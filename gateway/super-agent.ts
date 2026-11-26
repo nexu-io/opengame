@@ -42,6 +42,7 @@ import {
 import type { Modality } from '../shared/gateway.ts';
 import { normalizeToolInput, phase1Tools, validateInput } from '../shared/phase1-tools.ts';
 import {
+  DEFAULT_SUPER_AGENT_PREFERENCES,
   SUPER_AGENT_FEEDBACK_REASONS,
   artifactToSuperAgentIntent,
   classifySuperAgentTool,
@@ -73,6 +74,7 @@ import {
   type SuperAgentModeId,
   type SuperAgentPermissionMode,
   type SuperAgentPlanEntry,
+  type SuperAgentPreferences,
   type SuperAgentPromptSegment,
   type SuperAgentQueuedMessage,
   type SuperAgentResourceAttachment,
@@ -82,7 +84,7 @@ import {
   type SuperAgentTurnInput,
   type SuperAgentUsage,
 } from '../shared/super-agent.ts';
-import { resolveProviderSetupEntry } from '../shared/workspace-url.ts';
+import { resolveProviderSetupEntry, type ProviderSetupEntry } from '../shared/workspace-url.ts';
 import { getWorkflow, workflowNames, workflowSections } from '../shared/workflow.ts';
 import type { WorkspaceStore } from '../workspace.ts';
 import { accountMediaState } from './account-media.ts';
@@ -96,6 +98,7 @@ import { brandKitsFor } from './brand-kits.ts';
 import { resolveLocalAgent } from './local-agents.ts';
 import { buildMediaSettingsHandoff, resolveMediaSetupEntry } from './media-use.ts';
 import { gatewayFor } from './service.ts';
+import { readSettings, writeSettings } from './settings-storage.ts';
 import {
   AcpBootstrapError,
   runAcpAdapter,
@@ -246,7 +249,7 @@ You have access to every capability across OpenMotion:
 4. Images, Cinema Videos, Music, Sound Effects & Voiceovers (Media Models & Assets):
    - Discover configured models and provider availability with openmotion_asset_models(modality=...) or openmotion_media_use(action="inspect", modality=...). Pass modality ("image", "video", or "audio") when checking setup for a specific asset type so an image-only provider does not hide a missing audio/video handoff.
    - Check provider availability and mediaEntitlement before generating. When no fitting provider is usable for a planned modality (signed out with no API key, Free/Go mediaEntitlement "not-included", or rejected key) — including Game Studio multimodal-first builds unless the user explicitly requested pure-code output — you MUST call openmotion_open_preview with the returned modality-scoped settingsHandoff (target="providers", entry=...) so Studio renders an inline sign-in/upgrade action card directly in the chat (and present upgrade.url if returned for Free/Go, explicitly informing signed-in Free/Go users that multimodal generation requires subscribing to OpenDesign Plus), explain concisely, and ask the user to reply once done (then re-check with refreshAccount=true; in Game Studio also offer building a code-placeholder prototype first). Do not pre-block Plus+ accounts on cached hasBalance; if a generation fails with low balance ("balance is too low" / insufficient_balance), stop without retrying, call openmotion_open_preview(target="providers", entry="agent_media_balance_low"), and ask the user to top up and reply to resume.
-   - Generate reusable assets with openmotion_assets_use(action="generate") (Studio's built-in generation approval gate prompts the user before billed generation executes—even in auto mode, until the user explicitly chooses Always allow for generation—so skip redundant text spend-consent prompts inside Studio when the asset plan is already clear). Each openmotion_assets_use(action="status", jobId=...) call waits up to ~55s automatically; call action="status" again in sequence until job.state is "completed" or "failed". NEVER call schedule, timers, or shell sleep, and NEVER end your turn while a generation job is still queued or running. Inspect with action="read", import external files with openmotion_import_assets, or adopt into compositions with openmotion_assets_use(action="import_to_project"), and present with openmotion_present_artifact(kind="asset", assetId=..., versionId=...).
+   - Generate reusable assets with openmotion_assets_use(action="generate") (Studio manages multimodal generation consent automatically according to the user's workspace setting—running directly by default or prompting via its built-in approval card when manual confirmation is enabled—so skip redundant text spend-consent prompts inside Studio when the asset plan is already clear). Each openmotion_assets_use(action="status", jobId=...) call waits up to ~55s automatically; call action="status" again in sequence until job.state is "completed" or "failed". NEVER call schedule, timers, or shell sleep, and NEVER end your turn while a generation job is still queued or running. Inspect with action="read", import external files with openmotion_import_assets, or adopt into compositions with openmotion_assets_use(action="import_to_project"), and present with openmotion_present_artifact(kind="asset", assetId=..., versionId=...).
    - Never invent completed assets from queued jobs and never automatically resubmit failed paid generations.
 5. Multi-Step Workflows, Batch Content Optimization, Triggers & Captions:
    - Run and inspect multi-step campaign/role workflows with openmotion_assets_use(action="scenario", scenario={command:"catalog"|"list"|"create"|"get"|...}).
@@ -288,7 +291,7 @@ Use the registered OpenMotion MCP tools (mcp__openmotion__*) and injected <openm
 4. Images, Cinema Videos, Music, Sound Effects & Voiceovers:
    - Inspect configured models and provider availability with openmotion_media_use(action="inspect", modality=...) or openmotion_asset_models(modality=...). Pass modality ("image", "video", or "audio") when checking setup for a specific asset type so an image-only provider does not hide a missing audio/video handoff.
    - Check provider availability and mediaEntitlement before generating. When no fitting provider is usable for a planned modality (signed out with no API key, Free/Go mediaEntitlement "not-included", or rejected key) — including Game Studio multimodal-first builds unless the user explicitly requested pure-code output — you MUST call openmotion_open_preview with the returned modality-scoped settingsHandoff (target="providers", entry=...) so Studio renders an inline sign-in/upgrade action card in the chat (and present upgrade.url if returned for Free/Go, explicitly informing signed-in Free/Go users that multimodal generation requires subscribing to OpenDesign Plus), explain concisely, and ask the user to reply once done (then re-check with refreshAccount=true; in Game Studio also offer building a code-placeholder prototype first). Do not pre-block Plus+ accounts on cached hasBalance; if a generation fails with low balance ("balance is too low" / insufficient_balance), stop without retrying, call openmotion_open_preview(target="providers", entry="agent_media_balance_low"), and ask the user to top up and reply to resume.
-   - Generate reusable assets with openmotion_assets_use(action="generate") (Studio's built-in generation approval gate prompts the user before billed generation executes—even in auto mode, until the user explicitly chooses Always allow for generation—so skip redundant text spend-consent prompts inside Studio when the asset plan is already clear). Each openmotion_assets_use(action="status", jobId=...) call waits up to ~55s automatically; call action="status" again in sequence until job.state is "completed" or "failed" (NEVER call schedule, timers, or shell sleep, and NEVER end your turn while queued or running). Inspect with action="read" and present with openmotion_present_artifact(kind="asset", assetId=..., versionId=...).
+   - Generate reusable assets with openmotion_assets_use(action="generate") (Studio manages multimodal generation consent automatically according to the user's workspace setting—running directly by default or prompting via its built-in approval card when manual confirmation is enabled—so skip redundant text spend-consent prompts inside Studio when the asset plan is already clear). Each openmotion_assets_use(action="status", jobId=...) call waits up to ~55s automatically; call action="status" again in sequence until job.state is "completed" or "failed" (NEVER call schedule, timers, or shell sleep, and NEVER end your turn while queued or running). Inspect with action="read" and present with openmotion_present_artifact(kind="asset", assetId=..., versionId=...).
    - Never invent completed assets from queued jobs and never automatically resubmit failed paid generations.
 5. Workflows, Batch Content Optimization, Triggers, Captions & Brand Kits:
    - Run multi-step workflows via openmotion_assets_use(action="scenario"), optimize multiple items in parallel via openmotion_assets_use(action="batch"), manage webhooks/schedules via openmotion_assets_use(action="trigger"), transcribe/caption media via openmotion_assets_use(action="transcript"), and reuse Brand Kits via openmotion_assets_use(action="brand_kit") or openmotion_design_catalog(action="get_design_system").
@@ -313,6 +316,8 @@ Rules:
 
 const ACTION_CARD_ERROR_MAX = 600;
 const PLAN_ENTITLEMENT_ERROR_RE = /requires OpenDesign Plus|plan does not include|upgrade to (?:OpenDesign )?Plus|tier_model_not_entitled|tier_request_kind_not_entitled|model_access_denied/i;
+const LOW_BALANCE_ERROR_RE = /balance is too low|insufficient[_ ]balance|insufficient[_ ]credits|credits[_ ]exhausted|out of credits|quota[_ ]exceeded|quota depleted|billing[_ ]past[_ ]due|\b402\b/i;
+const MEDIA_SETUP_ERROR_RE = /Selected model is unavailable|CAPABILITY_UNAVAILABLE|configure an available provider|no usable provider|no available provider|Provider account is not ready/i;
 
 function collectErrorFragments(value: unknown, out: string[], depth = 0): void {
   if (depth > 4 || value === null || value === undefined || out.length >= 8) return;
@@ -430,6 +435,25 @@ export function isProviderSettingsWebArtifactUrl(rawUrl: string, origin: string)
   }
 }
 
+export function actionCardForProviderSetupEntry(entry?: ProviderSetupEntry): SuperAgentActionCard | undefined {
+  if (entry === 'agent_media_signed_out') {
+    return { id: `action:sign_in:${entry}`, kind: 'sign_in', entry, provider: 'account' };
+  }
+  if (entry === 'agent_media_upgrade_free') {
+    return { id: `action:upgrade_free:${entry}`, kind: 'upgrade_free', entry, provider: 'account' };
+  }
+  if (entry === 'agent_media_upgrade_go') {
+    return { id: `action:upgrade_go:${entry}`, kind: 'upgrade_go', entry, provider: 'account' };
+  }
+  if (entry === 'agent_media_balance_low') {
+    return { id: `action:top_up:${entry}`, kind: 'top_up', entry, provider: 'account' };
+  }
+  if (entry === 'agent_media_key_rejected') {
+    return { id: `action:configure_key:${entry}`, kind: 'configure_key', entry };
+  }
+  return undefined;
+}
+
 export function extractActionCardFromTool(
   toolName: string,
   args: Record<string, unknown>,
@@ -443,22 +467,7 @@ export function extractActionCardFromTool(
 
   if (ok && name === 'openmotion_open_preview' && args.target === 'providers') {
     const entry = resolveProviderSetupEntry(typeof args.entry === 'string' ? args.entry : undefined);
-    if (entry === 'agent_media_signed_out') {
-      return { id: `action:sign_in:${entry}`, kind: 'sign_in', entry, provider: 'account' };
-    }
-    if (entry === 'agent_media_upgrade_free') {
-      return { id: `action:upgrade_free:${entry}`, kind: 'upgrade_free', entry, provider: 'account' };
-    }
-    if (entry === 'agent_media_upgrade_go') {
-      return { id: `action:upgrade_go:${entry}`, kind: 'upgrade_go', entry, provider: 'account' };
-    }
-    if (entry === 'agent_media_balance_low') {
-      return { id: `action:top_up:${entry}`, kind: 'top_up', entry, provider: 'account' };
-    }
-    if (entry === 'agent_media_key_rejected') {
-      return { id: `action:configure_key:${entry}`, kind: 'configure_key', entry };
-    }
-    return undefined;
+    return actionCardForProviderSetupEntry(entry);
   }
 
   const webPublish = args.webPublish && typeof args.webPublish === 'object'
@@ -505,50 +514,26 @@ export function extractActionCardFromTool(
     const errorText = extractActionCardErrorText(value);
     if (!errorText) return undefined;
     if (
-      /balance is too low|insufficient[_ ]balance|insufficient[_ ]credits|out of credits/i.test(errorText)
+      LOW_BALANCE_ERROR_RE.test(errorText)
       && isOpenDesignAccountMediaCall(args, payload, errorText)
     ) {
-      return {
-        id: 'action:top_up:agent_media_balance_low',
-        kind: 'top_up',
-        entry: 'agent_media_balance_low',
-        provider: 'account',
-      };
+      return actionCardForProviderSetupEntry('agent_media_balance_low');
     }
     if (PLAN_ENTITLEMENT_ERROR_RE.test(errorText) && isOpenDesignAccountMediaCall(args, payload, errorText)) {
       if (context?.accountMediaEntitlement === 'included') return undefined;
       if (context?.accountPlan === 'go') {
-        return {
-          id: 'action:upgrade_go:agent_media_upgrade_go',
-          kind: 'upgrade_go',
-          entry: 'agent_media_upgrade_go',
-          provider: 'account',
-        };
+        return actionCardForProviderSetupEntry('agent_media_upgrade_go');
       }
       if (context?.accountPlan === 'free') {
-        return {
-          id: 'action:upgrade_free:agent_media_upgrade_free',
-          kind: 'upgrade_free',
-          entry: 'agent_media_upgrade_free',
-          provider: 'account',
-        };
+        return actionCardForProviderSetupEntry('agent_media_upgrade_free');
       }
       return undefined;
     }
     if (/OPENDESIGN_SIGN_IN_REQUIRED|sign-in is no longer accepted|Sign in with OpenDesign/i.test(errorText)) {
-      return {
-        id: 'action:sign_in:agent_media_signed_out',
-        kind: 'sign_in',
-        entry: 'agent_media_signed_out',
-        provider: 'account',
-      };
+      return actionCardForProviderSetupEntry('agent_media_signed_out');
     }
     if (/Credentials or permissions rejected|API key.*(?:rejected|invalid)/i.test(errorText)) {
-      return {
-        id: 'action:configure_key:agent_media_key_rejected',
-        kind: 'configure_key',
-        entry: 'agent_media_key_rejected',
-      };
+      return actionCardForProviderSetupEntry('agent_media_key_rejected');
     }
   }
 
@@ -563,6 +548,16 @@ const MEDIA_ACTION_CARD_TOOLS = new Set([
   'openmotion_job_manage',
 ]);
 
+function isMediaExecutionOrStatusCall(toolName: string, args: Record<string, unknown>): boolean {
+  const name = normalizeOpenMotionToolName(toolName);
+  if (name === 'openmotion_capability_run') return args.dryRun !== true;
+  if (name === 'openmotion_job_manage') return args.action === 'status' || args.action === 'resume';
+  if (name === 'openmotion_assets_use' || name === 'openmotion_assets' || name === 'openmotion_media_use') {
+    return args.action === 'generate' || args.action === 'status' || args.action === 'resume';
+  }
+  return false;
+}
+
 function mayHavePlanEntitlementFailure(toolName: string, value: unknown, ok: boolean): boolean {
   if (!MEDIA_ACTION_CARD_TOOLS.has(normalizeOpenMotionToolName(toolName))) return false;
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : null;
@@ -571,6 +566,22 @@ function mayHavePlanEntitlementFailure(toolName: string, value: unknown, ok: boo
   const jobFailed = (payload?.job as Record<string, unknown> | undefined)?.state === 'failed';
   if (!isErrorResult && !jobFailed) return false;
   return PLAN_ENTITLEMENT_ERROR_RE.test(extractActionCardErrorText(value));
+}
+
+function mayHaveMediaSetupFailure(
+  toolName: string,
+  args: Record<string, unknown>,
+  value: unknown,
+  ok: boolean,
+): boolean {
+  if (!isMediaExecutionOrStatusCall(toolName, args)) return false;
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : null;
+  const payload = unwrapToolPayload(value) ?? record;
+  const isErrorResult = !ok || record?.isError === true;
+  const jobFailed = (payload?.job as Record<string, unknown> | undefined)?.state === 'failed';
+  if (!isErrorResult && !jobFailed) return false;
+  const errorText = extractActionCardErrorText(value);
+  return Boolean(errorText && (MEDIA_SETUP_ERROR_RE.test(errorText) || PLAN_ENTITLEMENT_ERROR_RE.test(errorText)));
 }
 
 const ALLOWED_ARTIFACT_KINDS = new Set<SuperAgentArtifact['kind']>([
@@ -1201,6 +1212,7 @@ export class SuperAgentConversations {
   private listeners = new Map<string, Set<ServerResponse>>();
   private emitTimers = new Map<string, NodeJS.Timeout>();
   private heartbeatTimer: NodeJS.Timeout;
+  private preferencesCache?: SuperAgentPreferences;
   readonly options: {
     resolve?: (bin: string) => Promise<string | null>;
     resolveAgent?: (bin: string) => Promise<string | null>;
@@ -1240,6 +1252,71 @@ export class SuperAgentConversations {
   async file(id: string) {
     if (!isSuperAgentId(id)) throw new Error('CONVERSATION_NOT_FOUND');
     return this.store.safePath(`chats/${id}.json`, this.root);
+  }
+
+  private preferencesFile() {
+    return this.store.safePath('preferences.json', this.root);
+  }
+
+  async getPreferences(): Promise<SuperAgentPreferences> {
+    if (this.preferencesCache) return { ...this.preferencesCache };
+    try {
+      const stored = await readSettings<Partial<SuperAgentPreferences>>(
+        await this.preferencesFile(),
+        DEFAULT_SUPER_AGENT_PREFERENCES,
+      );
+      const normalized: SuperAgentPreferences = {
+        autoMultimodalGeneration: stored?.autoMultimodalGeneration !== false,
+      };
+      this.preferencesCache = normalized;
+      return { ...normalized };
+    } catch {
+      // Fail closed on corrupt or unreadable preferences.json without caching, so paid generation
+      // requires confirmation until the file is readable again or explicitly updated.
+      return { autoMultimodalGeneration: false };
+    }
+  }
+
+  async updatePreferences(patch: unknown): Promise<SuperAgentPreferences> {
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      throw new Error('Preferences patch must be an object');
+    }
+    const record = patch as Record<string, unknown>;
+    if (record.autoMultimodalGeneration !== undefined && typeof record.autoMultimodalGeneration !== 'boolean') {
+      throw new Error('autoMultimodalGeneration must be boolean');
+    }
+    const current = await this.getPreferences();
+    const next: SuperAgentPreferences = {
+      autoMultimodalGeneration: typeof record.autoMultimodalGeneration === 'boolean'
+        ? record.autoMultimodalGeneration
+        : current.autoMultimodalGeneration,
+    };
+    await writeSettings(await this.preferencesFile(), next);
+    this.preferencesCache = next;
+
+    // Turning automatic multimodal generation back on immediately unblocks waiting generation approvals in auto-mode chats.
+    if (next.autoMultimodalGeneration) {
+      for (const active of this.active.values()) {
+        if (active.stopped || active.deleted || active.chat.permissionMode !== 'auto') continue;
+        const resolvers: ((ok: boolean) => void)[] = [];
+        for (const [approvalId, resolvePending] of active.approvals.entries()) {
+          if (active.approvalMeta?.get(approvalId)?.kind !== 'generation') continue;
+          active.approvals.delete(approvalId);
+          active.approvalMeta?.delete(approvalId);
+          resolvers.push(resolvePending);
+        }
+        if (!resolvers.length) continue;
+        active.chat.approvals = active.chat.approvals.filter(item => item.kind !== 'generation');
+        active.chat.state = active.chat.approvals.length ? 'waiting' : 'running';
+        if (!active.chat.approvals.length) {
+          this.updateActivity(active, { phase: 'tool' }, false);
+        }
+        await this.persist(active, true);
+        for (const resolvePending of resolvers) resolvePending(true);
+      }
+    }
+
+    return { ...next };
   }
 
   private syncProjectDir(chat: SuperAgentChat) {
@@ -2278,18 +2355,34 @@ export class SuperAgentConversations {
     kind: SuperAgentApproval['kind'],
     title: string,
     detail: string,
-    meta?: { summary?: string; target?: string },
+    meta?: { summary?: string; target?: string; signal?: AbortSignal },
   ): Promise<boolean> {
-    if (active.stopped) return false;
-    // Billed media generation always requires explicit user confirmation unless the user clicked Always allow on a generation approval.
+    const signal = meta?.signal;
+    if (active.stopped || signal?.aborted) return false;
+    // Multimodal generation runs automatically by default when workspace preference is enabled and the chat is in auto mode;
+    // disabling it in Settings (or switching the chat to on-request) restores per-call confirmation until Always allow is clicked for this chat.
     if (kind === 'generation') {
       if (active.chat.generationAutoApproved) return true;
+      if (active.chat.permissionMode === 'auto') {
+        const prefs = await this.getPreferences();
+        if (active.stopped || signal?.aborted) return false;
+        if (prefs.autoMultimodalGeneration) return true;
+      }
     } else if (active.chat.permissionMode === 'auto') {
       return true;
     }
     const id = randomUUID();
+    let settled = false;
+    let onAbort: (() => void) | undefined;
+    let resolvePending!: (accepted: boolean) => void;
     const pending = new Promise<boolean>(resolve => {
-      active.approvals.set(id, resolve);
+      resolvePending = accepted => {
+        if (settled) return;
+        settled = true;
+        if (signal && onAbort) signal.removeEventListener('abort', onAbort);
+        resolve(accepted);
+      };
+      active.approvals.set(id, resolvePending);
     });
     active.turnApprovalCount = (active.turnApprovalCount ?? 0) + 1;
     (active.approvalMeta ??= new Map()).set(id, { kind, requestedAt: Date.now() });
@@ -2313,6 +2406,25 @@ export class SuperAgentConversations {
     });
     active.chat.state = 'waiting';
     this.updateActivity(active, { phase: 'waiting_approval', label: described.headingFallback || described.headingKey }, false);
+    if (signal) {
+      onAbort = () => {
+        if (settled) return;
+        active.approvals.delete(id);
+        active.approvalMeta?.delete(id);
+        active.chat.approvals = active.chat.approvals.filter(item => item.id !== id);
+        if (!active.stopped && !active.deleted && !active.chat.approvals.length && active.chat.state === 'waiting') {
+          active.chat.state = 'running';
+          this.updateActivity(active, { phase: 'thinking' }, false);
+        }
+        void this.persist(active, true);
+        resolvePending(false);
+      };
+      if (signal.aborted) {
+        onAbort();
+        return pending;
+      }
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
     await this.persist(active, true);
     return pending;
   }
@@ -3358,10 +3470,20 @@ export class SuperAgentConversations {
         const toolName = String(rpc?.params?.name || '');
         const toolArgs = rpc?.params?.arguments && typeof rpc.params.arguments === 'object' ? rpc.params.arguments : {};
         const callId = String(id ?? randomUUID());
+        const requestAbort = new AbortController();
+        const socket = req.socket;
+        const onResponseClose = () => {
+          if (!res.writableEnded) requestAbort.abort();
+        };
+        res.once('close', onResponseClose);
+        socket?.once('close', onResponseClose);
+        if (res.destroyed || socket?.destroyed) {
+          onResponseClose();
+        }
         const task = (async () => {
           try {
-            const value = await this.executeToolCall(active, toolName, toolArgs, callId, runtime);
-            if (active.stopped || active.deleted) {
+            const value = await this.executeToolCall(active, toolName, toolArgs, callId, runtime, requestAbort.signal);
+            if (active.stopped || active.deleted || requestAbort.signal.aborted) {
               return { isError: true, content: [{ type: 'text', text: JSON.stringify({ error: 'Conversation stopped' }) }] };
             }
             const media = isAssetReadTool(toolName, toolArgs)
@@ -3379,12 +3501,15 @@ export class SuperAgentConversations {
               isError: true,
               content: [{ type: 'text', text: JSON.stringify({ error: error instanceof Error ? error.message : 'Tool execution failed' }) }],
             };
+          } finally {
+            res.off('close', onResponseClose);
+            socket?.off('close', onResponseClose);
           }
         })();
         active.inFlightTools.add(task);
         try {
           const result = await task;
-          reply({ result });
+          if (!res.writableEnded && !res.destroyed) reply({ result });
         } finally {
           active.inFlightTools.delete(task);
         }
@@ -3951,7 +4076,7 @@ export class SuperAgentConversations {
           createdAt: startedAt,
           toolEvent: ev,
         }, true);
-        if (item.type === 'mcpToolCall' && !actionCard && mayHavePlanEntitlementFailure(toolName, rawOutput, ok)) {
+        if (item.type === 'mcpToolCall' && !actionCard && (mayHavePlanEntitlementFailure(toolName, rawOutput, ok) || mayHaveMediaSetupFailure(toolName, toolArgs, rawOutput, ok))) {
           void this.resolveActionCardFromTool(toolName, toolArgs, rawOutput, ok).then(resolved => {
             if (!resolved || active.deleted) return;
             const targetMsg = active.chat.messages.find(m => m.id === msgId);
@@ -4021,6 +4146,7 @@ export class SuperAgentConversations {
     rawArgs: Record<string, unknown>,
     callId: string,
     runtime: SuperAgentRuntimeContext,
+    signal?: AbortSignal,
   ): Promise<unknown> {
     if (toolName === assetModelsTool.name) {
       validateInput(assetModelsTool.inputSchema, rawArgs);
@@ -4103,8 +4229,12 @@ export class SuperAgentConversations {
         'generation',
         approvalTitle,
         JSON.stringify(args, null, 2),
+        signal ? { signal } : undefined,
       );
-      if (!approved) throw new Error('Generation declined by the user');
+      if (!approved) {
+        if (signal?.aborted) throw new Error('Generation approval cancelled: client disconnected');
+        throw new Error('Generation declined by the user');
+      }
       if (active.stopped) throw new Error('Conversation stopped');
       if (normalizedTool === 'openmotion_assets_use' || normalizedTool === 'openmotion_capability_run') {
         args.conversationId = active.chat.id;
@@ -4304,14 +4434,45 @@ export class SuperAgentConversations {
   ): Promise<SuperAgentActionCard | undefined> {
     const direct = extractActionCardFromTool(toolName, args, value, ok);
     if (direct) return direct;
-    if (!mayHavePlanEntitlementFailure(toolName, value, ok)) return undefined;
+    const planFailure = mayHavePlanEntitlementFailure(toolName, value, ok);
+    const setupFailure = mayHaveMediaSetupFailure(toolName, args, value, ok);
+    if (!planFailure && !setupFailure) return undefined;
     try {
-      const account = await gatewayFor(this.store).account.summary(false);
-      const media = accountMediaState(account);
-      return extractActionCardFromTool(toolName, args, value, ok, {
-        accountPlan: media.plan,
-        accountMediaEntitlement: media.mediaEntitlement,
+      const gateway = gatewayFor(this.store);
+      const record = value && typeof value === 'object' ? value as Record<string, unknown> : null;
+      const payload = unwrapToolPayload(value) ?? record;
+      const errorText = extractActionCardErrorText(value);
+      const isAccountCall = isOpenDesignAccountMediaCall(args, payload, errorText);
+      if (planFailure || (setupFailure && isAccountCall)) {
+        const account = await gateway.account.summary(false);
+        const media = accountMediaState(account);
+        if (planFailure) {
+          const card = extractActionCardFromTool(toolName, args, value, ok, {
+            accountPlan: media.plan,
+            accountMediaEntitlement: media.mediaEntitlement,
+          });
+          if (card) return card;
+        }
+        if (setupFailure && isAccountCall) {
+          if (account.state !== 'signed-in') return actionCardForProviderSetupEntry('agent_media_signed_out');
+          if (media.mediaEntitlement === 'not-included' && media.plan === 'go') {
+            return actionCardForProviderSetupEntry('agent_media_upgrade_go');
+          }
+          if (media.mediaEntitlement === 'not-included' && media.plan === 'free') {
+            return actionCardForProviderSetupEntry('agent_media_upgrade_free');
+          }
+        }
+      }
+      if (!setupFailure) return undefined;
+      const status = await gateway.status(false);
+      const modality = typeof args.modality === 'string' && ['image', 'video', 'audio'].includes(args.modality)
+        ? args.modality as Modality
+        : undefined;
+      const entry = resolveMediaSetupEntry(status.providers, {
+        ...(modality ? { modality } : {}),
+        capabilities: status.capabilities,
       });
+      return actionCardForProviderSetupEntry(entry);
     } catch {
       return undefined;
     }
