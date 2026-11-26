@@ -152,7 +152,7 @@ export class AccountRequestError extends Error {
   readonly status?: number;
   readonly code?: string;
   readonly upstreamCode?: string;
-  constructor(stderr: string, options?: { cause?: unknown }) {
+  constructor(stderr: string, options?: { cause?: unknown; media?: boolean }) {
     let parsedEnvelope: { status?: number; code?: string } | undefined;
     try {
       const parsed: unknown = JSON.parse(stderr.trim());
@@ -179,8 +179,9 @@ export class AccountRequestError extends Error {
     const code = parsedEnvelope?.code ?? (api ? api[2] : media && /^[A-Za-z0-9_-]{1,64}$/.test(media[1]) ? media[1] : undefined);
     // Local CLI flag/argument rejections exit without an HTTP status; do not misreport them as connection or sign-in failures.
     const cliInvalid = !status && !code && /(?:^|\n)Error: (?:if any flags in the group |unknown (?:shorthand )?flag:|invalid argument |required flag\(s\) |flag needs an argument:)/.test(stderr);
+    const isMediaRequest = options?.media ?? Boolean(media);
     super(
-      (code && requestMessages[code]) || (cliInvalid ? requestMessages.invalid_request : status === 401 ? requestMessages.unauthorized : status === 429 ? requestMessages.tier_limit_exceeded : status ? jobMessages.service : jobMessages.connection),
+      (code && requestMessages[code]) || (cliInvalid ? requestMessages.invalid_request : status === 401 ? requestMessages.unauthorized : status === 429 && isMediaRequest ? requestMessages.tier_limit_exceeded : status ? jobMessages.service : jobMessages.connection),
       options?.cause !== undefined ? { cause: options.cause } : undefined,
     );
     this.status = status; this.code = code; this.upstreamCode = code;
@@ -452,7 +453,8 @@ export class OpenDesignAccount {
       });
       return stdout;
     } catch (error) {
-      throw new AccountRequestError(String((error as { stderr?: unknown }).stderr ?? ''), { cause: error });
+      const mediaCommand = args[0] === 'image' || args[0] === 'video' || args[0] === 'audio' || args[0] === 'media';
+      throw new AccountRequestError(String((error as { stderr?: unknown }).stderr ?? ''), { cause: error, media: mediaCommand });
     }
   }
   async run(args: string[], signal?: AbortSignal, envOverrides?: Record<string, string>) {

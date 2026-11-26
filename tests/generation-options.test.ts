@@ -1140,7 +1140,7 @@ test('Magi-2 video compatibility: capabilities, always-on audio, first-frame fix
     assert.ok(!submit.includes('--generate-audio=false'));
   } finally { account.close(); }
 
-  // 429 video_concurrency_limit_exceeded maps cleanly in AccountRequestError (api, media, JSON, bare 429) and apiJson.
+  // 429 video_concurrency_limit_exceeded maps cleanly in AccountRequestError (explicit code, media 429, control-plane 429) and apiJson.
   const accountErr = new AccountRequestError('API request failed with status 429: video_concurrency_limit_exceeded');
   assert.equal(accountErr.status, 429);
   assert.equal(accountErr.code, 'video_concurrency_limit_exceeded');
@@ -1149,9 +1149,16 @@ test('Magi-2 video compatibility: capabilities, always-on audio, first-frame fix
   assert.equal(mediaErr.status, 429);
   assert.equal(mediaErr.code, 'video_concurrency_limit_exceeded');
   assert.match(mediaErr.message, /rate or concurrency limit reached/i);
-  const bare429 = new AccountRequestError('API request failed with status 429');
-  assert.equal(bare429.status, 429);
-  assert.match(bare429.message, /rate or concurrency limit reached/i);
+  const mediaBare429 = new AccountRequestError('API request failed with status 429', { media: true });
+  assert.equal(mediaBare429.status, 429);
+  assert.match(mediaBare429.message, /rate or concurrency limit reached/i);
+  const mediaStderr429 = new AccountRequestError('video request rejected (, HTTP 429)');
+  assert.equal(mediaStderr429.status, 429);
+  assert.match(mediaStderr429.message, /rate or concurrency limit reached/i);
+  const controlPlane429 = new AccountRequestError('API request failed with status 429');
+  assert.equal(controlPlane429.status, 429);
+  assert.doesNotMatch(controlPlane429.message, /rate or concurrency limit reached/i);
+  assert.match(controlPlane429.message, /could not complete this request/i);
 
   await assert.rejects(
     apiJson(

@@ -109,6 +109,9 @@ test('resolveCanonicalIdentity and classifyMultimodalTask group cross-provider a
   assert.equal(resolveCanonicalIdentity('fal-ai/wan/v2.7/text-to-video').canonicalId, 'alibaba/wan-2.7');
   assert.equal(resolveCanonicalIdentity('fal-ai/wan/v2.7/edit-video').canonicalId, 'alibaba/wan-2.7');
   assert.equal(resolveCanonicalIdentity('fal-ai/wan/v2.7/image').canonicalId, 'alibaba/wan-2.7-image');
+  assert.equal(resolveCanonicalIdentity('magi-2').canonicalId, 'sandai/magi-2');
+  assert.equal(resolveCanonicalIdentity('sandai/magi/v2').canonicalId, 'sandai/magi-2');
+  assert.notEqual(resolveCanonicalIdentity('fal-ai/magic-animate').canonicalId, 'sandai/magi-2');
 
   assert.deepEqual(classifyMultimodalTask('first-last-frame-to-video'), {
     modality: 'video',

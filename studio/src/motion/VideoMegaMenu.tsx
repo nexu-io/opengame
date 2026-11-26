@@ -76,7 +76,7 @@ export function VideoMegaMenu({ catalog, destination, onNavigate }: {
   const pendingOpenDesign = openDesignVideoModels.filter(entry => !presentModelIds.has(entry.modelId));
   const modelItems = [
     ...families.map(family => {
-      const pending = anyOpenDesignReady && !family.ready && family.variants.every(variant => isOpenDesignProvider(variant.provider));
+      const pending = anyOpenDesignReady && !family.ready;
       const badge = pending ? 'Soon' : imageModelBadge(family.representative);
       return <Button key={family.key} variant="plain" className="om-nav-item om-media-mega-row"
         data-ready={family.ready || undefined} disabled={pending || undefined} aria-disabled={pending || undefined}
