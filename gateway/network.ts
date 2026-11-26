@@ -17,13 +17,36 @@ export class ProviderError extends Error {
   }
 }
 export type ErrorTelemetryMeta = { status?: number; upstreamCode?: string; errorSource?: ErrorSource };
+const upstreamCodePattern = /^[A-Za-z0-9_-]{1,64}$/;
+/** Validate a bounded structured upstream error code for telemetry attribution. */
+export function boundedUpstreamCode(raw: unknown): string | undefined {
+  return typeof raw === 'string' && upstreamCodePattern.test(raw) ? raw : undefined;
+}
+/** Extract a bounded structured error code from a non-2xx JSON response without forwarding raw provider text. */
+export async function readUpstreamErrorCode(response: Response, maxBytes = 65_536): Promise<string | undefined> {
+  try {
+    const errBody = JSON.parse(await readCappedText(response, maxBytes)) as {
+      error?: { code?: unknown; error_code?: unknown };
+      code?: unknown;
+      error_code?: unknown;
+    };
+    return boundedUpstreamCode(errBody?.error?.code)
+      ?? boundedUpstreamCode(errBody?.error?.error_code)
+      ?? boundedUpstreamCode(errBody?.error_code)
+      ?? boundedUpstreamCode(errBody?.code);
+  } catch {
+    /* Non-JSON or oversized error responses simply omit upstreamCode. */
+    return undefined;
+  }
+}
 /** Attach bounded HTTP status / structured upstream code to an Error without changing its user-facing message. */
 export function withErrorMeta<T extends Error>(error: T, meta: ErrorTelemetryMeta): T {
   if (meta.status !== undefined && Number.isInteger(meta.status) && meta.status >= 100 && meta.status <= 599) {
     (error as T & { status?: number }).status = meta.status;
   }
-  if (typeof meta.upstreamCode === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(meta.upstreamCode)) {
-    (error as T & { upstreamCode?: string }).upstreamCode = meta.upstreamCode;
+  const code = boundedUpstreamCode(meta.upstreamCode);
+  if (code) {
+    (error as T & { upstreamCode?: string }).upstreamCode = code;
   }
   if (meta.errorSource) {
     (error as T & { errorSource?: ErrorSource }).errorSource = meta.errorSource;
@@ -62,13 +85,7 @@ export async function apiJson(fetcher: Fetcher, url: string, init: RequestInit =
   // Do not forward provider response text: it may echo a key or user input.
   // Extract only a bounded structured error code from JSON envelopes for telemetry attribution.
   if (!response.ok) {
-    let upstreamCode: string | undefined;
-    try {
-      const errBody = JSON.parse(await readCappedText(response, 65_536)) as { error?: { code?: unknown }; code?: unknown };
-      const rawCode = typeof errBody?.error?.code === 'string' ? errBody.error.code
-        : typeof errBody?.code === 'string' ? errBody.code : undefined;
-      if (rawCode && /^[A-Za-z0-9_-]{1,64}$/.test(rawCode)) upstreamCode = rawCode;
-    } catch { /* Non-JSON or oversized error responses simply omit upstreamCode. */ }
+    const upstreamCode = await readUpstreamErrorCode(response);
     throw new ProviderError(`Provider HTTP ${response.status}${response.status === 401 || response.status === 403 ? ': credentials or permissions rejected' : ''}`, response.status, upstreamCode, 'api');
   }
   const body = await readCappedText(response, maxBytes);

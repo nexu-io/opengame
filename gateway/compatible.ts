@@ -1,5 +1,5 @@
 import type { ProviderAdapter } from './providers.ts';
-import { apiJson, publicProviderFetch, ProviderError, readCappedText } from './network.ts';
+import { apiJson, publicProviderFetch, ProviderError, readUpstreamErrorCode } from './network.ts';
 
 /** Explicit OpenAI-compatible image/speech operations; never guesses a video protocol. */
 export const compatibleProvider: ProviderAdapter = {
@@ -14,13 +14,7 @@ export const compatibleProvider: ProviderAdapter = {
       const response = await fetcher(context.baseUrl + '/audio/speech', { method: 'POST', headers, redirect: 'error', signal: context.signal,
         body: JSON.stringify({ ...parameters, model: job.model.modelId, input: job.prompt }) });
       if (!response.ok) {
-        let upstreamCode: string | undefined;
-        try {
-          const errBody = JSON.parse(await readCappedText(response, 65_536)) as { error?: { code?: unknown }; code?: unknown };
-          const rawCode = typeof errBody?.error?.code === 'string' ? errBody.error.code
-            : typeof errBody?.code === 'string' ? errBody.code : undefined;
-          if (rawCode && /^[A-Za-z0-9_-]{1,64}$/.test(rawCode)) upstreamCode = rawCode;
-        } catch { /* Non-JSON error bodies simply omit upstreamCode. */ }
+        const upstreamCode = await readUpstreamErrorCode(response);
         throw new ProviderError(`Provider HTTP ${response.status}`, response.status, upstreamCode, 'api');
       }
       return [Buffer.from(await response.arrayBuffer())];

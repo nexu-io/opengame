@@ -2027,7 +2027,7 @@ test('Multimodal failure attribution blind spots: AMR upstream codes, CONTENT_BL
   assert.equal(mediaGenerationError(new Error('Codex returned no generated image. Check image generation access in the local Codex client.'), 'generating'), 'EMPTY_OUTPUT');
   assert.equal(mediaGenerationError(new Error('Codex CLI is no longer installed'), 'generating'), 'PROVIDER_UNAVAILABLE');
 
-  // 5) End-to-end ModelGateway: BYOK fal async safety_blocked + OpenDesign Cloud 403 upstream_provider_forbidden + Codex empty output
+  // 5) End-to-end ModelGateway: BYOK fal/atlas/wavespeed/compatible + OpenDesign Cloud 403 upstream_provider_forbidden + Codex empty output
   const gateway = new ModelGateway(store, {
     tracking,
     detect: async () => [{ id: 'codex', label: 'Codex', installed: true, authenticated: true, imageGeneration: true, available: true, reason: 'ok' }],
@@ -2041,6 +2041,24 @@ test('Multimodal failure attribution blind spots: AMR upstream codes, CONTENT_BL
       if (target.endsWith('/s-safe')) {
         return Response.json({ status: 'COMPLETED', error: { code: 'safety_blocked', message: 'NSFW detected' } });
       }
+      if (target.includes('api.atlascloud.ai/api/v1/model/generateImage')) {
+        return Response.json({ code: 200, data: { id: 'atlas-1039', status: 'created' } });
+      }
+      if (target.includes('api.atlascloud.ai/api/v1/model/prediction/atlas-1039')) {
+        return Response.json({ code: 200, data: { id: 'atlas-1039', status: 'failed', error_code: 1039, error: 'Content moderation failed' } });
+      }
+      if (target.includes('api.wavespeed.ai/api/v3/') && init.method === 'POST') {
+        const body = typeof init.body === 'string' ? JSON.parse(init.body) as { prompt?: string } : {};
+        const code = body.prompt?.includes('1407') ? 1407 : 1402;
+        return Response.json({ code: 200, data: { id: `ws-${code}`, status: 'created' } });
+      }
+      if (target.includes('api.wavespeed.ai/api/v3/predictions/ws-')) {
+        const code = Number(target.match(/ws-(\d+)/)?.[1] ?? 0);
+        return Response.json({ code: 200, data: { id: `ws-${code}`, status: 'failed', error_code: code, error: 'Task failed' } });
+      }
+      if (target.includes('speech-compat.example.com/v1/audio/speech')) {
+        return new Response(JSON.stringify({ error: { code: 'content_policy_violation' } }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
       if (target.endsWith('/api/v1/media/models?include_audio=true')) {
         return Response.json({ models: [{ model: 'gpt-image-2', kind: 'image', capabilities: { edits: true } }] });
       }
@@ -2052,15 +2070,32 @@ test('Multimodal failure attribution blind spots: AMR upstream codes, CONTENT_BL
   });
 
   await gateway.configureProvider('fal', { apiKey: 'fal-secret-key' });
+  await gateway.configureProvider('atlascloud', { apiKey: 'atlas-secret-key' });
+  await gateway.configureProvider('wavespeed', { apiKey: 'ws-secret-key' });
   await gateway.configureProvider('opendesign', { apiKey: 'od-secret-key', baseUrl: 'https://amr-api.open-design.ai' });
   await gateway.listModels({ provider: 'opendesign', refresh: true });
+  const compatId = await gateway.connections.configure(null, {
+    label: 'Speech Compat',
+    baseUrl: 'https://speech-compat.example.com/v1',
+    apiKey: 'compat-secret-key',
+    protocol: 'openai',
+    enabled: true,
+  });
+  await gateway.connections.saveModel(compatId, { modelId: 'private-tts-v1', label: 'TTS', kind: 'audio', enabled: true });
 
   const falSafeJob = await gateway.submit({ modality: 'image', prompt: 'Fal safety', model: 'fal:fal-ai/flux/schnell', library: { title: 'Fal safety' } }, codexHost, { entrySurface: 'studio' });
+  const atlasSafeJob = await gateway.submit({ modality: 'image', prompt: 'Atlas 1039', model: 'atlascloud:google/nano-banana-2/text-to-image', library: { title: 'Atlas 1039' } }, codexHost, { entrySurface: 'studio' });
+  const wsCreditJob = await gateway.submit({ modality: 'image', prompt: 'WS 1407', model: 'wavespeed:wavespeed-ai/z-image/turbo', library: { title: 'WS 1407' } }, codexHost, { entrySurface: 'studio' });
+  const wsOtherJob = await gateway.submit({ modality: 'image', prompt: 'WS 1402', model: 'wavespeed:wavespeed-ai/z-image/turbo', library: { title: 'WS 1402' } }, codexHost, { entrySurface: 'studio' });
+  const compatSpeechJob = await gateway.submit({ modality: 'audio', prompt: 'Blocked speech', model: `${compatId}:private-tts-v1`, parameters: { voice: 'alloy' }, library: { title: 'Compat speech' } }, codexHost, { entrySurface: 'studio' });
   const odForbiddenJob = await gateway.submit({ modality: 'image', prompt: 'OD upstream 403', model: 'opendesign:gpt-image-2', library: { title: 'OD 403' } }, codexHost, { entrySurface: 'mcp_media_use' });
   const codexEmptyJob = await gateway.submit({ modality: 'image', prompt: 'Codex empty', model: 'codex:image-generation', library: { title: 'Codex empty' } }, codexHost, { entrySurface: 'studio' });
 
-  await gateway.tick();
-  await Promise.all([...gateway.active.values()].map(task => task.done));
+  for (let i = 0; i < 10; i++) {
+    await gateway.tick();
+    if (!gateway.active.size) break;
+    await Promise.all([...gateway.active.values()].map(task => task.done));
+  }
   while (tracking.pending() > 0) await tracking.flush();
 
   const falRes = events.find(e => e.event === 'media_generation_result' && e.properties.job_id === falSafeJob.id);
@@ -2068,6 +2103,30 @@ test('Multimodal failure attribution blind spots: AMR upstream codes, CONTENT_BL
   assert.equal(falRes?.properties.upstream_error_code, 'safety_blocked');
   assert.equal(falRes?.properties.error_code, 'CONTENT_BLOCKED');
   assert.equal(falRes?.properties.error_category, 'content_policy');
+
+  const atlasRes = events.find(e => e.event === 'media_generation_result' && e.properties.job_id === atlasSafeJob.id);
+  assert.equal(atlasRes?.properties.failure_phase, 'remote_task');
+  assert.equal(atlasRes?.properties.upstream_error_code, 'content_policy_violation');
+  assert.equal(atlasRes?.properties.error_code, 'CONTENT_BLOCKED');
+  assert.equal(atlasRes?.properties.error_category, 'content_policy');
+
+  const wsCreditRes = events.find(e => e.event === 'media_generation_result' && e.properties.job_id === wsCreditJob.id);
+  assert.equal(wsCreditRes?.properties.failure_phase, 'remote_task');
+  assert.equal(wsCreditRes?.properties.upstream_error_code, 'insufficient_balance');
+  assert.equal(wsCreditRes?.properties.error_code, 'BALANCE_LOW');
+  assert.equal(wsCreditRes?.properties.error_category, 'byok_billing');
+
+  const wsOtherRes = events.find(e => e.event === 'media_generation_result' && e.properties.job_id === wsOtherJob.id);
+  assert.equal(wsOtherRes?.properties.failure_phase, 'remote_task');
+  assert.equal(wsOtherRes?.properties.upstream_error_code, 'other');
+  assert.equal(wsOtherRes?.properties.error_code, 'REMOTE_FAILED');
+
+  const compatRes = events.find(e => e.event === 'media_generation_result' && e.properties.job_id === compatSpeechJob.id);
+  assert.equal(compatRes?.properties.failure_phase, 'submitting');
+  assert.equal(compatRes?.properties.http_status, 400);
+  assert.equal(compatRes?.properties.error_code, 'CONTENT_BLOCKED');
+  assert.equal(compatRes?.properties.error_category, 'content_policy');
+  assert.equal(compatRes?.properties.upstream_error_code, undefined, 'custom provider must omit upstream_error_code');
 
   const odRes = events.find(e => e.event === 'media_generation_result' && e.properties.job_id === odForbiddenJob.id);
   assert.equal(odRes?.properties.failure_phase, 'submitting');

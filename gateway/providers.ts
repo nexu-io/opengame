@@ -1,6 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import type { GenerationJob, Model } from '../shared/gateway.ts';
-import { apiJson, ProviderError, withErrorMeta, type Fetcher } from './network.ts';
+import { apiJson, boundedUpstreamCode, ProviderError, withErrorMeta, type Fetcher } from './network.ts';
 import { normalizeModels } from './catalog.ts';
 import { opendesign } from './opendesign.ts';
 import { registeredProvider, type MediaProviderId } from '../shared/provider-registry.ts';
@@ -21,15 +21,49 @@ function outputs(body: any, modality: string): string[] {
   const raw = body?.outputs ?? (modality === 'image' ? body?.images ?? body?.image : modality === 'video' ? body?.video ?? body?.videos : body?.audio ?? body?.audio_file ?? body?.audios);
   return (Array.isArray(raw) ? raw : [raw]).flatMap(item => typeof item === 'string' ? [item] : typeof item?.url === 'string' ? [item.url] : []).slice(0, 8);
 }
-function extractAsyncUpstreamCode(raw: unknown): string | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const candidate = (raw as { code?: unknown; error_code?: unknown }).code
-    ?? (raw as { code?: unknown; error_code?: unknown }).error_code;
-  return typeof candidate === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(candidate) ? candidate : undefined;
+// Documented provider numeric task codes mapped onto the closed telemetry allowlist;
+// other finite non-zero numeric task codes are stringified so telemetry intentionally folds them to 'other'.
+const atlasTaskCodes: Readonly<Record<number, string>> = {
+  1039: 'content_policy_violation',
+};
+const waveSpeedTaskCodes: Readonly<Record<number, string>> = {
+  1200: 'content_policy_violation',
+  1400: 'invalid_request',
+  1401: 'invalid_request',
+  1407: 'insufficient_balance',
+  5000: 'internal_error',
+  5003: 'service_unavailable',
+  5004: 'timeout',
+};
+function parseTaskCodeValue(candidate: unknown, numericMap?: Readonly<Record<number, string>>, ignoreEnvelopeStatus = false): string | undefined {
+  if (typeof candidate === 'number') {
+    if (!Number.isSafeInteger(candidate) || candidate === 0) return undefined;
+    if (ignoreEnvelopeStatus && candidate >= 100 && candidate <= 599) return undefined;
+    return numericMap?.[candidate] ?? boundedUpstreamCode(String(candidate));
+  }
+  if (typeof candidate === 'string') {
+    if (/^\d+$/.test(candidate)) {
+      const n = Number(candidate);
+      if (!Number.isSafeInteger(n) || n === 0) return undefined;
+      if (ignoreEnvelopeStatus && n >= 100 && n <= 599) return undefined;
+      return numericMap?.[n] ?? boundedUpstreamCode(candidate);
+    }
+    return boundedUpstreamCode(candidate);
+  }
+  return undefined;
 }
-function predictionData(body: any, provider: string) {
+function extractAsyncUpstreamCode(raw: unknown, numericMap?: Readonly<Record<number, string>>, ignoreEnvelopeStatus = true): string | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const obj = raw as { error_code?: unknown; code?: unknown; error?: unknown };
+  const nested = obj.error && typeof obj.error === 'object' ? obj.error as { code?: unknown; error_code?: unknown } : undefined;
+  return parseTaskCodeValue(obj.error_code, numericMap, false)
+    ?? parseTaskCodeValue(nested?.code, numericMap, false)
+    ?? parseTaskCodeValue(nested?.error_code, numericMap, false)
+    ?? parseTaskCodeValue(obj.code, numericMap, ignoreEnvelopeStatus);
+}
+function predictionData(body: any, provider: string, numericMap?: Readonly<Record<number, string>>) {
   if (body.code !== undefined && String(body.code) !== '200') {
-    const upstreamCode = extractAsyncUpstreamCode(body.error) ?? (typeof body.code === 'string' && /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(body.code) ? body.code : undefined);
+    const upstreamCode = extractAsyncUpstreamCode(body, numericMap, true);
     throw new ProviderError(`${provider} rejected the request`, Number(body.code), upstreamCode, 'api');
   }
   return body.data ?? body;
@@ -41,12 +75,12 @@ const atlas: ProviderAdapter = {
     const endpoint = { image: 'generateImage', video: 'generateVideo', audio: 'generateAudio' }[job.modality];
     const data = predictionData(await apiJson(ctx.fetcher, `${atlasOrigin}/api/v1/model/${endpoint}`, {
       method: 'POST', headers: auth, body: JSON.stringify(payload), signal: ctx.signal,
-    }), 'Atlas');
+    }), 'Atlas', atlasTaskCodes);
     if (!data.id || !/^[a-zA-Z0-9_-]+$/.test(String(data.id))) throw new Error('Atlas did not return a prediction ID');
     await ctx.progress('submitted', String(data.id));
     for (;;) {
       await delay(ctx.pollMs ?? (job.modality === 'video' ? 5000 : 2000), undefined, { signal: ctx.signal });
-      const result = predictionData(await apiJson(ctx.fetcher, `${atlasOrigin}/api/v1/model/prediction/${data.id}`, { headers: auth, signal: ctx.signal }), 'Atlas');
+      const result = predictionData(await apiJson(ctx.fetcher, `${atlasOrigin}/api/v1/model/prediction/${data.id}`, { headers: auth, signal: ctx.signal }), 'Atlas', atlasTaskCodes);
       if (['completed', 'succeeded'].includes(result.status)) {
         const media = outputs(result, job.modality);
         if (!media.length) throw new Error('Atlas completed without media output');
@@ -54,14 +88,14 @@ const atlas: ProviderAdapter = {
       }
       if (['failed', 'timeout', 'cancelled', 'canceled'].includes(result.status)) {
         await ctx.progress('remote_failed');
-        throw withErrorMeta(new Error(`Atlas generation ${result.status}`), { upstreamCode: extractAsyncUpstreamCode(result.error) });
+        throw withErrorMeta(new Error(`Atlas generation ${result.status}`), { upstreamCode: extractAsyncUpstreamCode(result, atlasTaskCodes) });
       }
       await ctx.progress('generating');
     }
   },
 };
 export async function waveSpeedModels(key: string, fetcher: Fetcher): Promise<Model[]> {
-  const rows = predictionData(await apiJson(fetcher, waveSpeedOrigin + '/api/v3/models', { headers: { Authorization: `Bearer ${key}` } }), 'WaveSpeed');
+  const rows = predictionData(await apiJson(fetcher, waveSpeedOrigin + '/api/v3/models', { headers: { Authorization: `Bearer ${key}` } }), 'WaveSpeed', waveSpeedTaskCodes);
   if (!Array.isArray(rows)) throw new Error('WaveSpeed catalogue format changed');
   return normalizeModels('wavespeed', rows);
 }
@@ -71,7 +105,7 @@ const wavespeed: ProviderAdapter = {
     const payload = { ...job.model.defaults, ...job.parameters, [job.model.mode === 'text-to-speech' ? 'text' : 'prompt']: job.prompt };
     let data = predictionData(await apiJson(ctx.fetcher, `${waveSpeedOrigin}/api/v3/${job.model.modelId}`, {
       method: 'POST', headers, body: JSON.stringify(payload), signal: ctx.signal,
-    }), 'WaveSpeed');
+    }), 'WaveSpeed', waveSpeedTaskCodes);
     if (typeof data.id !== 'string' || !/^[a-zA-Z0-9_-]{1,180}$/.test(data.id)) throw new Error('WaveSpeed did not return a prediction ID');
     const taskId = data.id;
     await ctx.progress('submitted', taskId);
@@ -83,10 +117,10 @@ const wavespeed: ProviderAdapter = {
       }
       if (['failed', 'cancelled', 'canceled', 'timeout', 'deleted'].includes(data.status)) {
         await ctx.progress('remote_failed');
-        throw withErrorMeta(new Error(`WaveSpeed generation ${data.status}`), { upstreamCode: extractAsyncUpstreamCode(data.error) });
+        throw withErrorMeta(new Error(`WaveSpeed generation ${data.status}`), { upstreamCode: extractAsyncUpstreamCode(data, waveSpeedTaskCodes) });
       }
       await delay(ctx.pollMs ?? (job.modality === 'video' ? 5000 : 2000), undefined, { signal: ctx.signal });
-      data = predictionData(await apiJson(ctx.fetcher, `${waveSpeedOrigin}/api/v3/predictions/${taskId}/result`, { headers, signal: ctx.signal }), 'WaveSpeed');
+      data = predictionData(await apiJson(ctx.fetcher, `${waveSpeedOrigin}/api/v3/predictions/${taskId}/result`, { headers, signal: ctx.signal }), 'WaveSpeed', waveSpeedTaskCodes);
       await ctx.progress('generating');
     }
   },
@@ -117,7 +151,7 @@ const fal: ProviderAdapter = {
         if (status.status === 'COMPLETED') {
           if (status.error) {
             await ctx.progress('remote_failed');
-            throw withErrorMeta(new Error('fal generation failed'), { upstreamCode: extractAsyncUpstreamCode(status.error) });
+            throw withErrorMeta(new Error('fal generation failed'), { upstreamCode: extractAsyncUpstreamCode(status.error, undefined, false) });
           }
           const result = await apiJson(ctx.fetcher, resultUrl, { headers, signal: ctx.signal });
           const media = outputs(result, job.modality);
