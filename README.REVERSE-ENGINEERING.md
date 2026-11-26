@@ -604,7 +604,7 @@ To start from a video instead, supply your reference and use the [recreation bri
 
 ##### Skills, MCP and CLI
 
-From the checkout, discover and install the five core workflows with the [Skills CLI](https://github.com/vercel-labs/skills):
+From the checkout, discover and install the four symmetric domain Skills with the [Skills CLI](https://github.com/vercel-labs/skills) (the five video workflows live under `openmotion-video/workflows/`):
 
 ```sh
 npx skills add ./skills --list
@@ -613,13 +613,17 @@ npx skills add ./skills --skill openmotion-video openmotion-game openmotion-desi
 
 This copies instructions; it does not install the runtime or register MCP. Keep the shared documentation available and connect the app separately, or use the integrated local installer above.
 
-| Skill | Use it for |
+| Skill / Workflow | Use it for |
 | --- | --- |
-| [openmotion-recreate](skills/openmotion-video/workflows/recreate.md) | Reconstructing a reference video and comparing the result |
-| [openmotion-template-to-video](skills/openmotion-video/workflows/template-to-video.md) | Adapting an existing editable template |
-| [openmotion-director](skills/openmotion-video/workflows/director.md) | Original films, narrative, movement, sound and creative review |
-| [openmotion-video-to-template](skills/openmotion-video/workflows/video-to-template.md) | Producing a portable reusable template |
-| [openmotion-production](skills/openmotion-video/workflows/production.md) | Scoped edits, preview, checks, troubleshooting and export |
+| [openmotion-video](skills/openmotion-video/SKILL.md) | Video domain router dispatching to five specialized workflows (`workflows/*.md`) |
+| [openmotion-video / recreate](skills/openmotion-video/workflows/recreate.md) | Reconstructing a reference video and comparing the result |
+| [openmotion-video / template-to-video](skills/openmotion-video/workflows/template-to-video.md) | Adapting an existing editable template |
+| [openmotion-video / director](skills/openmotion-video/workflows/director.md) | Original films, narrative, movement, sound and creative review |
+| [openmotion-video / video-to-template](skills/openmotion-video/workflows/video-to-template.md) | Producing a portable reusable template |
+| [openmotion-video / production](skills/openmotion-video/workflows/production.md) | Scoped edits, preview, checks, troubleshooting and export |
+| [openmotion-game](skills/openmotion-game/SKILL.md) | Playable 2D, 3D, and 9:16 browser games |
+| [openmotion-design](skills/openmotion-design/SKILL.md) | Interactive HTML prototypes, slide decks, documents, and WebGL |
+| [openmotion-media](skills/openmotion-media/SKILL.md) | Atomic media capabilities and standalone image, video, speech, or music generation |
 
 <a id="local-agent-connection"></a>
 
