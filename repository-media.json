@@ -566,16 +566,136 @@
       "url": "https://releases.open-design.ai/open-motion/media/sha256/98f02a127ec68acb7cde4d5278acc66ef53c0e91625aebccd1274fe1d74da0d7.jpg"
     },
     {
+      "path": "library/game-previews/ace-archer-3d.mp4",
+      "bytes": 319173,
+      "sha256": "a6478c6c9d791758269116aeece97895e92dfc7a41ee84c83bd0bcb51e0ae8e3",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/a6478c6c9d791758269116aeece97895e92dfc7a41ee84c83bd0bcb51e0ae8e3.mp4"
+    },
+    {
+      "path": "library/game-previews/alien-sniper-3d.mp4",
+      "bytes": 305021,
+      "sha256": "8e7fdb233aab514ef1987e4b97816aee4148a44d13766c0016c9e2e18793556f",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/8e7fdb233aab514ef1987e4b97816aee4148a44d13766c0016c9e2e18793556f.mp4"
+    },
+    {
+      "path": "library/game-previews/arrow-out-3d.mp4",
+      "bytes": 115489,
+      "sha256": "9bb101e683d9ac05ac70e0f476c3438a31fedee20a7c94ea025105ade40762c7",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/9bb101e683d9ac05ac70e0f476c3438a31fedee20a7c94ea025105ade40762c7.mp4"
+    },
+    {
+      "path": "library/game-previews/arrow-pop-clear.mp4",
+      "bytes": 608768,
+      "sha256": "814e43beed058c755afa3369bc09c2f28d57ad276321b840a7f1ab5321234783",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/814e43beed058c755afa3369bc09c2f28d57ad276321b840a7f1ab5321234783.mp4"
+    },
+    {
+      "path": "library/game-previews/backpack-hero.mp4",
+      "bytes": 390837,
+      "sha256": "08658ce18dc81dfc2de94b0699349ccd2f7cfa233e246617888fa5f73c32b30d",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/08658ce18dc81dfc2de94b0699349ccd2f7cfa233e246617888fa5f73c32b30d.mp4"
+    },
+    {
+      "path": "library/game-previews/ball-laser-bounce.mp4",
+      "bytes": 737404,
+      "sha256": "21791023731e00693be7225f4e3a5301d4bb096e84ce9957b9575cdc8e1e7a81",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/21791023731e00693be7225f4e3a5301d4bb096e84ce9957b9575cdc8e1e7a81.mp4"
+    },
+    {
       "path": "library/game-previews/ball-match.mp4",
       "bytes": 264864,
       "sha256": "ee4b6075168a05ec21b5c02dd17028ac7e125f5527b42bf7cbd64b922722d934",
       "url": "https://releases.open-design.ai/open-game/media/sha256/ee4b6075168a05ec21b5c02dd17028ac7e125f5527b42bf7cbd64b922722d934.mp4"
     },
     {
+      "path": "library/game-previews/base-defense-battle.mp4",
+      "bytes": 305063,
+      "sha256": "2a5a2268103eff90c0f7d9482b2ba26efa86e83c493b8ff607cf2db1e47e510f",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/2a5a2268103eff90c0f7d9482b2ba26efa86e83c493b8ff607cf2db1e47e510f.mp4"
+    },
+    {
+      "path": "library/game-previews/battle-cats-clash.mp4",
+      "bytes": 911321,
+      "sha256": "7b7082a13d00bee030ca617e6c4edc458188ebf510b20284bd99bc97ba3e8904",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/7b7082a13d00bee030ca617e6c4edc458188ebf510b20284bd99bc97ba3e8904.mp4"
+    },
+    {
+      "path": "library/game-previews/beach-soccer-pro.mp4",
+      "bytes": 113914,
+      "sha256": "fe953ee8aeedccf603b49266eb3380bc745dd2aef98dd24863d8f6ec94532ef2",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/fe953ee8aeedccf603b49266eb3380bc745dd2aef98dd24863d8f6ec94532ef2.mp4"
+    },
+    {
+      "path": "library/game-previews/big-hero-squad.mp4",
+      "bytes": 223972,
+      "sha256": "192201e420e06faadc158a5a9bd0550025f7ecc17191d776d5dcbb17ca0b41cb",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/192201e420e06faadc158a5a9bd0550025f7ecc17191d776d5dcbb17ca0b41cb.mp4"
+    },
+    {
+      "path": "library/game-previews/billiards-3d-pro.mp4",
+      "bytes": 203194,
+      "sha256": "371cc6449129150f5f96791a69432e1c0a8da32a6968db14a5afa1bb12773681",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/371cc6449129150f5f96791a69432e1c0a8da32a6968db14a5afa1bb12773681.mp4"
+    },
+    {
       "path": "library/game-previews/block-blast.mp4",
       "bytes": 217347,
       "sha256": "de1e85a7908b8fdd87cce4de5c640dad1ec315eca5888d16f68c54572c22edab",
       "url": "https://releases.open-design.ai/open-game/media/sha256/de1e85a7908b8fdd87cce4de5c640dad1ec315eca5888d16f68c54572c22edab.mp4"
+    },
+    {
+      "path": "library/game-previews/block-gem-clear.mp4",
+      "bytes": 405791,
+      "sha256": "a8cc74182d8835b20b11f85ee5954873bdae030b0997e396b444f6c46a1bc7e7",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/a8cc74182d8835b20b11f85ee5954873bdae030b0997e396b444f6c46a1bc7e7.mp4"
+    },
+    {
+      "path": "library/game-previews/blossom-bloom-match.mp4",
+      "bytes": 75559,
+      "sha256": "bd9f70202b26fc9d1d924fd1cbe5d5dcdba20d4fd7f11dd78c377828fd220497",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/bd9f70202b26fc9d1d924fd1cbe5d5dcdba20d4fd7f11dd78c377828fd220497.mp4"
+    },
+    {
+      "path": "library/game-previews/boba-tea-adventure.mp4",
+      "bytes": 149031,
+      "sha256": "9aa7dd5ede3db8cc19d6a7b9d4c530316d3d6a506be1e3a2d8eff81fa7b2354a",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/9aa7dd5ede3db8cc19d6a7b9d4c530316d3d6a506be1e3a2d8eff81fa7b2354a.mp4"
+    },
+    {
+      "path": "library/game-previews/bottle-fill-puzzle.mp4",
+      "bytes": 203101,
+      "sha256": "f4fd374137366b9e4d8089bc92ff54cfcde5fd2063639cfde03e954249ad6ea5",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/f4fd374137366b9e4d8089bc92ff54cfcde5fd2063639cfde03e954249ad6ea5.mp4"
+    },
+    {
+      "path": "library/game-previews/breakout-siege-3d.mp4",
+      "bytes": 942977,
+      "sha256": "6b9925976742532e1851661234dc0b460bb669799b40b1eba71626bdc650da94",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/6b9925976742532e1851661234dc0b460bb669799b40b1eba71626bdc650da94.mp4"
+    },
+    {
+      "path": "library/game-previews/bubble-hex-dragon.mp4",
+      "bytes": 239472,
+      "sha256": "708d4bcd1d2a647ad5f3260341e6c2fc5775e0f586742ba452ec435ec61256b6",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/708d4bcd1d2a647ad5f3260341e6c2fc5775e0f586742ba452ec435ec61256b6.mp4"
+    },
+    {
+      "path": "library/game-previews/bug-sprint-2d.mp4",
+      "bytes": 516849,
+      "sha256": "f956723142ea31c4e1aa72bc8d205e805339103d591e91f0b0920cadf29b20f3",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/f956723142ea31c4e1aa72bc8d205e805339103d591e91f0b0920cadf29b20f3.mp4"
+    },
+    {
+      "path": "library/game-previews/bus-queue-sort.mp4",
+      "bytes": 160899,
+      "sha256": "ed0c50c320fa2a48f76a8a38629a212dca0c0f9e1ac5b668a535bd266378477e",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/ed0c50c320fa2a48f76a8a38629a212dca0c0f9e1ac5b668a535bd266378477e.mp4"
+    },
+    {
+      "path": "library/game-previews/button-cut-200.mp4",
+      "bytes": 199903,
+      "sha256": "3aa445e7b24c3679129172607cd7cc5ea4cef7a439ee82ee06dd5905d95646cb",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/3aa445e7b24c3679129172607cd7cc5ea4cef7a439ee82ee06dd5905d95646cb.mp4"
     },
     {
       "path": "library/game-previews/castle-crush.mp4",
@@ -588,6 +708,36 @@
       "bytes": 274911,
       "sha256": "d474176efbd9409bd44a4309d8700c9502c36785c7074ef6ea23ac0a99a5ea3c",
       "url": "https://releases.open-design.ai/open-game/media/sha256/d474176efbd9409bd44a4309d8700c9502c36785c7074ef6ea23ac0a99a5ea3c.mp4"
+    },
+    {
+      "path": "library/game-previews/chamber-block-clear.mp4",
+      "bytes": 689642,
+      "sha256": "9aad4961fc213d30e55ebdb7829cfec822d97da6f340b83bd2dccbf774c9b4e0",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/9aad4961fc213d30e55ebdb7829cfec822d97da6f340b83bd2dccbf774c9b4e0.mp4"
+    },
+    {
+      "path": "library/game-previews/chibi-3kingdoms.mp4",
+      "bytes": 551966,
+      "sha256": "2566ad88cdda81b541b80f0d9ba8c35238813195c8285d55ffb625a818dd6687",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/2566ad88cdda81b541b80f0d9ba8c35238813195c8285d55ffb625a818dd6687.mp4"
+    },
+    {
+      "path": "library/game-previews/classic-jigsaw.mp4",
+      "bytes": 222133,
+      "sha256": "c06d2e677ae0f1358a82b78dd45e894520d28423bbd17e284e69d542c9815088",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/c06d2e677ae0f1358a82b78dd45e894520d28423bbd17e284e69d542c9815088.mp4"
+    },
+    {
+      "path": "library/game-previews/cloud-2048-match.mp4",
+      "bytes": 77426,
+      "sha256": "c69603635c20862906d799698086b56769a0097c4f841c1a1a6bc035a52ba03b",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/c69603635c20862906d799698086b56769a0097c4f841c1a1a6bc035a52ba03b.mp4"
+    },
+    {
+      "path": "library/game-previews/comeback-life-quest.mp4",
+      "bytes": 362031,
+      "sha256": "3373e74f0576cd7af7d4f4cb90943cfc2ad6c2d27d557bbf7005e9ce5eb7a0c8",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/3373e74f0576cd7af7d4f4cb90943cfc2ad6c2d27d557bbf7005e9ce5eb7a0c8.mp4"
     },
     {
       "path": "library/game-previews/comet-guard.mp4",
@@ -698,10 +848,88 @@
       "url": "https://releases.open-design.ai/open-game/media/sha256/5156b7b8a5e9d1c56a61ba8dcea36ca44f5997b1468cae30b9d2748218540926.mp4"
     },
     {
+      "path": "library/game-previews/crowd-rush-3d.mp4",
+      "bytes": 967137,
+      "sha256": "166ab265b13fc8d30fa56d0a773ae0bd8774382fb57b049331b34c3d23785cca",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/166ab265b13fc8d30fa56d0a773ae0bd8774382fb57b049331b34c3d23785cca.mp4"
+    },
+    {
+      "path": "library/game-previews/cube-chain-2048.mp4",
+      "bytes": 75684,
+      "sha256": "095dee70c21b236505f3cf8a146afa43d4aa549cc83cccff0e1e055d886248ef",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/095dee70c21b236505f3cf8a146afa43d4aa549cc83cccff0e1e055d886248ef.mp4"
+    },
+    {
+      "path": "library/game-previews/daily-match-pop.mp4",
+      "bytes": 175225,
+      "sha256": "9bc7594aea86727e8cf1746ee252a81236e0053fea4cbc5c7a85581559e4bcc6",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/9bc7594aea86727e8cf1746ee252a81236e0053fea4cbc5c7a85581559e4bcc6.mp4"
+    },
+    {
+      "path": "library/game-previews/dino-island-3d.mp4",
+      "bytes": 444048,
+      "sha256": "76bfc9bc06e69d2b03389d8f72ba8d5fa057b76f8d937290a63f8612ccdc17fd",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/76bfc9bc06e69d2b03389d8f72ba8d5fa057b76f8d937290a63f8612ccdc17fd.mp4"
+    },
+    {
+      "path": "library/game-previews/doomsday-survivor.mp4",
+      "bytes": 543267,
+      "sha256": "3289747f14b5768a5adcb62c5c8905fddc8bdf2d7c68ba3e1acf2c0852799368",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/3289747f14b5768a5adcb62c5c8905fddc8bdf2d7c68ba3e1acf2c0852799368.mp4"
+    },
+    {
       "path": "library/game-previews/drift-dash.mp4",
       "bytes": 279627,
       "sha256": "35c683cdabd6e6d261ae38aaa1cf0e4a59c25157c08d4a75632cca77430e9a96",
       "url": "https://releases.open-design.ai/open-game/media/sha256/35c683cdabd6e6d261ae38aaa1cf0e4a59c25157c08d4a75632cca77430e9a96.mp4"
+    },
+    {
+      "path": "library/game-previews/drift-king-rush.mp4",
+      "bytes": 735177,
+      "sha256": "fa6d51ff53a1d228cb7ecef333018c5c4d3fee7c4ba6cdefebd7cfc6eb5995e8",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/fa6d51ff53a1d228cb7ecef333018c5c4d3fee7c4ba6cdefebd7cfc6eb5995e8.mp4"
+    },
+    {
+      "path": "library/game-previews/duke-duck-quest.mp4",
+      "bytes": 421474,
+      "sha256": "eebd723b6a20cec7a45899bfd56b7beebac1d23ab04468ede55d71d3356e577d",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/eebd723b6a20cec7a45899bfd56b7beebac1d23ab04468ede55d71d3356e577d.mp4"
+    },
+    {
+      "path": "library/game-previews/dungeon-escape-horde.mp4",
+      "bytes": 457296,
+      "sha256": "246d6ce212894ec75823681a36785804fba21c695281b27410a4e4fd42f1f541",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/246d6ce212894ec75823681a36785804fba21c695281b27410a4e4fd42f1f541.mp4"
+    },
+    {
+      "path": "library/game-previews/escape-match.mp4",
+      "bytes": 159905,
+      "sha256": "5eeeebe910cce7c089e96cbc3a552234b03b0605a80bcb5b99415ec7b9876520",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/5eeeebe910cce7c089e96cbc3a552234b03b0605a80bcb5b99415ec7b9876520.mp4"
+    },
+    {
+      "path": "library/game-previews/find-the-cow.mp4",
+      "bytes": 60899,
+      "sha256": "6b93c8572eec302e34c1cb945aaf903a51016fd6e75fddbd363f035a09f7f8c1",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/6b93c8572eec302e34c1cb945aaf903a51016fd6e75fddbd363f035a09f7f8c1.mp4"
+    },
+    {
+      "path": "library/game-previews/fire-water-duo.mp4",
+      "bytes": 491866,
+      "sha256": "5e93fcb9f7c70cbfbfe69b02629579a0a3692571e83ebe91af74b7feb7e3ad09",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/5e93fcb9f7c70cbfbfe69b02629579a0a3692571e83ebe91af74b7feb7e3ad09.mp4"
+    },
+    {
+      "path": "library/game-previews/flappy-pixel-bird.mp4",
+      "bytes": 69447,
+      "sha256": "392bf3948d6612a19270993f14d23765e6d6e7ea217d6456cab22cc9f1c177b0",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/392bf3948d6612a19270993f14d23765e6d6e7ea217d6456cab22cc9f1c177b0.mp4"
+    },
+    {
+      "path": "library/game-previews/fruit-bubble-pop.mp4",
+      "bytes": 528136,
+      "sha256": "45b944c9f0d278d8ff354817a9e9413a4b99d04ac5987874f34620dfba83f1fe",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/45b944c9f0d278d8ff354817a9e9413a4b99d04ac5987874f34620dfba83f1fe.mp4"
     },
     {
       "path": "library/game-previews/gate-legion.mp4",
@@ -710,10 +938,34 @@
       "url": "https://releases.open-design.ai/open-game/media/sha256/7e9277de01c1ab1e37440711699745cba4c5b19d3333b1e7387661c355a0dc4f.mp4"
     },
     {
+      "path": "library/game-previews/giant-rush-3d.mp4",
+      "bytes": 377639,
+      "sha256": "8ee65150bc42692ac95ed3586c1f5df1e6d5d12e6765a49eff086213c848aee9",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/8ee65150bc42692ac95ed3586c1f5df1e6d5d12e6765a49eff086213c848aee9.mp4"
+    },
+    {
       "path": "library/game-previews/glyph-garden.mp4",
       "bytes": 329350,
       "sha256": "7b2f23a4a981bb461b959f215f80cf82c32dd77b73c9e8b15f04865486b529af",
       "url": "https://releases.open-design.ai/open-game/media/sha256/7b2f23a4a981bb461b959f215f80cf82c32dd77b73c9e8b15f04865486b529af.mp4"
+    },
+    {
+      "path": "library/game-previews/gold-miner.mp4",
+      "bytes": 110373,
+      "sha256": "3546b3b4dd6acd0158c0f84564a1bff22c48ade03c0a6b9e28ceecc5c8dc151d",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/3546b3b4dd6acd0158c0f84564a1bff22c48ade03c0a6b9e28ceecc5c8dc151d.mp4"
+    },
+    {
+      "path": "library/game-previews/gomoku-ai-pro.mp4",
+      "bytes": 37549,
+      "sha256": "ab03a0b6f91b1067831e0c9f0a701aaada4bac8d7c240fe4b5da05a22043034e",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/ab03a0b6f91b1067831e0c9f0a701aaada4bac8d7c240fe4b5da05a22043034e.mp4"
+    },
+    {
+      "path": "library/game-previews/happy-glass-draw.mp4",
+      "bytes": 84421,
+      "sha256": "70928aa54864865f5ff712705cbd2d3010835aebe938847226037b8931203e4e",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/70928aa54864865f5ff712705cbd2d3010835aebe938847226037b8931203e4e.mp4"
     },
     {
       "path": "library/game-previews/harbor-skirmish.mp4",
@@ -722,10 +974,40 @@
       "url": "https://releases.open-design.ai/open-game/media/sha256/687ebd66d217e3ce8d367b57fb32dd851fb80d7370a236778359c4e0928b35fb.mp4"
     },
     {
+      "path": "library/game-previews/heroes-tactics-war.mp4",
+      "bytes": 306310,
+      "sha256": "097679e695d1678bad5af9391c6b12d4d8eff3a11785a7ceac4329745b6702e0",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/097679e695d1678bad5af9391c6b12d4d8eff3a11785a7ceac4329745b6702e0.mp4"
+    },
+    {
+      "path": "library/game-previews/hoop-dunk-master.mp4",
+      "bytes": 119284,
+      "sha256": "d3e156d7bf58924364a1665426f01a35ade72554674feda395094b9a0e1a0359",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/d3e156d7bf58924364a1665426f01a35ade72554674feda395094b9a0e1a0359.mp4"
+    },
+    {
+      "path": "library/game-previews/idiom-chain-pro.mp4",
+      "bytes": 599362,
+      "sha256": "183a6e9ae9c7e390908812c3d05b5a076032ac4771311dd9a6e8010e3a982f1c",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/183a6e9ae9c7e390908812c3d05b5a076032ac4771311dd9a6e8010e3a982f1c.mp4"
+    },
+    {
       "path": "library/game-previews/jingyang-ridge.mp4",
       "bytes": 277710,
       "sha256": "5e8dd0c7ccd52bdfeb1597da963ce406af79138339bcdc49cc2310fcac140e6d",
       "url": "https://releases.open-design.ai/open-game/media/sha256/5e8dd0c7ccd52bdfeb1597da963ce406af79138339bcdc49cc2310fcac140e6d.mp4"
+    },
+    {
+      "path": "library/game-previews/jump-jump-3d.mp4",
+      "bytes": 245179,
+      "sha256": "f8cbb5f9710d89e5a3737e07fad8d19736f87d95b3aefcc282d8c4383c2cd188",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/f8cbb5f9710d89e5a3737e07fad8d19736f87d95b3aefcc282d8c4383c2cd188.mp4"
+    },
+    {
+      "path": "library/game-previews/knit-yarn-unravel.mp4",
+      "bytes": 341013,
+      "sha256": "7690484311da9b99af6a3a7c28dc9713feeb6a2779c5871d20f50508dffcf3b1",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/7690484311da9b99af6a3a7c28dc9713feeb6a2779c5871d20f50508dffcf3b1.mp4"
     },
     {
       "path": "library/game-previews/lane-turret.mp4",
@@ -746,10 +1028,22 @@
       "url": "https://releases.open-design.ai/open-game/media/sha256/6bf4a180b1b65c93f7969da7e4f1579d5002665d7098ee2b0d27794167210e12.mp4"
     },
     {
+      "path": "library/game-previews/lazy-cat-runner.mp4",
+      "bytes": 991576,
+      "sha256": "e13d40a3fdccb4f5380f0baa4e5cfb9004a000ed575d4ab7825794afc74aaf2b",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/e13d40a3fdccb4f5380f0baa4e5cfb9004a000ed575d4ab7825794afc74aaf2b.mp4"
+    },
+    {
       "path": "library/game-previews/lighthouse-log.mp4",
       "bytes": 236521,
       "sha256": "cb9f525824253e35317d6158b196f19c067c1b2c53ace8d16f43630624d067bc",
       "url": "https://releases.open-design.ai/open-game/media/sha256/cb9f525824253e35317d6158b196f19c067c1b2c53ace8d16f43630624d067bc.mp4"
+    },
+    {
+      "path": "library/game-previews/magic-tower-rpg.mp4",
+      "bytes": 84431,
+      "sha256": "5ddacdd4607f5d8e537f883733277de167b774b7e92766b46b7756e02f43a76f",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/5ddacdd4607f5d8e537f883733277de167b774b7e92766b46b7756e02f43a76f.mp4"
     },
     {
       "path": "library/game-previews/mahjong-pairs.mp4",
@@ -758,10 +1052,46 @@
       "url": "https://releases.open-design.ai/open-game/media/sha256/ce6472de4136b524fdcf7fdca1870266896a052f0b947727bd25eb6b43c8e7a4.mp4"
     },
     {
+      "path": "library/game-previews/mahjong-slide-pairs.mp4",
+      "bytes": 127632,
+      "sha256": "3ca72f30fb5911b0da1524b8b33d163938e058a998baacbc0849d7e157864130",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/3ca72f30fb5911b0da1524b8b33d163938e058a998baacbc0849d7e157864130.mp4"
+    },
+    {
+      "path": "library/game-previews/meme-spot-diff.mp4",
+      "bytes": 623275,
+      "sha256": "cdfe6c08e210bd7f4d8fab3ee9dc92b088fe04359bd562e3521b11c54c41cf26",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/cdfe6c08e210bd7f4d8fab3ee9dc92b088fe04359bd562e3521b11c54c41cf26.mp4"
+    },
+    {
+      "path": "library/game-previews/meme-spotter-king.mp4",
+      "bytes": 472684,
+      "sha256": "98e8226df7afc428e90c9676805c2491d838cd5f6b4cc886945d5a8f1c51e961",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/98e8226df7afc428e90c9676805c2491d838cd5f6b4cc886945d5a8f1c51e961.mp4"
+    },
+    {
       "path": "library/game-previews/merge-bakery.mp4",
       "bytes": 364766,
       "sha256": "eb9d5750d332334a97ec42a7f42343dce63756fda9675e5e36db8e7882f8f4b5",
       "url": "https://releases.open-design.ai/open-game/media/sha256/eb9d5750d332334a97ec42a7f42343dce63756fda9675e5e36db8e7882f8f4b5.mp4"
+    },
+    {
+      "path": "library/game-previews/merge-to-ten.mp4",
+      "bytes": 90540,
+      "sha256": "e01f9ac07d1455d9d2400f13c77ac0e9e94226b5d4bc6463529ded28ebe462de",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/e01f9ac07d1455d9d2400f13c77ac0e9e94226b5d4bc6463529ded28ebe462de.mp4"
+    },
+    {
+      "path": "library/game-previews/model-jigsaw-3d.mp4",
+      "bytes": 275063,
+      "sha256": "dac66b4cb49ffb21c8e26dd4d8504e73fd619678c488ad817041f4856b1d5c39",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/dac66b4cb49ffb21c8e26dd4d8504e73fd619678c488ad817041f4856b1d5c39.mp4"
+    },
+    {
+      "path": "library/game-previews/monkey-mart-idle.mp4",
+      "bytes": 413640,
+      "sha256": "338f6c0c57c0b7b1c9eb65b1da6c06bbe349affc3fdb4bdb833fa91a04f7e191",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/338f6c0c57c0b7b1c9eb65b1da6c06bbe349affc3fdb4bdb833fa91a04f7e191.mp4"
     },
     {
       "path": "library/game-previews/neon-drift.mp4",
@@ -776,10 +1106,22 @@
       "url": "https://releases.open-design.ai/open-game/media/sha256/4a85b6b9bbb9aaaf832620dc4911da7d7e5cf9afbbf404d30df00d661da835ef.mp4"
     },
     {
+      "path": "library/game-previews/parking-jam-hero.mp4",
+      "bytes": 132085,
+      "sha256": "f5199a28691cf4bc924365e22b66e4d1a788c455188f34211a3f67bfabe2780e",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/f5199a28691cf4bc924365e22b66e4d1a788c455188f34211a3f67bfabe2780e.mp4"
+    },
+    {
       "path": "library/game-previews/periscope-depth.mp4",
       "bytes": 161856,
       "sha256": "b3874c28c8b870a7f39cec4612ba871edfbd7a97df0ca3d59dde8c27d2f76f05",
       "url": "https://releases.open-design.ai/open-game/media/sha256/b3874c28c8b870a7f39cec4612ba871edfbd7a97df0ca3d59dde8c27d2f76f05.mp4"
+    },
+    {
+      "path": "library/game-previews/phantom-shooter.mp4",
+      "bytes": 537501,
+      "sha256": "635fe9b168d191be86864904a71bee6ba45ec66c05e229bf8b9c8f8ba4a26f42",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/635fe9b168d191be86864904a71bee6ba45ec66c05e229bf8b9c8f8ba4a26f42.mp4"
     },
     {
       "path": "library/game-previews/pin-rescue.mp4",
@@ -788,10 +1130,40 @@
       "url": "https://releases.open-design.ai/open-game/media/sha256/41fe6dc70dc64246e55f0e2c66e55ab23e77bc20a1b772a0b6a9ff61f3877c8c.mp4"
     },
     {
+      "path": "library/game-previews/pixel-block-clear.mp4",
+      "bytes": 83615,
+      "sha256": "ec42e600f895587793883600e1e3dd99216f4ce52a1fb65713385ee288f52940",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/ec42e600f895587793883600e1e3dd99216f4ce52a1fb65713385ee288f52940.mp4"
+    },
+    {
+      "path": "library/game-previews/plane-fight-arcade.mp4",
+      "bytes": 496162,
+      "sha256": "c3597a13eff466cbab326ea17fd7e5dc0000e50976949432ab8e827d0d55146b",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/c3597a13eff466cbab326ea17fd7e5dc0000e50976949432ab8e827d0d55146b.mp4"
+    },
+    {
+      "path": "library/game-previews/planet-knife-battle.mp4",
+      "bytes": 903862,
+      "sha256": "a9fb3ef60d09ee294bb9a3b3c408bef63ce05f99a588a2677410ea6eab6a0b1f",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/a9fb3ef60d09ee294bb9a3b3c408bef63ce05f99a588a2677410ea6eab6a0b1f.mp4"
+    },
+    {
+      "path": "library/game-previews/ring-stack-match.mp4",
+      "bytes": 57469,
+      "sha256": "6115b471666c0a56834f73fd6d8df79d67e8fa94aff74758901c1b5268fc1bc1",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/6115b471666c0a56834f73fd6d8df79d67e8fa94aff74758901c1b5268fc1bc1.mp4"
+    },
+    {
       "path": "library/game-previews/rooftop-roast.mp4",
       "bytes": 387511,
       "sha256": "2f05987745f9f0bc5832ca8c9c086e03939668375807ae2f8d6b255f0d9cdcec",
       "url": "https://releases.open-design.ai/open-game/media/sha256/2f05987745f9f0bc5832ca8c9c086e03939668375807ae2f8d6b255f0d9cdcec.mp4"
+    },
+    {
+      "path": "library/game-previews/rope-untangle-3d.mp4",
+      "bytes": 192467,
+      "sha256": "74878b69068cd80b8aba07dbf051c738f71317317aa234a8ffa153cae946bb8c",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/74878b69068cd80b8aba07dbf051c738f71317317aa234a8ffa153cae946bb8c.mp4"
     },
     {
       "path": "library/game-previews/screw-puzzle.mp4",
@@ -818,6 +1190,12 @@
       "url": "https://releases.open-design.ai/open-game/media/sha256/7f5c0cebc427aa29b0d87544bf4d0919219d591c0e1346d38011d0cf9489bb52.mp4"
     },
     {
+      "path": "library/game-previews/snow-dash-runner.mp4",
+      "bytes": 540175,
+      "sha256": "7a772662edc5d781a6d4e26914647788437b75870fe5e0fa3717347d2e5c54c3",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/7a772662edc5d781a6d4e26914647788437b75870fe5e0fa3717347d2e5c54c3.mp4"
+    },
+    {
       "path": "library/game-previews/sort-stack.mp4",
       "bytes": 261233,
       "sha256": "a771e64e1643c900fb86159b497492e824c6fdb54304b02d8a5c467f6762d6e7",
@@ -830,10 +1208,34 @@
       "url": "https://releases.open-design.ai/open-game/media/sha256/af0793c821da4113a0234b26691d36be866c7d9573474e52eaf2168b6f8d2f9f.mp4"
     },
     {
+      "path": "library/game-previews/star-frontier-war.mp4",
+      "bytes": 836677,
+      "sha256": "f5cf934b1e1bd147a91ae7ec164bf504b232fb064a273ea85ea269f6658f0b28",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/f5cf934b1e1bd147a91ae7ec164bf504b232fb064a273ea85ea269f6658f0b28.mp4"
+    },
+    {
       "path": "library/game-previews/starlight-bastion.mp4",
       "bytes": 295092,
       "sha256": "49c1cb939f76d972f86a163efb306c16d488a88cac5e74a99405f0e9e3f1c924",
       "url": "https://releases.open-design.ai/open-game/media/sha256/49c1cb939f76d972f86a163efb306c16d488a88cac5e74a99405f0e9e3f1c924.mp4"
+    },
+    {
+      "path": "library/game-previews/stickman-3kingdoms.mp4",
+      "bytes": 454150,
+      "sha256": "dc13a1228f2540a04795d1f57ed4c6a017c0cebb20f31429df8d636e2867f404",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/dc13a1228f2540a04795d1f57ed4c6a017c0cebb20f31429df8d636e2867f404.mp4"
+    },
+    {
+      "path": "library/game-previews/tetris-blast-boom.mp4",
+      "bytes": 52818,
+      "sha256": "d7caff5f3d5e355f2c5bdfb8ffe458d5cb75937233f56782311bfa64f14cf387",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/d7caff5f3d5e355f2c5bdfb8ffe458d5cb75937233f56782311bfa64f14cf387.mp4"
+    },
+    {
+      "path": "library/game-previews/tetris-classic-pro.mp4",
+      "bytes": 46338,
+      "sha256": "a0dc7d0ff0e2489e4e5579cb933a4883597ee5d792216785a46558012d31b745",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/a0dc7d0ff0e2489e4e5579cb933a4883597ee5d792216785a46558012d31b745.mp4"
     },
     {
       "path": "library/game-previews/tidebreaker.mp4",
@@ -854,10 +1256,34 @@
       "url": "https://releases.open-design.ai/open-game/media/sha256/31beb9dda3a737a1cb7a3aadc324f25a4a213159da6280df70571cf4137b57ac.mp4"
     },
     {
+      "path": "library/game-previews/tiny-war-commander.mp4",
+      "bytes": 806294,
+      "sha256": "808d6ec10dbb23b7ef02b01da8b959b276c4266705ad555764cde6ac0c356036",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/808d6ec10dbb23b7ef02b01da8b959b276c4266705ad555764cde6ac0c356036.mp4"
+    },
+    {
+      "path": "library/game-previews/unbolt-screw-51.mp4",
+      "bytes": 183809,
+      "sha256": "01d1778e77c26585684aeb401c0deb088f82b79d3c73f42d3e7644c657195c3c",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/01d1778e77c26585684aeb401c0deb088f82b79d3c73f42d3e7644c657195c3c.mp4"
+    },
+    {
+      "path": "library/game-previews/vice-beach-golf-club.mp4",
+      "bytes": 674837,
+      "sha256": "0c317af4d9008394d60862fa4bdb2866553cb9d96ae01a4ca805c30d21ebb56f",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/0c317af4d9008394d60862fa4bdb2866553cb9d96ae01a4ca805c30d21ebb56f.mp4"
+    },
+    {
       "path": "library/game-previews/vice-beach-motor-club.mp4",
       "bytes": 316158,
       "sha256": "790847cecf4a577b00305d378b389fb283059af24bcc02628de85d3b96d6665c",
       "url": "https://releases.open-design.ai/open-game/media/sha256/790847cecf4a577b00305d378b389fb283059af24bcc02628de85d3b96d6665c.mp4"
+    },
+    {
+      "path": "library/game-previews/video-jigsaw.mp4",
+      "bytes": 301923,
+      "sha256": "71daa0ed116f3b5d49f4f6e8f405a38559701d99cf1d4c7587490154db894a89",
+      "url": "https://releases.open-design.ai/open-game/media/sha256/71daa0ed116f3b5d49f4f6e8f405a38559701d99cf1d4c7587490154db894a89.mp4"
     },
     {
       "path": "library/skills/openmotion-design-remix/previews/canopy-part-title.gif",
