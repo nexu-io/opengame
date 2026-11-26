@@ -18,9 +18,10 @@ import { WorkspaceStore } from './workspace.ts';
 import { ensureRuntime, execute, pluginRoot, HYPERFRAMES_VERSION } from './hyperframes.ts';
 import { verificationBinaries } from './scripts/verify-export.ts';
 import type { Duplex } from 'node:stream';
-import { injectPreviewBridgeHtml, isValidPreviewBridgeToken } from './shared/preview-bridge.ts';
+import { injectPreviewBridgeHtml, injectViewportGuardHtml, isValidPreviewBridgeToken } from './shared/preview-bridge.ts';
 import { attachmentDisposition } from './shared/http-header.ts';
 import { HostedGameTemplates } from './shared/hosted-game-templates.ts';
+import { lfsPointer } from './shared/repository-template-catalog.ts';
 import { zip } from './scripts/zip.mjs';
 import { escapeHtml } from './shared/scenario-content.ts';
 import { formatGameBriefPrompt, gameAssetInstructions, gameGenreLabels, gameGenres, gameStyles, gameSettings, isReadyBuiltInTemplate, type GameBrief, type GameCard, type GameCatalog, type GameCatalogIssue, type GameCreated, type GameHandoff, type GameRemixOptions, type RoomServerMessage, type GameTrailer, type GameTrailerStatus } from './shared/game-contract.ts';
@@ -1581,14 +1582,21 @@ server.listen(port, '127.0.0.1', () => {
   async staticFile(id: string, relative: string) {
     if (relative.toLowerCase() === 'game.json' || relative.toLowerCase()==='trailer/job.json' || isPublishRecord(relative)) throw new GameError('Private game metadata', 404);
     const card = await this.locateCard(id);
-    const root = relative.startsWith('trailer/') ? await this.trailerStorage(id) : card.dir;
+    const root = relative.startsWith('trailer/') ? await this.trailerStorage(id)
+      : card.source === 'template' && relative === 'index.html' ? await this.hosted.directory(id, card.dir) : card.dir;
     let file: string;
     try { file = await safeFile(root, relative); }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || card.source !== 'template' || root !== card.dir) throw error;
       file = await safeFile(await this.hosted.directory(id, card.dir), relative);
     }
-    return { data: await readFile(file), mime: mime[path.extname(file).toLowerCase()] ?? 'application/octet-stream' };
+    let data = await readFile(file);
+    if (card.source === 'template' && root === card.dir && lfsPointer(data)) {
+      const directory = await this.hosted.directory(id, card.dir);
+      data = await readFile(await safeFile(directory, relative));
+      if (lfsPointer(data)) throw new GameError(`Missing Git LFS data for ${id}/${relative}`, 503);
+    }
+    return { data, mime: mime[path.extname(file).toLowerCase()] ?? 'application/octet-stream' };
   }
 }
 
@@ -1736,11 +1744,44 @@ export async function gameHttp(req: IncomingMessage, res: ServerResponse, url: U
         const target=new URL(url);target.searchParams.set('room',randomUUID().replaceAll('-','').slice(0,8));
         res.writeHead(302,{'Location':target.pathname+target.search,'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'});res.end();return true;
       }
-      const file = await service.staticFile(id,rest.length?rest.join('/'):'index.html');
+      const studioEntry = entry && url.searchParams.get('gameStartup') === '1';
+      let file;
+      try {
+        file = await service.staticFile(id,rest.length?rest.join('/'):'index.html');
+      } catch (error) {
+        if (!studioEntry) throw error;
+        res.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; sandbox allow-scripts" });
+        res.end(`<script>parent.postMessage({type:'opengame:startup',state:'failed'}, '*')</script>`);
+        return true;
+      }
+      if (studioEntry && file.data.includes('id="GameCanvas"') && file.data.includes('cocos-js')) {
+        const startup = `<script>(() => {
+          const report = state => parent.postMessage({type:'opengame:startup',state}, '*');
+          const startupError = () => report('failed');
+          addEventListener('error', startupError);
+          addEventListener('unhandledrejection', startupError);
+          report('loading');
+          const waitForGameScene = setInterval(() => {
+            if (!window.cc?.director?.getScene?.()) return;
+            clearInterval(waitForGameScene);
+            removeEventListener('error', startupError);
+            removeEventListener('unhandledrejection', startupError);
+            requestAnimationFrame(() => requestAnimationFrame(() => report('ready')));
+          }, 100);
+          addEventListener('pagehide', () => clearInterval(waitForGameScene), {once:true});
+        })()</script>`;
+        file.data = Buffer.from(file.data.toString('utf8').replace(/<head\b[^>]*>/i, head => head + startup));
+      }
       const bridgeToken = url.searchParams.get('omBridge');
-      const payload = entry && file.mime.startsWith('text/html') && isValidPreviewBridgeToken(bridgeToken)
-        ? injectPreviewBridgeHtml(file.data, bridgeToken)
-        : file.data;
+      const hasBridge = isValidPreviewBridgeToken(bridgeToken);
+      const wantsViewportGuard = hasBridge
+        || url.searchParams.get('omViewportGuard') === '1'
+        || req.headers?.['sec-fetch-dest'] === 'iframe';
+      let payload: Buffer = file.data;
+      if (entry && file.mime.startsWith('text/html')) {
+        if (hasBridge) payload = injectPreviewBridgeHtml(payload, bridgeToken);
+        if (wantsViewportGuard) payload = injectViewportGuardHtml(payload);
+      }
       const origin = new URL(url); if (req.headers?.host) origin.host = req.headers.host;
       const encodedId = encodeURIComponent(id);
       const assetOrigins = `${origin.origin}/api/assets/ ${origin.origin}/motion-api/assets/`;

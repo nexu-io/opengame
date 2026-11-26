@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
-import { lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { access, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
+import { lfsPointer } from './repository-template-catalog.ts';
 import { readProjectZip } from './project-zip.ts';
 import { boundedMediaBody, mediaDigest, mediaOrigin } from './repository-media.ts';
 
@@ -8,6 +11,35 @@ export const gameBundlePrefix = 'open-game/games/objects/';
 export const maxGameBundleBytes = 150 * 1024 * 1024;
 export type GameBundle = { sha256: string; bytes: number };
 export type GameDownloadIndex = { schemaVersion: 1; games: Record<string, GameBundle> };
+const runGit = promisify(execFile);
+const sourceDownloads = new Map<string, Promise<void>>();
+
+async function hasTemplatePointer(directory: string): Promise<boolean> {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
+    const file = path.join(directory, entry.name);
+    if (entry.isDirectory() && await hasTemplatePointer(file)) return true;
+    if (entry.isFile()) {
+      const { size } = await lstat(file);
+      if (size >= 125 && size <= 1024 && lfsPointer(await readFile(file))) return true;
+    }
+  }
+  return false;
+}
+
+async function hydrateSourceTemplate(id: string, directory: string) {
+  if (!await hasTemplatePointer(directory)) return;
+  assert(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$/.test(id) && path.basename(directory) === id, 'Invalid game template ID');
+  const include = `--include=templates/games/${id}/**`;
+  const root = path.resolve(directory, '../../..');
+  try {
+    await access(path.join(root, '.git'));
+    await runGit('git', ['lfs', 'pull', include, '--exclude='], { cwd: root, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
+    assert(!await hasTemplatePointer(directory), 'Git LFS left unresolved files');
+  } catch (cause) {
+    throw new Error(`Could not fetch ${id}. Install Git LFS and retry, or run git lfs pull "${include}" --exclude="" in the OpenGame checkout.`, { cause });
+  }
+}
 export function gameBundleUrl(hash: string) {
   assert(/^[a-f0-9]{64}$/.test(hash), 'Invalid game bundle hash');
   return `${mediaOrigin}/${gameBundlePrefix}${hash}.zip`;
@@ -19,6 +51,7 @@ export class HostedGameTemplates {
   private pending = new Map<string, Promise<string>>();
   private readonly indexPath: string;
   private readonly cache: string;
+  private sourceCheckout?: Promise<boolean>;
   constructor(indexPath: string, cache: string) { this.indexPath = indexPath; this.cache = cache; }
 
   private async loadIndex(): Promise<GameDownloadIndex> {
@@ -32,7 +65,21 @@ export class HostedGameTemplates {
 
   async directory(id: string, installed: string) {
     const { games } = await (this.index ??= this.loadIndex());
-    if (!Object.hasOwn(games, id)) return installed;
+    if (!Object.hasOwn(games, id)) {
+      this.sourceCheckout ??= access(path.join(path.dirname(installed), '.gitattributes')).then(() => true, error => {
+        if (error.code === 'ENOENT') return false;
+        throw error;
+      });
+      if (await this.sourceCheckout) {
+        let ready = sourceDownloads.get(installed);
+        if (!ready) {
+          ready = hydrateSourceTemplate(id, installed).finally(() => sourceDownloads.delete(installed));
+          sourceDownloads.set(installed, ready);
+        }
+        await ready;
+      }
+      return installed;
+    }
     const bundle = games[id];
     const url = gameBundleUrl(bundle.sha256);
     assert(Number.isSafeInteger(bundle.bytes) && bundle.bytes > 0 && bundle.bytes <= maxGameBundleBytes, 'Invalid game bundle length');

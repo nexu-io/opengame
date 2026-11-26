@@ -47,7 +47,8 @@ OpenGame 是**首个开源全栈 Super Game Agent**——把 **DeepSeek（DSH）
 把下面这段指令发给 **DeepSeek TUI / Harness**、**Claude Code**、**Codex**、**WorkBuddy**、**Cursor**、**Gemini CLI** 或任意 [22 个本地 Agent](#agent-wall)：
 
 ```text
-阅读 https://github.com/nexu-io/opengame/blob/main/docs/opengame-setup.md，按照指南在当前 Agent 中安装并连接 OpenGame，打开 /studios/game 进入 Game Studio，然后使用 openmotion-game Skill 帮我复刻或制作一款可玩的游戏。
+请按 https://github.com/nexu-io/opengame/blob/main/docs/opengame-setup.md 把 OpenGame 接入当前 Agent。首次安装时用浅克隆（--depth 1），跳过 LFS 素材下载。打开 Game Studio 的模板库让我挑选，等我试玩或 Remix 时，再下载所选游戏的素材。
+如果发现可复现的 OpenGame 问题，欢迎向 nexu-io/opengame 提交修复 PR，附上复现步骤和验证结果。
 ```
 
 ### 2. 通过 Skills CLI 安装游戏工程 Skill
@@ -62,11 +63,12 @@ npx skills add nexu-io/opengame --skill openmotion-game
 
 ### 3. 从源码在本地启动 OpenGame Studio
 
-环境要求：**Git**、**npm**、**Node.js 22.18+**（CI 锁定 Node.js 26.11.1）。
+环境要求：**Git**、**Git LFS**、**npm**、**Node.js 22.18+**（CI 锁定 Node.js 26.11.1）。启动后即可浏览模板目录，首次试玩或 Remix 时只下载所选模板的素材。Tidebreaker 可直接离线试玩。
 
 ```sh
 git -c filter.lfs.process= -c filter.lfs.smudge= -c filter.lfs.required=false clone --depth 1 --single-branch --branch main https://github.com/nexu-io/opengame.git
 cd opengame
+git lfs install --local --skip-smudge
 npm ci
 npm run build:studio
 npm start

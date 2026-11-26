@@ -12,6 +12,7 @@ import {
   type SuperAgentIntent,
   type SuperAgentModeId,
   type SuperAgentPermissionMode,
+  type SuperAgentPreferences,
   type SuperAgentResourceAttachment,
   type SuperAgentResourceCatalog,
   type SuperAgentTurnFeedback,
@@ -178,6 +179,14 @@ export async function fetchWorkspaceResources(params: WorkspaceResourceQuery & {
   return run.finally(() => {
     if (inflightResources.get(key) === run) inflightResources.delete(key);
   });
+}
+
+export async function getSuperAgentPreferences() {
+  return saRequest<{ preferences: SuperAgentPreferences }>('/preferences');
+}
+
+export async function updateSuperAgentPreferences(patch: Partial<SuperAgentPreferences>) {
+  return saRequest<{ preferences: SuperAgentPreferences }>('/preferences', 'PATCH', patch);
 }
 
 export async function listSuperAgentChats() {

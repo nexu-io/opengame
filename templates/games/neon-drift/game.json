@@ -22,5 +22,6 @@
       "description": "雨夜高架上的霓虹夜驰。穿梭车流、蓄满加速，刷新你的最远距离。",
       "controls": "← → 或 A / D 转向 · ↑ / W / 空格加速 · 点击屏幕左右两侧转向 · 触屏 BOOST 加速 · P / Esc 暂停 · R 重开"
     }
-  }
+  },
+  "orientation": "landscape"
 }

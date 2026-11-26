@@ -15,14 +15,16 @@ import { clickMethod, clickOption, trackStudioClick } from './editorTracking';
 import { ModelSwitcher } from './ModelSwitcher';
 import { useProviderDirectory } from './useProviderDirectory';
 import { gatewayRequest } from './gatewayClient';
-import { SettingsError, SettingsLoading } from './settingsPrimitives';
+import { SettingsError, SettingsLoading, Toggle } from './settingsPrimitives';
 import { AgentSettings, DefaultAgentCard } from './AgentSettings';
 import { DiagnosticExport } from './DiagnosticExport';
 import { discord, feishu } from './CommunityLink';
 import { GITHUB_REPOSITORY, repositorySupportLinks } from './githubRepository';
 import { SettingsSurfaceBoundary } from './SettingsSurfaceBoundary';
+import { StudioToastViewport } from '../components/StudioToastViewport';
+import { useToast } from '../hooks/useToast';
 import { getDesktopBridge, isDesktopApp, useDesktopUpdateState } from '../utils/platformHost';
-import { useFollowUpBehavior } from '../utils/superAgentPreferences';
+import { useAutoMultimodalGeneration, useFollowUpBehavior } from '../utils/superAgentPreferences';
 import type { SuperAgentFollowUpMode } from '../../../shared/super-agent';
 
 import type { SettingsSection } from './workspacePageRouting';
@@ -78,8 +80,15 @@ function DefaultModels({ openProviders }: { openProviders: () => void }) {
 }
 function GeneralSettings({ openConnections }: { openConnections: () => void }) {
   const { t, locale, setLocale } = useI18n();
+  const toast = useToast();
   const [followUpBehavior, setFollowUpBehavior] = useFollowUpBehavior();
-  return <div className="om-settings-page"><h1 className="om-title">{t('General')}</h1><div className="om-card"><div className="om-preference-row"><div><h2 className="om-subtitle">{t('Language')}</h2><p className="om-muted">{t('Display language for the workspace')}</p></div><div className="om-preference-control"><Select label={t('Language')} value={locale} onCommit={value => { if (value !== locale) trackStudioClick('settings', 'language_change', undefined, undefined, clickOption(value)); setLocale(value as Locale); }} options={languages.map(item => ({ value: item.locale, label: item.label }))} /></div></div><div className="om-preference-row"><div><h2 className="om-subtitle">{t('Connect Agent')}</h2><p className="om-muted">{t('Connect your preferred Agent to this workspace.')}</p></div><Button variant="ghost" className="om-button h-auto" onClick={openConnections}>{t('Set up connection')}</Button></div></div><section className="om-card om-card-stack"><h2 className="om-subtitle">{t('Follow-ups')}</h2><div className="om-preference-row"><div><h3 className="om-subtitle">{t('Follow-up behavior')}</h3><p className="om-muted">{t('Queue follow-ups while the agent runs or steer the current run. Press ⌘ / Ctrl + Enter to do the opposite for one message.')}</p></div><div className="om-preference-control"><Select label={t('Follow-up behavior')} value={followUpBehavior} onCommit={value => setFollowUpBehavior(value as SuperAgentFollowUpMode)} options={[{ value: 'steer', label: t('Steer') }, { value: 'queue', label: t('Queue') }]} /></div></div></section><section className="om-card om-card-stack"><h2 className="om-subtitle">{t('Keyboard shortcuts')}</h2><div className="om-preference-row"><span>{t('Open settings')}</span><kbd>⌘ / Ctrl + ,</kbd></div><div className="om-preference-row"><span>{t('Toggle project list')}</span><kbd>Alt + B</kbd></div><div className="om-preference-row"><span>{t('Close menu or dialog')}</span><kbd>Esc</kbd></div></section></div>;
+  const autoMultimodal = useAutoMultimodalGeneration();
+  const handleToggleAutoMultimodal = async (enabled: boolean) => {
+    const ok = await autoMultimodal.setEnabled(enabled);
+    if (ok) toast.showToast(t('Settings saved'), 'info');
+    else toast.showToast(t('Could not save setting.'), 'error');
+  };
+  return <div className="om-settings-page"><h1 className="om-title">{t('General')}</h1><div className="om-card"><div className="om-preference-row"><div><h2 className="om-subtitle">{t('Language')}</h2><p className="om-muted">{t('Display language for the workspace')}</p></div><div className="om-preference-control"><Select label={t('Language')} value={locale} onCommit={value => { if (value !== locale) trackStudioClick('settings', 'language_change', undefined, undefined, clickOption(value)); setLocale(value as Locale); }} options={languages.map(item => ({ value: item.locale, label: item.label }))} /></div></div><div className="om-preference-row"><div><h2 className="om-subtitle">{t('Connect Agent')}</h2><p className="om-muted">{t('Connect your preferred Agent to this workspace.')}</p></div><Button variant="ghost" className="om-button h-auto" onClick={openConnections}>{t('Set up connection')}</Button></div></div><section className="om-card om-card-stack"><h2 className="om-subtitle">{t('Follow-ups')}</h2><div className="om-preference-row"><div><h3 className="om-subtitle">{t('Follow-up behavior')}</h3><p className="om-muted">{t('Queue follow-ups while the agent runs or steer the current run. Press ⌘ / Ctrl + Enter to do the opposite for one message.')}</p></div><div className="om-preference-control"><Select label={t('Follow-up behavior')} value={followUpBehavior} onCommit={value => setFollowUpBehavior(value as SuperAgentFollowUpMode)} options={[{ value: 'steer', label: t('Steer') }, { value: 'queue', label: t('Queue') }]} /></div></div></section><section className="om-card om-card-stack"><div className="om-preference-row"><div><h2 className="om-subtitle">{t('Auto-generate multimodal assets')}</h2><p className="om-muted">{t('Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.')}</p></div><Toggle label={t('Auto-generate multimodal assets')} checked={autoMultimodal.enabled} disabled={autoMultimodal.saving} onChange={enabled => void handleToggleAutoMultimodal(enabled)} /></div></section><section className="om-card om-card-stack"><h2 className="om-subtitle">{t('Keyboard shortcuts')}</h2><div className="om-preference-row"><span>{t('Open settings')}</span><kbd>⌘ / Ctrl + ,</kbd></div><div className="om-preference-row"><span>{t('Toggle project list')}</span><kbd>Alt + B</kbd></div><div className="om-preference-row"><span>{t('Close menu or dialog')}</span><kbd>Esc</kbd></div></section><StudioToastViewport {...toast} /></div>;
 }
 function ResourceSettings({ about, openConnections }: { about: boolean; openConnections: () => void }) {
   const { t, locale } = useI18n();

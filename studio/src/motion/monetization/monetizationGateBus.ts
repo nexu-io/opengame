@@ -17,6 +17,8 @@ export interface MonetizationGateRequest {
   limitCount?: number;
   /** Requested high resolution label such as "2K" or "4K" when `kind === 'resolution'`. */
   resolutionLabel?: string;
+  /** Optional callback invoked once after polling detects an upgraded plan or increased balance. */
+  onRecovered?: () => void | Promise<unknown>;
 }
 
 let currentGate: MonetizationGateRequest | null = null;

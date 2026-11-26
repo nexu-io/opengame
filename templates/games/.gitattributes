@@ -1,0 +1,19 @@
+*.png game-lfs
+*.jpg game-lfs
+*.jpeg game-lfs
+*.webp game-lfs
+*.mp3 game-lfs
+*.wav game-lfs
+*.ogg game-lfs
+*.m4a game-lfs
+*.mp4 game-lfs
+*.bin game-lfs
+*.cconb game-lfs
+*.wasm game-lfs
+*.glb game-lfs
+*.fbx game-lfs
+*.ttf game-lfs
+*.part[0-9] game-lfs
+*.part[0-9][0-9] game-lfs
+*/cover.webp -filter -diff -merge -text
+tidebreaker/** !filter !diff !merge text=auto

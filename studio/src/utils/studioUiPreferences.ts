@@ -57,6 +57,7 @@ export interface StudioUiPreferences {
   syncIndicatorsVisible?: boolean;
   superAgentFollowUpBehavior?: 'steer' | 'queue';
   superAgentPermissionMode?: 'on-request' | 'auto';
+  superAgentAutoMultimodalGeneration?: boolean;
 }
 
 const STUDIO_UI_PREFERENCES_KEY = "hf-studio-ui-preferences";
@@ -177,6 +178,9 @@ function readStorage(storage: Storage | null, key: string): StudioUiPreferences 
     }
     if (parsed.superAgentPermissionMode === "on-request" || parsed.superAgentPermissionMode === "auto") {
       preferences.superAgentPermissionMode = parsed.superAgentPermissionMode;
+    }
+    if (typeof parsed.superAgentAutoMultimodalGeneration === "boolean") {
+      preferences.superAgentAutoMultimodalGeneration = parsed.superAgentAutoMultimodalGeneration;
     }
     const dockLayout = parseDockLayout(parsed.dockLayout);
     if (dockLayout) preferences.dockLayout = dockLayout;

@@ -3689,6 +3689,7 @@
 }
 
 .om-sa-frame-skeleton[data-game-loading] {
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3697,6 +3698,12 @@
     radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--motion-accent) 10%, transparent), transparent 56%),
     radial-gradient(color-mix(in srgb, var(--motion-border-subtle) 45%, transparent) 1px, transparent 1px);
   background-size: 100% 100%, 24px 24px;
+}
+
+.om-sa-frame-skeleton[data-game-failed] {
+  flex-direction: column;
+  gap: var(--motion-space-8);
+  pointer-events: auto;
 }
 
 .om-sa-code-view {
