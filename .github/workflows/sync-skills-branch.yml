@@ -29,8 +29,9 @@ jobs:
         with:
           lfs: false
           persist-credentials: false
+          filter: blob:none
+          # Cone mode automatically includes root-level files (including LICENSE).
           sparse-checkout: |
-            LICENSE
             skills/opengame
             skills/openmotion-game
             skills/openmotion-media

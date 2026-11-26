@@ -102,8 +102,7 @@ test('OpenGame main entry Skill and setup guides install opengame once before lo
   }
   const syncWorkflow = await readFile(new URL('../.github/workflows/sync-skills-branch.yml', import.meta.url), 'utf8');
   assert.match(syncWorkflow, /github\.repository == 'nexu-io\/opengame'/);
-  assert.match(syncWorkflow, /skills\/opengame/);
-  assert.match(syncWorkflow, /skills\/openmotion-game/);
-  assert.match(syncWorkflow, /skills\/openmotion-media/);
+  assert.match(syncWorkflow, /filter: blob:none/);
+  assert.match(syncWorkflow, /sparse-checkout: \|\n\s+skills\/opengame\n\s+skills\/openmotion-game\n\s+skills\/openmotion-media/);
   assert.match(syncWorkflow, /refs\/heads\/skills/);
 });
