@@ -19,7 +19,7 @@ npx --yes skills@1.9.0 add nexu-io/opengame --skill opengame --global --agent AG
 
 Use `codex` for Codex and `claude-code` for Claude Code. For DeepSeek Harness (DSH) or any host without a dedicated Skills CLI target, use `universal`. Select only the intended host; for custom or isolated profiles, omit `--global` and run inside that profile or project directory instead of the daily global profile.
 
-Reuse an existing official installation and skip this step if `opengame` is already installed from `nexu-io/opengame` (for example, when setup started from the `opengame` Skill itself). Preserve unrelated Skills, foreign same-name entries, and the CLI's telemetry opt-outs (`DISABLE_TELEMETRY`, `DO_NOT_TRACK`). Setting `OPENGAME_SKIP_PUBLIC_SKILL=1` skips this optional step. Do not reinstall merely to generate another install event.
+Reuse an existing official installation and skip this step if `opengame` is already installed from `nexu-io/opengame` (for example, when setup started from the `opengame` Skill itself). Preserve unrelated Skills, foreign same-name entries, and the CLI's telemetry opt-outs (`DISABLE_TELEMETRY`, `DO_NOT_TRACK`). Setting `OPENMOTION_SKIP_PUBLIC_SKILL=1` skips this optional step. Do not reinstall merely to generate another install event.
 
 A Skills CLI failure or timeout does not block Studio or MCP setup: report it briefly and continue below. Skills CLI installs instructions only; continue the local source installation and stdio MCP setup below in this same conversation.
 

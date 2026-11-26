@@ -86,7 +86,7 @@ test('OpenGame main entry Skill and setup guides install opengame once before lo
   assert.match(entrySkill, /local stdio MCP/i);
   const setupGuide = await readFile(new URL('../docs/opengame-setup.md', import.meta.url), 'utf8');
   assert.match(setupGuide, /npx --yes skills@1\.9\.0 add nexu-io\/opengame --skill opengame --global --agent AGENT --copy --yes/);
-  assert.match(setupGuide, /OPENGAME_SKIP_PUBLIC_SKILL=1/);
+  assert.match(setupGuide, /OPENMOTION_SKIP_PUBLIC_SKILL=1/);
   assert.match(setupGuide, /already installed/i);
   assert.match(setupGuide, /does not block/i);
   const rootForwarder = await readFile(new URL('../install.md', import.meta.url), 'utf8');
