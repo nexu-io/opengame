@@ -76,3 +76,24 @@ test('source and complete installers register the canonical plugin and caches pr
     assert.equal(resolveInstalled(project, codex), path.join(codex, 'plugins/cache/openmotion-local/openmotion/0.2.0'));
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('OpenGame main entry Skill and setup guides install opengame once before local setup', async () => {
+  const entrySkill = await readFile(new URL('../skills/opengame/SKILL.md', import.meta.url), 'utf8');
+  assert.match(entrySkill, /^---\nname: opengame\ndescription: .+\n---/);
+  assert.match(entrySkill, /https:\/\/github\.com\/nexu-io\/opengame\/blob\/main\/docs\/opengame-setup\.md/);
+  assert.match(entrySkill, /openmotion:\/\/workflow\/game\/start/);
+  assert.match(entrySkill, /openmotion:\/\/workflow\/media\/start/);
+  assert.match(entrySkill, /local stdio MCP/i);
+  for (const file of ['../install.md', '../docs/opengame-setup.md']) {
+    const doc = await readFile(new URL(file, import.meta.url), 'utf8');
+    assert.match(doc, /npx --yes skills@1\.9\.0 add nexu-io\/opengame --skill opengame --global --agent AGENT --copy --yes/, file);
+    assert.match(doc, /OPENGAME_SKIP_PUBLIC_SKILL=1/, file);
+    assert.match(doc, /already installed/i, file);
+    assert.match(doc, /does not block|report it briefly and continue/i, file);
+  }
+  for (const readme of ['../README.md', '../README.zh-CN.md', '../README.ja.md']) {
+    const body = await readFile(new URL(readme, import.meta.url), 'utf8');
+    assert.match(body, /npx skills add nexu-io\/opengame --skill opengame/, readme);
+    assert.match(body, /skills\/opengame\/SKILL\.md/, readme);
+  }
+});

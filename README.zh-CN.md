@@ -50,15 +50,15 @@ OpenGame 是**首个开源全栈 Super Game Agent**——把 **DeepSeek（DSH）
 阅读 https://github.com/nexu-io/opengame/blob/main/docs/opengame-setup.md，按照指南在当前 Agent 中安装并连接 OpenGame，打开 /studios/game 进入 Game Studio，然后使用 openmotion-game Skill 帮我复刻或制作一款可玩的游戏。
 ```
 
-### 2. 通过 Skills CLI 安装游戏工程 Skill
+### 2. 通过 Skills CLI 安装 OpenGame 主 Skill
 
-使用 [Skills CLI](https://github.com/vercel-labs/skills) 安装游戏专用 Skill（`openmotion-game` 及 18 份涵盖 3C 手感、2D/3D 动画、试玩广告规范与质量门禁的工程手册）：
+使用 [Skills CLI](https://github.com/vercel-labs/skills) 安装 OpenGame 主入口 Skill（`opengame`，自动引导本地接入并路由到 `openmotion-game` 及 18 份涵盖 3C 手感、2D/3D 动画、试玩广告规范与质量门禁的工程手册）：
 
 ```sh
-npx skills add nexu-io/opengame --skill openmotion-game
+npx skills add nexu-io/opengame --skill opengame
 ```
 
-> Skills CLI 只安装工作流指引；请结合下方本地运行与 MCP 配置，让 Agent 能够直接调用 12 个 `openmotion_game_*` 工具并打开 Game Studio。
+> Skills CLI 只安装工作流指引（也可按需单独安装 `--skill openmotion-game`）；请结合下方本地运行与 MCP 配置，让 Agent 能够直接调用 12 个 `openmotion_game_*` 工具并打开 Game Studio。
 
 ### 3. 从源码在本地启动 OpenGame Studio
 
@@ -445,7 +445,7 @@ OpenGame 通过本地 stdio MCP 暴露完整的游戏开发与测试工具集（
 | --- | --- | --- |
 | **OpenGame Studio 界面** | React 19, TypeScript 5.9, Vite 6, Tailwind CSS 4, Zustand | [GameStudio.tsx](studio/src/motion/game/GameStudio.tsx) · [gameCatalog.ts](studio/src/motion/game/gameCatalog.ts) |
 | **游戏运行时与自动 QA** | Node.js, 原生 HTTP, Puppeteer Core / Chrome, 确定性仿真器 | [game-projects.ts](game-projects.ts) · [shared/game-contract.ts](shared/game-contract.ts) · [server.ts](server.ts) |
-| **MCP 与游戏 Skill** | 本地 stdio MCP 服务、`openmotion-game` Skill 及 18 份手册 | [mcp.ts](mcp.ts) · [skills/openmotion-game/](skills/openmotion-game/) |
+| **MCP 与游戏 Skill** | 本地 stdio MCP 服务、`opengame` 主入口 Skill、`openmotion-game` 工作流及 18 份手册 | [mcp.ts](mcp.ts) · [skills/opengame/SKILL.md](skills/opengame/SKILL.md) · [skills/openmotion-game/](skills/openmotion-game/) |
 | **多模态 Model Gateway** | BYOK 模型发现、异步任务轮询、素材库与在线分享发布 | [gateway/service.ts](gateway/service.ts) · [gateway/catalog.ts](gateway/catalog.ts) · [docs/assets.md](docs/assets.md) |
 | **内置游戏模板库** | 25 款独立可玩 HTML5 / Canvas / Three.js 工程与封面 | [templates/games/](templates/games/) |
 | **实机预告片管线** | 无头实机录屏 + HTML 合成 + FFmpeg MP4 渲染 | [docs/usage.md](docs/usage.md) · [scripts/verify-export.ts](scripts/verify-export.ts) |
