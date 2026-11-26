@@ -51,15 +51,15 @@ Follow https://github.com/nexu-io/opengame/blob/main/docs/opengame-setup.md to c
 If you find a reproducible OpenGame bug, you're welcome to open a PR against nexu-io/opengame with the fix, steps to reproduce, and how you verified it.
 ```
 
-### 2. Install the Game Skill with Skills CLI
+### 2. Install the Main OpenGame Skill with Skills CLI
 
-Install the dedicated game-engineering skill (`openmotion-game` + 18 game craft, 3C, animation, playable-ad, and QA reference handbooks) with the [Skills CLI](https://github.com/vercel-labs/skills):
+Install the main `opengame` entry Skill (which guides local setup and routes into `openmotion-game` + 18 game craft, 3C, animation, playable-ad, and QA reference handbooks) with the [Skills CLI](https://github.com/vercel-labs/skills):
 
 ```sh
-npx skills add nexu-io/opengame --skill openmotion-game
+npx skills add nexu-io/opengame --skill opengame
 ```
 
-> Installing the Skill copies the game engineering instructions into your agent. Complete the local Studio & MCP setup below so your agent can call the 12 `openmotion_game_*` tools and open Game Studio.
+> Installing the Skill copies the OpenGame entry instructions into your agent (you can also install `--skill openmotion-game` directly). Complete the local Studio & MCP setup below so your agent can call the 12 `openmotion_game_*` tools and open Game Studio.
 
 ### 3. Run OpenGame Studio locally from source
 
@@ -447,7 +447,7 @@ Every connected agent can read [`skills/openmotion-game/SKILL.md`](skills/openmo
 | --- | --- | --- |
 | **OpenGame Studio UI** | React 19, TypeScript 5.9, Vite 6, Tailwind CSS 4, Zustand | [GameStudio.tsx](studio/src/motion/game/GameStudio.tsx) · [gameCatalog.ts](studio/src/motion/game/gameCatalog.ts) |
 | **Game Runtime & QA** | Node.js, native HTTP, Puppeteer Core / Chrome, deterministic simulator | [game-projects.ts](game-projects.ts) · [shared/game-contract.ts](shared/game-contract.ts) · [server.ts](server.ts) |
-| **MCP & Agent Skills** | Local stdio MCP server, `openmotion-game` Skill & 18 handbooks | [mcp.ts](mcp.ts) · [skills/openmotion-game/](skills/openmotion-game/) |
+| **MCP & Agent Skills** | Local stdio MCP server, `opengame` entry Skill, `openmotion-game` workflow & 18 handbooks | [mcp.ts](mcp.ts) · [skills/opengame/SKILL.md](skills/opengame/SKILL.md) · [skills/openmotion-game/](skills/openmotion-game/) |
 | **Multimodal Gateway** | BYOK model discovery, job polling, asset library & web publish | [gateway/service.ts](gateway/service.ts) · [gateway/catalog.ts](gateway/catalog.ts) · [docs/assets.md](docs/assets.md) |
 | **Playable Templates** | 25 standalone HTML5 / Canvas / Three.js games with covers & metadata | [templates/games/](templates/games/) |
 | **Trailer Pipeline** | Headless gameplay capture + HTML composition + FFmpeg MP4 export | [docs/usage.md](docs/usage.md) · [scripts/verify-export.ts](scripts/verify-export.ts) |

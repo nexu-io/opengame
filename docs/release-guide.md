@@ -73,7 +73,7 @@ Each defect needs exact package/source/OS/host/environment/catalog identity, pro
 
 ## Hosted installation instructions
 
-[docs/install.md](install.md) is the public Agent-facing installation guide and the release generator's source. It contains source setup, the main Skill installation, npm setup and the shared onboarding contract. The generator omits marked source-only instructions, reads the complete npm tgz and its embedded manifest, pins the npm name/version and built source SHA, and records the guide and package hashes. It does not build or publish the application. Root `install.md` only forwards to this maintained guide.
+[docs/install.md](install.md) is the public Agent-facing installation guide and the release generator's source. It contains source setup, the main Skill installation, npm setup and the shared onboarding contract. The generator omits marked source-only instructions, reads the complete npm tgz and its embedded manifest, pins the npm name/version and built source SHA, and records the guide and package hashes. It does not build or publish the application. Root `install.md` contains no separate installation rules: it forwards OpenGame users to [docs/opengame-setup.md](opengame-setup.md) while retaining the forwarding link to this maintained guide for legacy OpenMotion releases.
 
 OpenMotion's `prepublish` workflow seals the candidate package with its **candidate-only** guide inside the `verified-candidate-*` Actions artifact (retained for 30 days). The publisher rejects candidate previews. Public guides require test/DEV or stable/prod identity; private builds cannot produce them.
 
