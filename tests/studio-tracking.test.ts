@@ -127,6 +127,7 @@ test('host identity uses declared clients, preserves unknown and scopes all hand
     ['vscode-agent-host', 'copilot'],
     ['Claude Desktop', 'claude'],
     ['workbuddy-direct', 'workbuddy'],
+    ['cursor-agent', 'cursor'],
   ] as const) {
     const resolved = identifyHost({ name: raw, version: '1.0.0' });
     assert.equal(resolved.host_agent, expected, raw);
@@ -138,6 +139,9 @@ test('host identity uses declared clients, preserves unknown and scopes all hand
   });
   assert.deepEqual(identifyHost({ name: 'openmotion-cli', version: '1' }, { OPENMOTION_HOST_AGENT: 'workbuddy' }), {
     host_agent: 'workbuddy', host_agent_source: 'launch_environment', mcp_client_name: 'openmotion-cli', mcp_client_version: '1',
+  });
+  assert.deepEqual(identifyHost({ name: 'openmotion-cli', version: '1' }, { OPENMOTION_HOST_AGENT: 'cursor-agent' }), {
+    host_agent: 'cursor', host_agent_source: 'launch_environment', mcp_client_name: 'openmotion-cli', mcp_client_version: '1',
   });
   assert.deepEqual(identifyHost({ name: 'openmotion-cli', version: '1' }, { CODEX_THREAD_ID: 'PRIVATE' }), {
     host_agent: 'codex', host_agent_source: 'launch_environment', mcp_client_name: 'openmotion-cli', mcp_client_version: '1',

@@ -10,7 +10,7 @@ const names: Record<string, HostContext['host_agent']> = {
   codex: 'codex', 'codex-mcp-client': 'codex', codex_cli_rs: 'codex', 'codex-local-openmotion': 'codex', 'codex-openmotion-local': 'codex',
   'dsh-mcp-client': 'deepseek', 'dsh-mcp-probe': 'deepseek', dsh: 'deepseek', 'deepseek-harness': 'deepseek', 'dsh-probe': 'deepseek', 'dsh-agent': 'deepseek', 'dsh-export': 'deepseek', 'dsh-lead-mcp-bridge': 'deepseek',
   claude: 'claude', 'claude-code': 'claude', 'claude-ai': 'claude', 'claude-desktop': 'claude', 'claude-code-direct': 'claude', 'claude-code-stdio': 'claude',
-  cursor: 'cursor', 'cursor-vscode': 'cursor', opencode: 'opencode',
+  cursor: 'cursor', 'cursor-vscode': 'cursor', 'cursor-agent': 'cursor', opencode: 'opencode',
   'gemini-cli': 'gemini', 'google-gemini-cli': 'gemini',
   workbuddy: 'workbuddy', 'workbuddy-desktop': 'workbuddy', 'workbuddy-cli': 'workbuddy', 'workbuddy-direct': 'workbuddy', 'workbuddy-verify': 'workbuddy',
   chatgpt: 'chatgpt',
