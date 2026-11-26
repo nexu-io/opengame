@@ -13,7 +13,7 @@
  */
 import type { GamePackageTarget } from './gamePackage';
 import type { GamePublishDevToolId } from './devTools';
-import { PLAYABLE_NETWORKS } from './playableNetworks';
+import { PLAYABLE_NETWORKS, playableNetwork, type PlayableNetwork, type PlayableNetworkId } from './playableNetworks';
 import type { WechatStepKey } from './wechatClient';
 import type { platformIcons } from '../../../../packages/design-system/platform-icons.js';
 
@@ -61,8 +61,8 @@ export interface GamePublishPlatform {
   resultHref?: string;
 }
 
-/** Platforms shown in the platform tiles, in order. */
-export const ENABLED_PUBLISH_PLATFORMS: readonly GamePublishPlatformId[] = ['wechat', 'douyin-minigame', 'qq', 'xiaohongshu', 'douyin', 'itch', 'telegram', 'playable-ad'];
+/** Game platforms shown in the platform tiles, in order. Playable ads are shown as one tile per network (PLAYABLE_NETWORKS). */
+export const ENABLED_PUBLISH_PLATFORMS: readonly GamePublishPlatformId[] = ['wechat', 'douyin-minigame', 'qq', 'xiaohongshu', 'douyin', 'itch', 'telegram'];
 
 const WECHAT_CONSOLE = { label: 'Open WeChat console', href: 'https://mp.weixin.qq.com/' };
 const DOUYIN_CONSOLE = { label: 'Open Douyin developer console', href: 'https://developer.open-douyin.com/console' };
@@ -332,6 +332,34 @@ export const GAME_PUBLISH_PLATFORMS: readonly GamePublishPlatform[] = [
 
 export function gamePublishPlatform(id: GamePublishPlatformId | undefined): GamePublishPlatform | undefined {
   return GAME_PUBLISH_PLATFORMS.find(platform => platform.id === id);
+}
+
+/**
+ * Playable ad for one network chosen from its own tile: the same steps without "Which ad network?",
+ * named after the network, with its console linked under the package step.
+ */
+export function playableAdPlatform(network: PlayableNetwork): GamePublishPlatform {
+  const base = gamePublishPlatform('playable-ad')!;
+  return {
+    ...base,
+    name: network.short ?? network.name,
+    badge: network.badge,
+    icon: network.icon,
+    steps: base.steps.filter(step => !step.pick).map(step => (step.kind === 'package' && network.console.href
+      ? { ...step, links: [{ label: network.console.label, href: network.console.href }] }
+      : step)),
+    resultAction: network.console.href ? network.console.label : undefined,
+    resultHref: network.console.href,
+  };
+}
+
+/** The steps the session actually follows: a network picked from its tile skips the network step. */
+export function sessionPublishPlatform(session: { platformId?: GamePublishPlatformId; network?: PlayableNetworkId } | undefined): GamePublishPlatform | undefined {
+  if (session?.platformId === 'playable-ad' && session.network) {
+    const network = playableNetwork(session.network);
+    if (network) return playableAdPlatform(network);
+  }
+  return gamePublishPlatform(session?.platformId);
 }
 
 /** Store links must be https URLs; at least one is needed. */

@@ -8,7 +8,8 @@ import { readAccountPlan, useCheckoutReturnRefresh } from '../../motion/entitlem
 import { reportEntitlementGateClick, reportEntitlementGateView } from '../../motion/pageTracking';
 import { gamePublishActions, useGamePublishSession, type GamePublishSession } from './gamePublishStore';
 import { GamePublishResultAction } from './GamePublishThread';
-import { ENABLED_PUBLISH_PLATFORMS, GAME_PUBLISH_PLATFORMS, gamePublishPlatform, type GamePublishPlatform, type GamePublishPlatformId } from './platforms';
+import { ENABLED_PUBLISH_PLATFORMS, GAME_PUBLISH_PLATFORMS, sessionPublishPlatform, type GamePublishPlatformId } from './platforms';
+import { PLAYABLE_NETWORKS, type PlayableNetworkId } from './playableNetworks';
 import { ChoiceTiles } from '../../components/ui/ChoiceTiles';
 import { PlatformIcon } from '../../../../packages/design-system/react/PlatformIcon';
 import { CompactLink, WechatProgress } from './WechatProgress';
@@ -39,7 +40,8 @@ export function GamePublishPanel({ artifactId, coverUrl, onNotify }: {
   }, [account, accountError, artifactId, session?.linkDeferred]);
 
   if (!session?.open) return null;
-  const platform = gamePublishPlatform(session.platformId);
+  const platform = sessionPublishPlatform(session);
+  const platformTitle = platform && session.network ? t('{name} playable ad', { name: platform.name }) : platform ? t(platform.name) : '';
   const close = () => gamePublishActions.close(artifactId);
 
   const header = (title: string, back?: { label: string; onClick: () => void }) => (
@@ -57,34 +59,41 @@ export function GamePublishPanel({ artifactId, coverUrl, onNotify }: {
     </header>
   );
 
+  const choose = (id: GamePublishPlatformId, network?: PlayableNetworkId) => {
+    if (!account && !accountError) {
+      gamePublishActions.choose(artifactId, id, { deferLink: true, network });
+      return;
+    }
+    gamePublishActions.choose(artifactId, id, { signedIn: account?.state === 'signed-in', network });
+  };
+
   // Same tiles as the video export panel: one square per platform with its mark. OpenDesign is not a tile: it is the
   // checked-by-default line under them (OpenDesignChoice), and every platform picked above also gets its link.
-  const tiles = (list: readonly GamePublishPlatform[]) => (
-    <ChoiceTiles<GamePublishPlatformId | ''>
-      label={t('Choose a platform')}
-      value=''
-      className="om-gp-platforms"
-      options={[
-        ...list.map(item => ({
-          value: item.id,
-          label: t(item.name),
-          icon: item.icon
-            ? <PlatformIcon platform={item.icon} />
-            : <span className="om-platform-icon om-gp-badge" aria-hidden="true">{item.badge}</span>,
-        })),
-      ]}
-      onChange={id => {
-        if (!id) return;
-        if (!account && !accountError) {
-          gamePublishActions.choose(artifactId, id, { deferLink: true });
-          return;
-        }
-        gamePublishActions.choose(artifactId, id, { signedIn: account?.state === 'signed-in' });
-      }}
-    />
+  // Playable ads are one tile per ad network, so each network's package rules are reached in one click.
+  type Tile = { value: string; label: string; icon: ReactNode };
+  const tileIcon = (item: { icon?: Parameters<typeof PlatformIcon>[0]['platform']; badge: string }) => item.icon
+    ? <PlatformIcon platform={item.icon} />
+    : <span className="om-platform-icon om-gp-badge" aria-hidden="true">{item.badge}</span>;
+  const tileGroup = (title: string, options: Tile[], onPick: (value: string) => void) => (
+    <section className="om-gp-platform-group" aria-label={title}>
+      <h3 className="om-gp-platform-group-title">{title}</h3>
+      <ChoiceTiles<string>
+        label={title}
+        value=''
+        className="om-gp-platforms"
+        options={options}
+        onChange={value => { if (value) onPick(value); }}
+      />
+    </section>
   );
 
   const enabled = GAME_PUBLISH_PLATFORMS.filter(item => ENABLED_PUBLISH_PLATFORMS.includes(item.id));
+  const tiles = (
+    <>
+      {tileGroup(t('Game platforms'), enabled.map(item => ({ value: item.id, label: t(item.name), icon: tileIcon(item) })), value => choose(value as GamePublishPlatformId))}
+      {tileGroup(t('Playable ad networks'), PLAYABLE_NETWORKS.map(network => ({ value: network.id, label: network.short ?? network.name, icon: tileIcon(network) })), value => choose('playable-ad', value as PlayableNetworkId))}
+    </>
+  );
 
   let body: ReactNode;
   let foot: ReactNode;
@@ -92,7 +101,7 @@ export function GamePublishPanel({ artifactId, coverUrl, onNotify }: {
 
   if (platform?.id === 'wechat' && session.view !== 'list') {
     // WeChat is guided by the Agent in the conversation; the panel only shows where things stand.
-    head = header(t(platform.name), { label: t('Platforms'), onClick: () => gamePublishActions.showList(artifactId) });
+    head = header(platformTitle, { label: t('Platforms'), onClick: () => gamePublishActions.showList(artifactId) });
     body = <WechatProgress session={session} />;
     foot = (
       <>
@@ -111,13 +120,13 @@ export function GamePublishPanel({ artifactId, coverUrl, onNotify }: {
             <p>{t('Pick one to start. Steps are shown one at a time.')}</p>
           </div>
         </div>
-        {tiles(enabled)}
+        {tiles}
         <OpenDesignChoice session={session} onNotify={onNotify} />
       </>
     );
   } else {
     // Non-WeChat platforms render self-contained step cards in the publish thread; the panel tracks live step progress.
-    head = header(t(platform.name), { label: t('Platforms'), onClick: () => gamePublishActions.showList(artifactId) });
+    head = header(platformTitle, { label: t('Platforms'), onClick: () => gamePublishActions.showList(artifactId) });
     body = (
       <>
         <PlatformProgress session={session} />

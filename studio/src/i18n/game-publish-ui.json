@@ -608,7 +608,10 @@
     "Telegram Mini Apps need a public web URL. Sign in to OpenDesign to publish one automatically.": "Telegram 小程序需要可访问的网页地址，登录 OpenDesign 即可自动生成。",
     "Share a live play link while you wait?": "等审核期间，先发给朋友试玩？",
     "Sign in to OpenDesign to get an instant web play link—no waiting for platform review.": "登录 OpenDesign，10 秒生成公开试玩链接，无需等平台过审，点开即玩。",
-    "Sign in & get play link": "登录并生成试玩链接"
+    "Sign in & get play link": "登录并生成试玩链接",
+    "Game platforms": "游戏平台",
+    "Playable ad networks": "可玩广告平台",
+    "{name} playable ad": "{name} 可玩广告"
   },
   "ja": {
     "WeChat Mini Game": "WeChat ミニゲーム",
@@ -1219,7 +1222,10 @@
     "Telegram Mini Apps need a public web URL. Sign in to OpenDesign to publish one automatically.": "Telegram ミニアプリには公開ウェブURLが必要です。OpenDesign にログインすると自動で発行されます。",
     "Share a live play link while you wait?": "審査を待つ間に、友達へプレイリンクを共有しませんか？",
     "Sign in to OpenDesign to get an instant web play link—no waiting for platform review.": "OpenDesign にログインすると、審査待ちなしですぐ遊べるウェブリンクを発行できます。",
-    "Sign in & get play link": "ログインしてリンクを発行"
+    "Sign in & get play link": "ログインしてリンクを発行",
+    "Game platforms": "ゲームプラットフォーム",
+    "Playable ad networks": "プレイアブル広告ネットワーク",
+    "{name} playable ad": "{name} プレイアブル広告"
   },
   "ko": {
     "WeChat Mini Game": "WeChat 미니게임",
@@ -1830,7 +1836,10 @@
     "Telegram Mini Apps need a public web URL. Sign in to OpenDesign to publish one automatically.": "Telegram 미니 앱에는 공개 웹 URL이 필요합니다. OpenDesign에 로그인하면 자동으로 게시됩니다.",
     "Share a live play link while you wait?": "심사를 기다리는 동안 친구에게 플레이 링크를 공유해 볼까요?",
     "Sign in to OpenDesign to get an instant web play link—no waiting for platform review.": "OpenDesign에 로그인하면 심사 대기 없이 바로 플레이할 수 있는 웹 링크를 받을 수 있어요.",
-    "Sign in & get play link": "로그인하고 플레이 링크 받기"
+    "Sign in & get play link": "로그인하고 플레이 링크 받기",
+    "Game platforms": "게임 플랫폼",
+    "Playable ad networks": "플레이어블 광고 네트워크",
+    "{name} playable ad": "{name} 플레이어블 광고"
   },
   "de": {
     "WeChat Mini Game": "WeChat-Minispiel",
@@ -2441,7 +2450,10 @@
     "Telegram Mini Apps need a public web URL. Sign in to OpenDesign to publish one automatically.": "Telegram-Mini-Apps benötigen eine öffentliche Web-URL. Melde dich bei OpenDesign an, um sie automatisch zu veröffentlichen.",
     "Share a live play link while you wait?": "Während der Prüfung schon einen Spiel-Link teilen?",
     "Sign in to OpenDesign to get an instant web play link—no waiting for platform review.": "Melde dich bei OpenDesign an und erhalte sofort einen spielbaren Web-Link – ohne auf die Plattformprüfung zu warten.",
-    "Sign in & get play link": "Anmelden & Spiel-Link erstellen"
+    "Sign in & get play link": "Anmelden & Spiel-Link erstellen",
+    "Game platforms": "Spieleplattformen",
+    "Playable ad networks": "Playable-Ad-Netzwerke",
+    "{name} playable ad": "{name}-Playable-Ad"
   },
   "fr": {
     "WeChat Mini Game": "Mini-jeu WeChat",
@@ -3052,7 +3064,10 @@
     "Telegram Mini Apps need a public web URL. Sign in to OpenDesign to publish one automatically.": "Les mini-apps Telegram nécessitent une URL publique. Connectez-vous à OpenDesign pour la publier automatiquement.",
     "Share a live play link while you wait?": "Partager un lien jouable en attendant la validation ?",
     "Sign in to OpenDesign to get an instant web play link—no waiting for platform review.": "Connectez-vous à OpenDesign pour obtenir un lien web jouable instantané, sans attendre la vérification.",
-    "Sign in & get play link": "Se connecter et créer le lien"
+    "Sign in & get play link": "Se connecter et créer le lien",
+    "Game platforms": "Plateformes de jeu",
+    "Playable ad networks": "Réseaux de publicités jouables",
+    "{name} playable ad": "Publicité jouable {name}"
   },
   "ru": {
     "WeChat Mini Game": "Мини-игра WeChat",
@@ -3663,7 +3678,10 @@
     "Telegram Mini Apps need a public web URL. Sign in to OpenDesign to publish one automatically.": "Для мини-приложения Telegram нужен публичный веб-адрес. Войдите в OpenDesign, чтобы создать его автоматически.",
     "Share a live play link while you wait?": "Поделиться ссылкой на игру, пока идёт проверка?",
     "Sign in to OpenDesign to get an instant web play link—no waiting for platform review.": "Войдите в OpenDesign и сразу получите рабочую веб-ссылку — без ожидания проверки платформы.",
-    "Sign in & get play link": "Войти и получить ссылку"
+    "Sign in & get play link": "Войти и получить ссылку",
+    "Game platforms": "Игровые платформы",
+    "Playable ad networks": "Сети playable-рекламы",
+    "{name} playable ad": "Playable-реклама {name}"
   },
   "es": {
     "WeChat Mini Game": "Minijuego de WeChat",
@@ -4274,7 +4292,10 @@
     "Telegram Mini Apps need a public web URL. Sign in to OpenDesign to publish one automatically.": "Las miniapps de Telegram necesitan una URL web pública. Inicia sesión en OpenDesign para publicarla automáticamente.",
     "Share a live play link while you wait?": "¿Quieres compartir un enlace jugable mientras esperas?",
     "Sign in to OpenDesign to get an instant web play link—no waiting for platform review.": "Inicia sesión en OpenDesign para obtener un enlace web jugable al instante, sin esperar la revisión.",
-    "Sign in & get play link": "Iniciar sesión y crear enlace"
+    "Sign in & get play link": "Iniciar sesión y crear enlace",
+    "Game platforms": "Plataformas de juegos",
+    "Playable ad networks": "Redes de anuncios jugables",
+    "{name} playable ad": "Anuncio jugable de {name}"
   },
   "pt-BR": {
     "WeChat Mini Game": "Minijogo do WeChat",
@@ -4885,7 +4906,10 @@
     "Telegram Mini Apps need a public web URL. Sign in to OpenDesign to publish one automatically.": "Mini apps do Telegram precisam de uma URL pública. Entre no OpenDesign para publicar automaticamente.",
     "Share a live play link while you wait?": "Quer compartilhar um link jogável enquanto aguarda?",
     "Sign in to OpenDesign to get an instant web play link—no waiting for platform review.": "Entre no OpenDesign para gerar um link web jogável na hora, sem esperar a revisão da plataforma.",
-    "Sign in & get play link": "Entrar e gerar link jogável"
+    "Sign in & get play link": "Entrar e gerar link jogável",
+    "Game platforms": "Plataformas de jogos",
+    "Playable ad networks": "Redes de anúncios jogáveis",
+    "{name} playable ad": "Anúncio jogável do {name}"
   },
   "it": {
     "WeChat Mini Game": "Minigioco WeChat",
@@ -5496,7 +5520,10 @@
     "Telegram Mini Apps need a public web URL. Sign in to OpenDesign to publish one automatically.": "Le mini app di Telegram richiedono un URL web pubblico. Accedi a OpenDesign per pubblicarlo automaticamente.",
     "Share a live play link while you wait?": "Vuoi condividere un link giocabile mentre aspetti?",
     "Sign in to OpenDesign to get an instant web play link—no waiting for platform review.": "Accedi a OpenDesign per ottenere subito un link web giocabile, senza attendere la revisione.",
-    "Sign in & get play link": "Accedi e ottieni il link"
+    "Sign in & get play link": "Accedi e ottieni il link",
+    "Game platforms": "Piattaforme di gioco",
+    "Playable ad networks": "Reti di annunci giocabili",
+    "{name} playable ad": "Annuncio giocabile {name}"
   },
   "tr": {
     "WeChat Mini Game": "WeChat Mini Oyunu",
@@ -6107,6 +6134,9 @@
     "Telegram Mini Apps need a public web URL. Sign in to OpenDesign to publish one automatically.": "Telegram Mini Uygulamaları herkese açık bir web adresi gerektirir. Otomatik yayınlamak için OpenDesign’a giriş yapın.",
     "Share a live play link while you wait?": "İncelemeyi beklerken oynanabilir bağlantı paylaşmak ister misin?",
     "Sign in to OpenDesign to get an instant web play link—no waiting for platform review.": "Platform onayını beklemeden anında oynanabilir web bağlantısı almak için OpenDesign’a giriş yap.",
-    "Sign in & get play link": "Giriş yap ve bağlantı al"
+    "Sign in & get play link": "Giriş yap ve bağlantı al",
+    "Game platforms": "Oyun platformları",
+    "Playable ad networks": "Oynanabilir reklam ağları",
+    "{name} playable ad": "{name} oynanabilir reklamı"
   }
 }

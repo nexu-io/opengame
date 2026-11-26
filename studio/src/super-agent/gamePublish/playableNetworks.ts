@@ -6,6 +6,8 @@
  * every check is measured on the downloaded file.
  */
 
+import type { platformIcons } from '../../../../packages/design-system/platform-icons.js';
+
 export type PlayableNetworkId = 'mraid' | 'applovin' | 'google' | 'unity' | 'meta' | 'tiktok' | 'mintegral' | 'moloco' | 'liftoff';
 
 export interface PlayableNetwork {
@@ -24,18 +26,24 @@ export interface PlayableNetwork {
   /** Extra assets the network asks for, English source key, or empty. */
   extra?: string;
   console: { label: string; href?: string };
+  /** Tile label when the display name carries a limit (brand names stay untranslated). */
+  short?: string;
+  /** Network artwork from the design system (packages/design-system/platform-icons.js); otherwise the badge is shown. */
+  icon?: keyof typeof platformIcons;
+  /** Text mark shown when no artwork is bundled. */
+  badge: string;
 }
 
 export const PLAYABLE_NETWORKS: readonly PlayableNetwork[] = [
-  { id: 'mraid', name: 'MRAID', format: 'Single HTML', limitMb: 5, cta: 'mraid.open(url)', ctaCode: 'mraid.open(url)', mraid: 'Add mraid.js in <head>', console: { label: 'Your MRAID network console (InMobi, Chartboost…)' } },
-  { id: 'applovin', name: 'AppLovin', format: 'Single HTML', limitMb: 5, cta: 'mraid.open(url)', ctaCode: 'mraid.open(url)', mraid: 'Add mraid.js as the first script', console: { label: 'AppLovin dashboard', href: 'https://dash.applovin.com/' } },
-  { id: 'google', name: 'Google Ads', format: 'Zip', limitMb: 5, cta: 'ExitApi.exit()', ctaCode: 'ExitApi.exit()', mraid: 'No mraid.js; add exitapi.js and the ad.orientation tag', console: { label: 'Google Ads', href: 'https://ads.google.com/' } },
-  { id: 'unity', name: 'Unity', format: 'Single HTML', limitMb: 5, cta: 'mraid.open(url)', ctaCode: 'mraid.open(url)', mraid: 'Injected by the container; do not add it', console: { label: 'Unity Grow dashboard', href: 'https://cloud.unity.com/' } },
-  { id: 'meta', name: 'Meta (≤2 MB)', format: 'Single HTML (zip above 2 MB)', limitMb: 2, cta: 'FbPlayableAd.onCTAClick()', ctaCode: 'FbPlayableAd.onCTAClick()', mraid: 'mraid.js must not appear', extra: 'Lead-in video required', console: { label: 'Meta Ads Manager', href: 'https://adsmanager.facebook.com/' } },
-  { id: 'tiktok', name: 'TikTok / Pangle', format: 'Zip with config.json', limitMb: 5, cta: 'window.openAppStore()', ctaCode: 'window.openAppStore()', mraid: 'mraid.js must not appear; add the TikTok SDK', extra: 'Also needs a video or image', console: { label: 'TikTok Ads Manager', href: 'https://ads.tiktok.com/' } },
-  { id: 'mintegral', name: 'Mintegral', format: 'Single HTML', limitMb: 5, cta: 'window.install()', ctaCode: 'window.install()', mraid: 'No mraid.js; call gameReady / gameEnd / gameRetry', extra: '1200×627 image and 512 px icon', console: { label: 'Mintegral advertiser console', href: 'https://adv.mintegral.com/' } },
-  { id: 'moloco', name: 'Moloco', format: 'Single HTML, assets as data URIs', limitMb: 5, cta: 'FbPlayableAd.onCTAClick()', ctaCode: 'FbPlayableAd.onCTAClick()', mraid: 'mraid.js and XMLHttpRequest must not appear', console: { label: 'Moloco Ads console', href: 'https://www.moloco.com/' } },
-  { id: 'liftoff', name: 'Liftoff', format: 'Single HTML', limitMb: 5, cta: 'mraid.open(url)', ctaCode: 'mraid.open(url)', mraid: 'Wait for mraid ready and visible', console: { label: 'Liftoff dashboard', href: 'https://liftoff.io/' } },
+  { id: 'mraid', name: 'MRAID', format: 'Single HTML', limitMb: 5, cta: 'mraid.open(url)', ctaCode: 'mraid.open(url)', mraid: 'Add mraid.js in <head>', console: { label: 'Your MRAID network console (InMobi, Chartboost…)' }, badge: 'MR' },
+  { id: 'applovin', name: 'AppLovin', format: 'Single HTML', limitMb: 5, cta: 'mraid.open(url)', ctaCode: 'mraid.open(url)', mraid: 'Add mraid.js as the first script', console: { label: 'AppLovin dashboard', href: 'https://dash.applovin.com/' }, badge: 'AL' },
+  { id: 'google', name: 'Google Ads', format: 'Zip', limitMb: 5, cta: 'ExitApi.exit()', ctaCode: 'ExitApi.exit()', mraid: 'No mraid.js; add exitapi.js and the ad.orientation tag', console: { label: 'Google Ads', href: 'https://ads.google.com/' }, icon: 'google-ads', badge: 'G' },
+  { id: 'unity', name: 'Unity', format: 'Single HTML', limitMb: 5, cta: 'mraid.open(url)', ctaCode: 'mraid.open(url)', mraid: 'Injected by the container; do not add it', console: { label: 'Unity Grow dashboard', href: 'https://cloud.unity.com/' }, icon: 'unity', badge: 'U' },
+  { id: 'meta', name: 'Meta (≤2 MB)', format: 'Single HTML (zip above 2 MB)', limitMb: 2, cta: 'FbPlayableAd.onCTAClick()', ctaCode: 'FbPlayableAd.onCTAClick()', mraid: 'mraid.js must not appear', extra: 'Lead-in video required', console: { label: 'Meta Ads Manager', href: 'https://adsmanager.facebook.com/' }, short: 'Meta', icon: 'meta', badge: 'M' },
+  { id: 'tiktok', name: 'TikTok / Pangle', format: 'Zip with config.json', limitMb: 5, cta: 'window.openAppStore()', ctaCode: 'window.openAppStore()', mraid: 'mraid.js must not appear; add the TikTok SDK', extra: 'Also needs a video or image', console: { label: 'TikTok Ads Manager', href: 'https://ads.tiktok.com/' }, icon: 'tiktok', badge: 'TT' },
+  { id: 'mintegral', name: 'Mintegral', format: 'Single HTML', limitMb: 5, cta: 'window.install()', ctaCode: 'window.install()', mraid: 'No mraid.js; call gameReady / gameEnd / gameRetry', extra: '1200×627 image and 512 px icon', console: { label: 'Mintegral advertiser console', href: 'https://adv.mintegral.com/' }, badge: 'MI' },
+  { id: 'moloco', name: 'Moloco', format: 'Single HTML, assets as data URIs', limitMb: 5, cta: 'FbPlayableAd.onCTAClick()', ctaCode: 'FbPlayableAd.onCTAClick()', mraid: 'mraid.js and XMLHttpRequest must not appear', console: { label: 'Moloco Ads console', href: 'https://www.moloco.com/' }, badge: 'MO' },
+  { id: 'liftoff', name: 'Liftoff', format: 'Single HTML', limitMb: 5, cta: 'mraid.open(url)', ctaCode: 'mraid.open(url)', mraid: 'Wait for mraid ready and visible', console: { label: 'Liftoff dashboard', href: 'https://liftoff.io/' }, badge: 'LO' },
 ];
 
 

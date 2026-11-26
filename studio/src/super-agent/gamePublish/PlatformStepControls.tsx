@@ -6,7 +6,7 @@ import { downloadPackage, formatBytes, type GamePackageCheck } from './gamePacka
 import { gamePublishActions, stepBlocked, type GamePublishSession } from './gamePublishStore';
 import { playableNetwork } from './playableNetworks';
 import { CompactLink, OpenDesignProgress } from './WechatProgress';
-import { gamePublishPlatform } from './platforms';
+import { sessionPublishPlatform } from './platforms';
 import { useOpenDesignPublishSignIn } from './useOpenDesignPublishSignIn';
 import './gamePublish.css';
 
@@ -18,7 +18,7 @@ type Notify = (message: string, tone?: 'info' | 'error') => void;
  */
 export function PlatformProgress({ session }: { session: GamePublishSession }) {
   const { t } = useI18n();
-  const platform = gamePublishPlatform(session.platformId);
+  const platform = sessionPublishPlatform(session);
   if (!platform) return null;
   const total = platform.steps.length;
   const finished = session.stepIndex >= total;
@@ -58,7 +58,7 @@ export function PlatformProgress({ session }: { session: GamePublishSession }) {
  */
 export function PlatformInlineControls({ session, onNotify }: { session: GamePublishSession; onNotify?: Notify }) {
   const { t } = useI18n();
-  const platform = gamePublishPlatform(session.platformId);
+  const platform = sessionPublishPlatform(session);
   if (!platform || platform.id === 'wechat' || session.view !== 'step') return null;
   const tool = session.toolCheck?.state === 'missing' ? gamePublishDevTool(session.toolCheck.toolId) : undefined;
   if (tool) {

@@ -55,5 +55,17 @@
     "icon": "telegram-fill",
     "fill": "#26A5E4",
     "note": "Telegram Mini App destination."
+  },
+  "google-ads": {
+    "collection": "@iconify-json/logos@1.2.20",
+    "icon": "google-ads"
+  },
+  "unity": {
+    "collection": "@iconify-json/logos@1.2.20",
+    "icon": "unity"
+  },
+  "meta": {
+    "collection": "@iconify-json/logos@1.2.20",
+    "icon": "meta-icon"
   }
 }

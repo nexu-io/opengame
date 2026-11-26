@@ -11,7 +11,8 @@ import { useSyncExternalStore } from 'react';
 import { buildPlatformZip, buildPlayable, gameSlug, loadGameHtml, type GamePackageResult, type GamePackageTarget } from './gamePackage';
 import { describeLinkError, publishGameLink, type GamePublishLinkTarget } from './gamePublishAdapter';
 import type { GamePublishDevToolId } from './devTools';
-import { gamePublishPlatform, storeLinkProblem, type GamePublishPlatform, type GamePublishPlatformId, type GamePublishStep } from './platforms';
+import { playableNetwork, type PlayableNetworkId } from './playableNetworks';
+import { sessionPublishPlatform, storeLinkProblem, type GamePublishPlatform, type GamePublishPlatformId, type GamePublishStep } from './platforms';
 import { queueSuperAgentHandoff } from '../../motion/superAgentHandoff';
 import { wechatClient, type WechatPublishStatus } from './wechatClient';
 import wechatPortGuide from '../../../../skills/openmotion-game/references/wechat-minigame-port.md?raw';
@@ -54,6 +55,8 @@ export interface GamePublishSession {
   view: GamePublishView;
   platformId?: GamePublishPlatformId;
   stepIndex: number;
+  /** Ad network chosen from its own tile; its playable-ad steps skip the network choice. */
+  network?: PlayableNetworkId;
   picked?: string;
   inputs: Record<string, string>;
   /** Why the current step cannot continue yet (English source key). */
@@ -152,7 +155,7 @@ function startWork(artifactId: string, work: GamePublishWorkKind, title: string,
 }
 
 function stepInProgress(session: GamePublishSession): boolean {
-  const platform = gamePublishPlatform(session.platformId);
+  const platform = sessionPublishPlatform(session);
   return Boolean(platform && session.stepIndex < platform.steps.length);
 }
 
@@ -303,9 +306,11 @@ export const gamePublishActions = {
       pushEntry(sessions.get(artifactId)!, { kind: 'link-failed', message: linkError.message, authRequired: linkError.authRequired });
     }
   },
-  choose(artifactId: string, platformId: GamePublishPlatformId, options?: { signedIn?: boolean; deferLink?: boolean }) {
+  choose(artifactId: string, platformId: GamePublishPlatformId, options?: { signedIn?: boolean; deferLink?: boolean; network?: PlayableNetworkId }) {
     const session = sessions.get(artifactId);
-    const platform = gamePublishPlatform(platformId);
+    const network = platformId === 'playable-ad' ? playableNetwork(options?.network) : undefined;
+    if (options?.network && !network) return;
+    const platform = sessionPublishPlatform({ platformId, network: network?.id });
     if (!session || !platform) return;
     platformRuns.set(artifactId, (platformRuns.get(artifactId) ?? 0) + 1);
     const guestOnNonLinkPlatform = options?.signedIn === false && platformId !== 'telegram';
@@ -314,8 +319,9 @@ export const gamePublishActions = {
     removeEntries(session, entry => isLinkFailureEntry(entry) || isPackageWorkEntry(entry));
     update(artifactId, {
       platformId,
+      network: network?.id,
       stepIndex: 0,
-      picked: undefined,
+      picked: network?.name,
       inputs: {},
       view: 'step',
       stepProblem: undefined,
@@ -347,7 +353,7 @@ export const gamePublishActions = {
   /** The user says the developer tool is installed. OpenDesign does not check the machine yet. */
   confirmDevTool(artifactId: string) {
     const session = sessions.get(artifactId);
-    const platform = gamePublishPlatform(session?.platformId);
+    const platform = sessionPublishPlatform(session);
     if (!session || !platform || session.toolCheck?.state !== 'missing') return;
     // WeChat does not wait for the tool: keep the current step.
     if (platform.id === 'wechat') { gamePublishActions.dismissDevTool(artifactId); return; }
@@ -360,7 +366,7 @@ export const gamePublishActions = {
     const session = sessions.get(artifactId);
     if (!session || session.toolCheck?.state !== 'missing') return;
     platformRuns.set(artifactId, (platformRuns.get(artifactId) ?? 0) + 1);
-    update(artifactId, { view: 'list', platformId: undefined, toolCheck: undefined, stepIndex: 0, status: WAITING });
+    update(artifactId, { view: 'list', platformId: undefined, network: undefined, toolCheck: undefined, stepIndex: 0, status: WAITING });
   },
   pick(artifactId: string, option: string) { update(artifactId, { picked: option, stepProblem: undefined }); },
   setInput(artifactId: string, label: string, value: string) {
@@ -370,7 +376,7 @@ export const gamePublishActions = {
   /** Builds the current step's package from the game's real files. */
   async buildPackage(artifactId: string): Promise<void> {
     const session = sessions.get(artifactId);
-    const platform = gamePublishPlatform(session?.platformId);
+    const platform = sessionPublishPlatform(session);
     const step = platform?.steps[session?.stepIndex ?? 0];
     if (!session || !platform || !step?.packageTarget || session.package?.state === 'building') return;
     const target = step.packageTarget;
@@ -473,7 +479,7 @@ export const gamePublishActions = {
   completeStep(artifactId: string, from?: GamePublishStepRef) {
     const session = sessions.get(artifactId);
     if (!session || session.view === 'result' || (from && !matchesStep(session, from))) return;
-    const platform = gamePublishPlatform(session.platformId);
+    const platform = sessionPublishPlatform(session);
     if (!platform || !stepInProgress(session) || !toolReady(session)) return;
     const step = platform.steps[session.stepIndex];
     const problem = step.pick && !session.picked

@@ -20,7 +20,8 @@ vi.mock('../../motion/superAgentHandoff', () => ({ queueSuperAgentHandoff: (payl
 const { WebPublishApiError } = await import('../../components/webPublishClient');
 const { gamePublishActions, gamePublishSessionFor, gamePublishThreadFor, copyGamePublishLink, resetGamePublishStore } = await import('./gamePublishStore');
 const { PLAYABLE_NETWORKS } = await import('./playableNetworks');
-const { gamePublishPlatform } = await import('./platforms');
+const { ENABLED_PUBLISH_PLATFORMS, gamePublishPlatform, playableAdPlatform, sessionPublishPlatform } = await import('./platforms');
+const { platformIcons } = await import('../../../../packages/design-system/platform-icons.js');
 
 const GAME_HTML = '<!DOCTYPE html><html><head><title>Coin Jar</title><script src="game.js"></script></head><body><canvas></canvas><script>function openStore(id){window.open("https://example.com")}openStore("x")</script></body></html>';
 const input = {
@@ -282,6 +283,46 @@ describe('gamePublishStore', () => {
     expect(publish).not.toHaveBeenCalled();
     gamePublishActions.completeStep(input.artifactId);
     expect(gamePublishSessionFor(input.artifactId)?.view).toBe('result');
+  });
+
+  it.each(PLAYABLE_NETWORKS)('opens the $name tile straight at store links and exports that network', async network => {
+    gamePublishActions.open({ ...input, orientation: 'portrait' });
+    gamePublishActions.setLinkToo(input.artifactId, false);
+    gamePublishActions.choose(input.artifactId, 'playable-ad', { network: network.id });
+    let session = gamePublishSessionFor(input.artifactId)!;
+    const platform = sessionPublishPlatform(session)!;
+    expect(session).toMatchObject({ platformId: 'playable-ad', network: network.id, picked: network.name, stepIndex: 0, view: 'step' });
+    expect(platform.steps.map(step => step.short)).toEqual(['Store links', 'Download']);
+    expect(platform.steps.some(step => step.pick)).toBe(false);
+    gamePublishActions.setInput(input.artifactId, 'iOS App Store link', 'https://apps.apple.com/app/id1');
+    gamePublishActions.completeStep(input.artifactId);
+    await settle();
+    session = gamePublishSessionFor(input.artifactId)!;
+    expect(session).toMatchObject({ stepIndex: 1, package: { state: 'ready', target: 'playable' } });
+    expect(await session.package!.result!.blob.text()).toContain(network.ctaCode);
+    gamePublishActions.completeStep(input.artifactId);
+    expect(gamePublishSessionFor(input.artifactId)).toMatchObject({ view: 'result', stepIndex: 2, published: ['playable-ad'] });
+    gamePublishActions.showList(input.artifactId);
+    gamePublishActions.choose(input.artifactId, 'itch');
+    expect(gamePublishSessionFor(input.artifactId)).toMatchObject({ platformId: 'itch', network: undefined, picked: undefined });
+  });
+
+  it('lists every ad network as its own tile with bundled artwork or a text mark', () => {
+    expect(ENABLED_PUBLISH_PLATFORMS).not.toContain('playable-ad');
+    for (const network of PLAYABLE_NETWORKS) {
+      expect(network.badge).toBeTruthy();
+      if (network.icon) expect(platformIcons[network.icon]).toBeTruthy();
+      const platform = playableAdPlatform(network);
+      expect(platform.resultHref).toBe(network.console.href);
+      expect(platform.steps.at(-1)?.links ?? []).toEqual(network.console.href ? [{ label: network.console.label, href: network.console.href }] : []);
+    }
+  });
+
+  it('ignores an unknown ad network instead of opening an empty playable flow', () => {
+    gamePublishActions.open(input);
+    gamePublishActions.choose(input.artifactId, 'playable-ad', { network: 'nope' as never });
+    expect(gamePublishSessionFor(input.artifactId)?.view).toBe('list');
+    expect(gamePublishSessionFor(input.artifactId)?.platformId).toBeUndefined();
   });
 
   it.each(['xiaohongshu', 'douyin', 'itch'] as const)('builds the package declared by the %s guide', async id => {

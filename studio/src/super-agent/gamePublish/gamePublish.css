@@ -576,6 +576,8 @@
 
 /* Platform choice: the export panel's square tiles, three per row so names fit. */
 .om-gp-platforms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--motion-space-6); margin-top: var(--motion-space-8); }
+.om-gp-platform-group { display: grid; margin-top: var(--motion-space-12); }
+.om-gp-platform-group-title { margin: 0; font-size: var(--motion-text-xs); font-weight: var(--motion-weight-semibold); color: var(--motion-muted); }
 .om-gp-badge { font-weight: var(--motion-weight-semibold); }
 
 /* WeChat key file and preview code, under the Agent's message in the conversation. */

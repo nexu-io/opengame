@@ -11,5 +11,8 @@ export const platformIcons = Object.freeze({
   reels: 'platforms/reels.svg',
   shorts: 'platforms/shorts.svg',
   x: 'platforms/x.svg',
+  'google-ads': 'platforms/google-ads.svg',
+  unity: 'platforms/unity.svg',
+  meta: 'platforms/meta.svg',
 });
 export const platformIconFiles = Object.freeze(Object.values(platformIcons));
