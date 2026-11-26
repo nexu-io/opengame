@@ -88,4 +88,4 @@ Test and stable packages both include the local diagnostic ZIP collector. In Stu
 
 ## Recreation vision tools
 
-Complete platform packages include `runtime/vision-assets`, containing the pinned Python distribution and NumPy/OpenCV wheels. The recreation Skill entry prepares a private cached environment from these local assets on first use, including offline. Use the package's Node executable with `skills/openmotion-recreate/scripts/vision-tools.mjs prepare` to prepare explicitly. The measurement helpers support macOS 13+ arm64 and Windows 11+ x64. Their original licenses remain inside the included archives and installed distributions.
+Complete platform packages include `runtime/vision-assets`, containing the pinned Python distribution and NumPy/OpenCV wheels. The recreation workflow entry prepares a private cached environment from these local assets on first use, including offline. Use the package's Node executable with `skills/openmotion-video/scripts/vision-tools.mjs prepare` to prepare explicitly. The measurement helpers support macOS 13+ arm64 and Windows 11+ x64. Their original licenses remain inside the included archives and installed distributions.
