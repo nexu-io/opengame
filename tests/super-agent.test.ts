@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { designHttp, designProjectsFor } from '../design-projects.ts';
-import { gameHttp, gameProjectsFor } from '../game-projects.ts';
+import { GameProjects, gameHttp, gameProjectsFor } from '../game-projects.ts';
 import { injectPreviewBridgeHtml, isValidPreviewBridgeToken } from '../shared/preview-bridge.ts';
 import { Phase1Service } from '../phase1.ts';
 import { AssetLibrary } from '../gateway/asset-library.ts';
@@ -1304,7 +1304,32 @@ test('game generation suppresses premature starter-kit artifacts during building
 }));
 
 test('built-in template zero-rebuild delivery presents game artifact immediately and preserves localized title across concurrent set_status', () => fixture(async store => {
-  const games = gameProjectsFor(store.directory);
+  const fixtureTemplates = path.join(store.directory, 'fixture-templates');
+  const templateDir = path.join(fixtureTemplates, 'ball-match');
+  await mkdir(templateDir, { recursive: true });
+  await writeFile(path.join(templateDir, 'index.html'), '<!doctype html><title>Jelly Ball Chain Pop</title>');
+  await writeFile(path.join(templateDir, 'cover.webp'), 'fake-webp');
+  await writeFile(path.join(templateDir, 'game.json'), JSON.stringify({
+    id: 'ball-match',
+    title: 'Jelly Ball Chain Pop',
+    description: 'Trace glossy chains across a 3D bubble grid.',
+    genre: 'casual',
+    style: '3d',
+    setting: 'modern',
+    multiplayer: false,
+    maxPlayers: 1,
+    status: 'published',
+    cover: 'cover.webp',
+    entry: 'index.html',
+    controls: 'Drag through adjacent balls.',
+    plays: 0,
+    likes: 0,
+    dislikes: 0,
+    createdAt: '2026-11-24T00:00:00.000Z',
+    updatedAt: '2026-11-24T00:00:00.000Z',
+    orientation: 'portrait',
+  }));
+  const games = new GameProjects(store.directory, fixtureTemplates);
   const remixed = await games.remix('ball-match');
   assert.equal(remixed.game.title, 'Jelly Ball Chain Pop');
   assert.equal(remixed.game.status, 'draft');
