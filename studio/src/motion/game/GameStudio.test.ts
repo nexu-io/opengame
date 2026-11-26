@@ -65,4 +65,16 @@ describe('gameCatalog multi-file detection and internal tags', () => {
       expect(game.tags).toContain(TOP_EARNING_TAG);
     }
   });
+
+  it('orders curated flagship TOP赚钱 hits ahead of alphabetical uncurated ties', () => {
+    const topIds = bundledGames.filter(isTopEarningGame).map(game => game.id);
+    expect(topIds.slice(0, 6)).toEqual([
+      'catch-goose-3d',
+      'plants-vs-zombies',
+      'archero-bow-legend',
+      'billiards-3d-pro',
+      'screw-puzzle',
+      'fruit-slash-frenzy',
+    ]);
+  });
 });

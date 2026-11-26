@@ -1,4 +1,4 @@
-import { gameGenreLabels, gameGenres, gameSettings, gameStyles, type GameBrief, type GameCard, type GameCatalog, type GameCreated, type GameGenre, type GameRemixOptions, type GameSetting, type GameStyle, type GameTrailer, type GameHandoff } from '../../../../shared/game-contract';
+import { compareGameCatalogOrder, gameGenreLabels, gameGenres, gameSettings, gameStyles, type GameBrief, type GameCard, type GameCatalog, type GameCreated, type GameGenre, type GameRemixOptions, type GameSetting, type GameStyle, type GameTrailer, type GameHandoff } from '../../../../shared/game-contract';
 import { motionApi } from '../useWorkspace';
 
 export const genreLabels: Record<GameGenre, string> = gameGenreLabels;
@@ -107,7 +107,7 @@ export const settingCovers = Object.fromEntries(gameSettings.map(setting => [set
 export const bundledGames: GameCard[] = Object.entries(bundledMeta).map(([path, meta]): GameCard => {
   const id = folder(path);
   return { ...meta, id, cover: genreCovers[meta.genre] ?? null, playUrl: `bundled:${id}`, reaction: 0, favorite: false, source: 'template', remixOf: null };
-}).sort((a, b) => b.plays - a.plays);
+}).sort(compareGameCatalogOrder);
 
 /** A bundled page that loads sibling files (./assets/..., ./src/..., ./app.part0.js) cannot run from a blob URL. */
 export const needsGameService = (html: string) => /["'(]\.?\/?(?:assets|src)\/|["']\.\/[^"']+\.(?:js|css|json|wasm)\b|<(?:script|link)\b[^>]+(?:src|href)=["'](?!https?:|data:|blob:|#)/i.test(html);
