@@ -22,5 +22,6 @@
       "description": "驾驶小无人机飞过街区，收齐 5 颗咖啡豆，降落在咖啡店屋顶就能兑换一杯咖啡。改一个 SHOP 配置，就能换成任何本地小店的推广小游戏。",
       "controls": "方向键 / WASD 飞行 · Q E 或 Shift / 空格 升降 · 手机用摇杆和 ▲ ▼ · P / Esc 暂停 · R 重开"
     }
-  }
+  },
+  "orientation": "landscape"
 }

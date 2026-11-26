@@ -67,11 +67,15 @@ export function MonetizationGateModal() {
   const [polling, setPolling] = useState(false);
   const [checking, setChecking] = useState(false);
   const [recovered, setRecovered] = useState(false);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+  const [retryingResume, setRetryingResume] = useState(false);
 
   const baselineRef = useRef<{ plan: string | undefined; balance: number | null }>({ plan: undefined, balance: null });
   const pollAttemptsRef = useRef(0);
   const checkInFlightRef = useRef(false);
   const lastReturnCheckAtRef = useRef(0);
+  const recoveredNotifiedRef = useRef(false);
+  const closeTimerRef = useRef<number | null>(null);
   const activeGateRef = useRef<MonetizationGateRequest | null>(null);
   activeGateRef.current = gate;
 
@@ -84,10 +88,16 @@ export function MonetizationGateModal() {
 
   // Reset state & record impression whenever a gate opens.
   useEffect(() => {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
     if (!gate) {
       setPolling(false);
       setChecking(false);
       setRecovered(false);
+      setResumeError(null);
+      setRetryingResume(false);
       pollAttemptsRef.current = 0;
       return;
     }
@@ -95,6 +105,9 @@ export function MonetizationGateModal() {
     setEntryId(nextEntryId);
     setPolling(false);
     setRecovered(false);
+    setResumeError(null);
+    setRetryingResume(false);
+    recoveredNotifiedRef.current = false;
     pollAttemptsRef.current = 0;
 
     const hookId = gateHookId(gate.kind);
@@ -110,7 +123,47 @@ export function MonetizationGateModal() {
         balance: parseBalanceNumber(summary?.balance),
       };
     });
+    return () => {
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+    };
   }, [gate, campaign, refresh]);
+
+  const runOnRecovered = useCallback(async (target: MonetizationGateRequest) => {
+    const scheduleClose = () => {
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = window.setTimeout(() => {
+        closeTimerRef.current = null;
+        if (activeGateRef.current === target) closeMonetizationGate();
+      }, 900);
+    };
+    if (!target.onRecovered) {
+      scheduleClose();
+      return;
+    }
+    setResumeError(null);
+    setRetryingResume(true);
+    try {
+      await target.onRecovered();
+      if (activeGateRef.current === target) {
+        scheduleClose();
+      }
+    } catch (error) {
+      if (activeGateRef.current === target) {
+        setResumeError(
+          error instanceof Error && error.message
+            ? error.message
+            : t('Could not continue the conversation. Try again.'),
+        );
+      }
+    } finally {
+      if (activeGateRef.current === target) {
+        setRetryingResume(false);
+      }
+    }
+  }, [t]);
 
   const checkEntitlementNow = useCallback(async (fromPoll = false) => {
     const current = activeGateRef.current;
@@ -133,7 +186,10 @@ export function MonetizationGateModal() {
       if (improved) {
         setPolling(false);
         setRecovered(true);
-        window.setTimeout(() => closeMonetizationGate(), 900);
+        if (!recoveredNotifiedRef.current) {
+          recoveredNotifiedRef.current = true;
+          void runOnRecovered(current);
+        }
       }
     } catch {
       if (!fromPoll) {
@@ -143,7 +199,7 @@ export function MonetizationGateModal() {
       checkInFlightRef.current = false;
       if (!fromPoll) setChecking(false);
     }
-  }, [entryId]);
+  }, [entryId, runOnRecovered]);
 
   // 5s background polling after user opens checkout.
   useEffect(() => {
@@ -293,10 +349,28 @@ export function MonetizationGateModal() {
               </ul>
             </div>
 
-            {recovered && (
+            {recovered && !resumeError && (
               <div className="om-mg-status" data-tone="success" role="status" data-testid="monetization-gate-recovered">
                 <RemixIcon name="checkbox-circle-fill" size={15} />
                 <span>{t('Plan updated! Returning to your workspace…')}</span>
+              </div>
+            )}
+
+            {resumeError && (
+              <div className="om-mg-status" data-tone="danger" role="alert" data-testid="monetization-gate-resume-error">
+                <RemixIcon name="error-warning-line" size={15} />
+                <span>{resumeError}</span>
+                {gate.onRecovered && (
+                  <Button
+                    variant="plain"
+                    type="button"
+                    className="om-mg-inline-btn"
+                    disabled={retryingResume}
+                    onClick={() => void runOnRecovered(gate)}
+                  >
+                    {t('Try again')}
+                  </Button>
+                )}
               </div>
             )}
 

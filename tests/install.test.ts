@@ -84,14 +84,15 @@ test('OpenGame main entry Skill and setup guides install opengame once before lo
   assert.match(entrySkill, /openmotion:\/\/workflow\/game\/start/);
   assert.match(entrySkill, /openmotion:\/\/workflow\/media\/start/);
   assert.match(entrySkill, /local stdio MCP/i);
-  for (const file of ['../install.md', '../docs/opengame-setup.md']) {
-    const doc = await readFile(new URL(file, import.meta.url), 'utf8');
-    assert.match(doc, /npx --yes skills@1\.9\.0 add nexu-io\/opengame --skill opengame --global --agent AGENT --copy --yes/, file);
-    assert.match(doc, /OPENGAME_SKIP_PUBLIC_SKILL=1/, file);
-    assert.match(doc, /already installed/i, file);
-    assert.match(doc, /does not block|report it briefly and continue/i, file);
-  }
-  for (const readme of ['../README.md', '../README.zh-CN.md', '../README.ja.md']) {
+  const setupGuide = await readFile(new URL('../docs/opengame-setup.md', import.meta.url), 'utf8');
+  assert.match(setupGuide, /npx --yes skills@1\.9\.0 add nexu-io\/opengame --skill opengame --global --agent AGENT --copy --yes/);
+  assert.match(setupGuide, /OPENGAME_SKIP_PUBLIC_SKILL=1/);
+  assert.match(setupGuide, /already installed/i);
+  assert.match(setupGuide, /does not block/i);
+  const rootForwarder = await readFile(new URL('../install.md', import.meta.url), 'utf8');
+  assert.match(rootForwarder, /\]\(docs\/opengame-setup\.md\)/);
+  assert.match(rootForwarder, /`opengame` Skill/);
+  for (const readme of ['../README.md', '../README.zh-CN.md', '../README.ja.md', '../docs/README.zh-CN.md', '../docs/README.ja.md']) {
     const body = await readFile(new URL(readme, import.meta.url), 'utf8');
     assert.match(body, /npx skills add nexu-io\/opengame --skill opengame/, readme);
     assert.match(body, /skills\/opengame\/SKILL\.md/, readme);

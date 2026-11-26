@@ -2570,8 +2570,8 @@ function actionCardMeta(kind: SuperAgentActionCard['kind']): {
       return {
         icon: 'error-warning-line',
         title: 'Top up OpenDesign balance',
-        description: 'Your OpenDesign balance was too low for this generation. Top up your credits, then reply here to resume.',
-        cta: 'Manage billing',
+        description: "Your OpenDesign balance is too low to generate media. Top up your credits and I'll continue automatically.",
+        cta: 'Top up credits',
       };
     case 'configure_key':
     default:
@@ -2611,15 +2611,19 @@ function TurnActionCard({
   if (card.kind === 'sign_in' || card.kind === 'upgrade_free' || card.kind === 'upgrade_go' || card.kind === 'web_publish_sign_in') {
     return <AccountHandoffCard card={card} handoffKey={handoffKey} onResume={onResume} onOpenSettings={onOpenSettings} />;
   }
-  return <GateActionCard card={card} onTrigger={onTrigger} />;
+  return <GateActionCard card={card} handoffKey={handoffKey} onTrigger={onTrigger} onResume={onResume} />;
 }
 
 function GateActionCard({
   card,
+  handoffKey,
   onTrigger,
+  onResume,
 }: {
   card: SuperAgentActionCard;
+  handoffKey?: string;
   onTrigger?: (card: SuperAgentActionCard) => void;
+  onResume?: AccountHandoffResume;
 }) {
   const { locale, t } = useI18n();
   const descriptionId = useId();
@@ -2653,7 +2657,12 @@ function GateActionCard({
       );
     }
     if (isTopUp) {
-      openBalanceGate({ reason: 'insufficient_balance', pageName: 'creative_studio', studioId: 'game' });
+      openBalanceGate({
+        reason: 'insufficient_balance',
+        pageName: 'creative_studio',
+        studioId: 'game',
+        ...(onResume ? { onRecovered: () => onResume(card, { key: handoffKey ?? card.id }) } : {}),
+      });
       return;
     }
     onTrigger?.(card);

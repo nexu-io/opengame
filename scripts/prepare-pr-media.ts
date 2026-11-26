@@ -15,13 +15,87 @@ export type CleanupPlan = { schemaVersion: 1; sourceSHA: string; pullNumber: num
 const execute = promisify(execFile);
 const repository = 'nexu-io/opengame';
 export type TreeFile = { path: string; mode: string; sha: string; size: number; type: string };
+export type GitTreeResponse = { truncated?: boolean; tree: TreeFile[] };
+type TreeFetcher = (sha: string, recursive: boolean) => Promise<GitTreeResponse>;
 type Inputs = { head: TreeFile[]; base: TreeFile[]; sourceSHA: string; pullNumber: number };
 type Transfer = (file: MediaLock, bytes: Buffer) => Promise<void>;
 const textFile = /\.(?:md|html?|css|json|[cm]?[jt]sx?|txt|ya?ml)$/i;
 const mediaFile = /\.(?:mp4|mov|webm|m4v|avi|mp3|wav|ogg|m4a|aac|flac|png|jpe?g|webp|avif|gif|woff2?|ttf|otf|motion)$/i;
 const videoOrAudio = /\.(?:mp4|mov|webm|m4v|avi|mp3|wav|ogg|m4a|aac|flac|motion)$/i;
 const catalogAsset = /^library\/templates\/catalog\/([a-z][a-z0-9-]+)\/source\/(assets\/[\w/.@+ -]+)$/;
+const relevantMediaTree = /^(?:docs|library|examples|studio\/src\/motion\/skill-covers)(?:\/|$)/;
+const relevantMediaAncestor = /^(?:studio|studio\/src|studio\/src\/motion)$/;
 const jsonBytes = (value: unknown) => Buffer.from(JSON.stringify(value, null, 2) + '\n');
+
+function prefixTree(entries: TreeFile[], prefix: string): TreeFile[] {
+  return prefix ? entries.map(entry => ({ ...entry, path: `${prefix}/${entry.path}` })) : entries;
+}
+
+async function readSingleGitTree(sha: string, fetchTree: TreeFetcher, prefix: string): Promise<TreeFile[]> {
+  const recursive = await fetchTree(sha, true);
+  if (!recursive.truncated) return prefixTree(recursive.tree, prefix);
+  const shallow = await fetchTree(sha, false);
+  assert(!shallow.truncated, 'GitHub directory tree truncated: ' + (prefix || '<root>'));
+  const entries: TreeFile[] = [];
+  for (const entry of shallow.tree) {
+    const fullPath = prefix ? `${prefix}/${entry.path}` : entry.path;
+    if (entry.type === 'tree') entries.push(...await readSingleGitTree(entry.sha, fetchTree, fullPath));
+    else entries.push({ ...entry, path: fullPath });
+  }
+  return entries;
+}
+
+/**
+ * Reads PR head and base trees without failing on GitHub's 100k-entry recursive tree cap.
+ * Unchanged subtrees outside media/doc roots have identical blob SHAs and are skipped when truncated.
+ */
+export async function readGitTreePair(headSHA: string, baseSHA: string, fetchHead: TreeFetcher, fetchBase: TreeFetcher): Promise<{ head: TreeFile[]; base: TreeFile[] }> {
+  const [headRoot, baseRoot] = await Promise.all([fetchHead(headSHA, true), fetchBase(baseSHA, true)]);
+  if (!headRoot.truncated && !baseRoot.truncated) return { head: headRoot.tree, base: baseRoot.tree };
+  const headEntries: TreeFile[] = [], baseEntries: TreeFile[] = [];
+  const walk = async (curHead: string | null, curBase: string | null, prefix: string): Promise<void> => {
+    if (curHead && curBase && curHead === curBase) {
+      if (!relevantMediaTree.test(prefix) && !relevantMediaAncestor.test(prefix) && prefix !== '') return;
+      if (relevantMediaTree.test(prefix)) {
+        const same = await readSingleGitTree(curHead, fetchHead, prefix);
+        headEntries.push(...same); baseEntries.push(...same);
+        return;
+      }
+    }
+    if (curHead && !curBase) { headEntries.push(...await readSingleGitTree(curHead, fetchHead, prefix)); return; }
+    if (!curHead && curBase) { baseEntries.push(...await readSingleGitTree(curBase, fetchBase, prefix)); return; }
+    assert(curHead && curBase);
+    if (prefix && curHead !== curBase) {
+      const [hRec, bRec] = await Promise.all([fetchHead(curHead, true), fetchBase(curBase, true)]);
+      if (!hRec.truncated && !bRec.truncated) {
+        headEntries.push(...prefixTree(hRec.tree, prefix));
+        baseEntries.push(...prefixTree(bRec.tree, prefix));
+        return;
+      }
+    }
+    const [hShallow, bShallow]: [GitTreeResponse, GitTreeResponse | null] = await Promise.all([
+      fetchHead(curHead, false),
+      curHead === curBase ? Promise.resolve(null) : fetchBase(curBase, false),
+    ]);
+    const baseTree: GitTreeResponse = bShallow ?? hShallow;
+    assert(!hShallow.truncated && !baseTree.truncated, 'GitHub directory tree truncated: ' + (prefix || '<root>'));
+    const hMap = new Map<string, TreeFile>(hShallow.tree.map(entry => [entry.path, entry]));
+    const bMap = new Map<string, TreeFile>(baseTree.tree.map(entry => [entry.path, entry]));
+    for (const name of new Set([...hMap.keys(), ...bMap.keys()])) {
+      const h = hMap.get(name), b = bMap.get(name), fullPath = prefix ? `${prefix}/${name}` : name;
+      if (h?.type === 'tree' || b?.type === 'tree') {
+        if (h && h.type !== 'tree') headEntries.push({ ...h, path: fullPath });
+        if (b && b.type !== 'tree') baseEntries.push({ ...b, path: fullPath });
+        await walk(h?.type === 'tree' ? h.sha : null, b?.type === 'tree' ? b.sha : null, fullPath);
+      } else {
+        if (h) headEntries.push({ ...h, path: fullPath });
+        if (b) baseEntries.push({ ...b, path: fullPath });
+      }
+    }
+  };
+  await walk(headSHA, baseSHA, '');
+  return { head: headEntries, base: baseEntries };
+}
 
 export async function finalizeMediaCleanup(plan: CleanupPlan, upload: () => Promise<void>, currentHead: () => Promise<string>, push: () => Promise<void>) {
   await upload();
@@ -193,8 +267,9 @@ export async function preparePullRequest(pullNumber: number, apply: boolean) {
   const settings = await fetch('https://api.github.com/repos/' + repository, { headers: { authorization: 'Bearer ' + token }, redirect: 'error' }).then(response => response.json()) as any;
   assert(settings.permissions?.push, 'The configured GitHub identity must have maintainer write access');
   assert(settings.allow_squash_merge === true && settings.allow_merge_commit === false && settings.allow_rebase_merge === false, 'Configure Squash merge only before transferring media; other merge methods retain intermediate large blobs');
-  const head = await api(`git/trees/${pr.head.sha}?recursive=1`, pr.head.repo.full_name), base = await api(`git/trees/${pr.base.sha}?recursive=1`);
-  assert(!head.truncated && !base.truncated, 'GitHub tree truncated; split this PR');
+  const fetchTree = (target: string): TreeFetcher => (sha, recursive) =>
+    api(`git/trees/${sha}${recursive ? '?recursive=1' : ''}`, target);
+  const { head, base } = await readGitTreePair(pr.head.sha, pr.base.sha, fetchTree(pr.head.repo.full_name), fetchTree(repository));
   const read = async (file: TreeFile) => {
     assert(file.size <= maxMediaBytes, 'Git blob exceeds media budget');
     const response = await fetch(`https://api.github.com/repos/${pr.head.repo.full_name}/git/blobs/${file.sha}`, { headers: { authorization: 'Bearer ' + token, accept: 'application/vnd.github.raw+json' }, redirect: 'error', signal: AbortSignal.timeout(120_000) });
@@ -219,7 +294,7 @@ export async function preparePullRequest(pullNumber: number, apply: boolean) {
     }
     await publishMedia(lock, bytes, { endpoint: process.env.OPENGAME_R2_ENDPOINT ?? '', bucket: process.env.OPENGAME_R2_BUCKET ?? '' });
   };
-  const inputs = { head: head.tree, base: base.tree, sourceSHA: pr.head.sha, pullNumber };
+  const inputs = { head, base, sourceSHA: pr.head.sha, pullNumber };
   const plan = await prepareMediaCleanup(inputs, read);
   const changed = new Map(inputs.base.map((file: TreeFile) => [file.path, file.sha]));
   for (const file of inputs.head) if (file.type === 'blob' && file.sha !== changed.get(file.path) && file.size > 1024 * 1024)

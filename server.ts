@@ -946,6 +946,16 @@ export async function handler(req: IncomingMessage, res: ServerResponse, store =
           previewUrl: `/motion-api/super-agent/file-content?${previewParams.toString()}`,
         });
       }
+      if (url.pathname === '/api/super-agent/preferences') {
+        if (req.method === 'GET') {
+          return json(res, 200, { preferences: await superAgent.getPreferences() });
+        }
+        if (req.method === 'PATCH' || req.method === 'PUT') {
+          const data = req.headers['content-type']?.includes('application/json') ? await input(req, 16 * 1024) : {};
+          return json(res, 200, { preferences: await superAgent.updatePreferences(data) });
+        }
+        return json(res, 405, { error: 'Unsupported Super Agent preferences request' });
+      }
       if (url.pathname === '/api/super-agent/chats') {
         if (req.method === 'GET') return json(res, 200, { conversations: await superAgent.list() });
         if (req.method === 'POST') {

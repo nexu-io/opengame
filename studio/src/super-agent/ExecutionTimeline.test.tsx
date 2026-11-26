@@ -98,6 +98,7 @@ describe('ExecutionTimeline inline action cards', () => {
     expect(container.textContent).toContain('Sign in with OpenDesign');
     expect(container.textContent).toContain('Upgrade to OpenDesign Plus');
     expect(container.textContent).toContain('Top up OpenDesign balance');
+    expect(container.textContent).toContain('Top up credits');
 
     const signInBtn = Array.from(container.querySelectorAll('button')).find(btn => btn.textContent?.trim() === 'Sign in & continue');
     expect(signInBtn).toBeTruthy();

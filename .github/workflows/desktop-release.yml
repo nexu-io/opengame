@@ -45,6 +45,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6.0.2
 
+      - name: Fetch game assets for the standalone desktop application
+        run: git lfs pull --include="templates/games/**" --exclude=""
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:

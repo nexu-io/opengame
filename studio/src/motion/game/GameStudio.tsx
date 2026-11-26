@@ -11,6 +11,7 @@ import { WebPublishPopover } from '../../components/WebPublishPopover';
 import { useToast } from '../../hooks/useToast';
 import { useI18n } from '../../i18n/I18n';
 import { useVisibilityPolling } from '../../hooks/useVisibilityPolling';
+import { useDeferredIframeSource } from '../../utils/useDeferredIframeSource';
 import { RemixIcon } from '../../icons/RemixIcons';
 import { WorkspaceBack } from '../WorkspaceBack';
 import { useOptionalWorkspaceChrome } from '../WorkspaceChromeContext';
@@ -527,6 +528,12 @@ function GameProject({ game, offline, onClose, onRemix, onChange, onOpenMcp, onC
     catch { reportGameAction('copy_link', 'failure', game); notify(t('Could not copy the link.'), 'error'); }
   };
   const popout = () => { if (url) reportGameClick('game_detail', 'open_external', game); if (url) window.open(url.startsWith('blob:') ? url : new URL(url, location.href).href, '_blank', 'noopener'); };
+  const gameFrameKey = `${game.id}:${reload}:${url ?? ''}`;
+  const gameFrameActive = Boolean(playable && view === 'preview' && url && !(game.external && !game.external.embeddable));
+  const gameSourceReady = useDeferredIframeSource(frame, gameFrameKey, gameFrameActive);
+  const iframeUrl = url && !game.external && !url.startsWith('blob:')
+    ? `${url}${url.includes('?') ? '&' : '?'}omViewportGuard=1`
+    : url;
   return <div className="om-game-project" role="dialog" aria-modal="true" aria-label={game.title}>
     <header className="om-game-project-top">
       <IconButton ref={close} variant="ghost" className="motion-icon-button" aria-label={t('All games')} onClick={onClose} icon={<RemixIcon name="arrow-left-line" size={18} />} />
@@ -609,7 +616,7 @@ function GameProject({ game, offline, onClose, onRemix, onChange, onOpenMcp, onC
               <div><strong>{t('This game only runs on the creator’s site.')}</strong>
                 <Button variant="ghost" className="om-button h-auto" data-primary onClick={popout}><RemixIcon name="external-link-line" size={15} />{t('Open original')}</Button></div>
             </div>
-          : url ? <iframe key={reload} ref={frame} src={url} title={game.title} onLoad={() => { if (!playReported.current) { playReported.current = true; reportGameAction('play', 'success', game); } }} sandbox={game.external ? 'allow-scripts allow-same-origin allow-pointer-lock allow-popups' : 'allow-scripts allow-forms allow-pointer-lock'} allow="fullscreen; gamepad; autoplay; clipboard-write" />
+          : url ? <iframe key={gameFrameKey} ref={frame} {...(gameSourceReady && iframeUrl ? { src: iframeUrl } : {})} title={game.title} onLoad={() => { if (!gameSourceReady) return; if (!playReported.current) { playReported.current = true; reportGameAction('play', 'success', game); } }} sandbox={game.external ? 'allow-scripts allow-same-origin allow-pointer-lock allow-popups' : 'allow-scripts allow-forms allow-pointer-lock'} allow="fullscreen; gamepad; autoplay; clipboard-write" />
           : <span className="om-muted">{t('Loading game…')}</span>}
       </div>
     </section>

@@ -25,6 +25,15 @@ export type SuperAgentEngine = string;
 export type SuperAgentPermissionMode = 'on-request' | 'auto';
 export type SuperAgentFollowUpMode = 'steer' | 'queue';
 
+export type SuperAgentPreferences = {
+  /** Allow Super Agent to automatically run multimodal asset generation without per-call confirmation prompts. Defaults to true. */
+  autoMultimodalGeneration: boolean;
+};
+
+export const DEFAULT_SUPER_AGENT_PREFERENCES: SuperAgentPreferences = {
+  autoMultimodalGeneration: true,
+};
+
 export type SuperAgentResourceKind =
   | 'asset'
   | 'file'
