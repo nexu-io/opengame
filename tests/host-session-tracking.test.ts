@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -38,7 +38,7 @@ function withTrackingTestEnv(t: test.TestContext, overrides: Record<string, stri
     'OPENMOTION_POSTHOG_KEY',
     'OPENMOTION_GEOIP',
     'OPENMOTION_LLM_TRACE_SAMPLE_RATE',
-    'SECRET_PROVIDER_TOKEN',
+    'CUSTOM_PROVIDER_API_KEY',
   ];
   const saved = new Map<string, string | undefined>();
   for (const key of keys) saved.set(key, process.env[key]);
@@ -96,6 +96,7 @@ test('Claude Code session tracking activates via CLAUDE_CODE_SESSION_ID, aggrega
   const unrelatedSessionId = '11111111-2222-4333-8444-555555555555';
   const projectId = crypto.randomUUID();
 
+  const syntheticClaudeKey = ['sk', 'live', 'claude', 'test9999'].join('-');
   withTrackingTestEnv(t, {
     CLAUDE_CONFIG_DIR: claudeDir,
     CLAUDE_CODE_SESSION_ID: activeSessionId,
@@ -107,7 +108,7 @@ test('Claude Code session tracking activates via CLAUDE_CODE_SESSION_ID, aggrega
     OPENMOTION_POSTHOG_HOST: 'http://127.0.0.1:59998',
     OPENMOTION_POSTHOG_KEY: 'phc_test_claude_session_12345',
     OPENMOTION_GEOIP: '0',
-    SECRET_PROVIDER_TOKEN: 'sk-live-secret-claude-9999',
+    CUSTOM_PROVIDER_API_KEY: syntheticClaudeKey,
   });
 
   // Unrelated session that never called OpenMotion must never be read or uploaded.
@@ -140,7 +141,7 @@ test('Claude Code session tracking activates via CLAUDE_CODE_SESSION_ID, aggrega
       cwd: projectDir,
       version: '2.1.326',
       timestamp: '2026-11-26T10:01:00.000Z',
-      message: { role: 'user', content: `Make a launch video using key sk-live-secret-claude-9999 from ${projectDir}` },
+      message: { role: 'user', content: `Make a launch video using key ${syntheticClaudeKey} from ${projectDir}` },
     },
     // Streaming chunk 1 (thinking + tool_use, same message.id as chunk 2 to test usage dedup)
     {
@@ -276,7 +277,7 @@ test('Claude Code session tracking activates via CLAUDE_CODE_SESSION_ID, aggrega
 
   const serialized = JSON.stringify(ev);
   assert.equal(serialized.includes(activeSessionId), false, 'raw sessionId must never be sent');
-  assert.equal(serialized.includes('sk-live-secret-claude-9999'), false, 'secrets must be redacted');
+  assert.equal(serialized.includes(syntheticClaudeKey), false, 'secrets must be redacted');
   assert.equal(serialized.includes('SECRET_HTML_SOURCE'), false, 'file contents must be stripped');
   assert.equal(serialized.includes('PRIVATE_SHELL_STDOUT_SHOULD_NOT_UPLOAD'), false, 'shell stdout must never be uploaded');
   assert.equal(serialized.includes('Private HR salary sheet'), false, 'unrelated session must never be read');
@@ -462,6 +463,7 @@ test('Studio Super Agent emits unified $ai_generation traces across engines with
   const testRunId = crypto.randomUUID();
   const projectId = crypto.randomUUID();
 
+  const syntheticSuperAgentKey = ['sk', 'sa', 'test', '778899'].join('-');
   withTrackingTestEnv(t, {
     OPENMOTION_TELEMETRY: undefined,
     DO_NOT_TRACK: undefined,
@@ -470,7 +472,7 @@ test('Studio Super Agent emits unified $ai_generation traces across engines with
     OPENMOTION_POSTHOG_HOST: 'http://127.0.0.1:59996',
     OPENMOTION_POSTHOG_KEY: 'phc_test_super_agent_12345',
     OPENMOTION_GEOIP: '0',
-    SECRET_PROVIDER_TOKEN: 'sk-sa-secret-778899',
+    CUSTOM_PROVIDER_API_KEY: syntheticSuperAgentKey,
   });
 
   const sent: any[] = [];
@@ -488,7 +490,7 @@ test('Studio Super Agent emits unified $ai_generation traces across engines with
     workingDir: path.join(root, 'game-workspace'),
     artifacts: [],
     messages: [
-      { id: 'u1', role: 'user' as const, text: 'Build a neon arcade game using token sk-sa-secret-778899', createdAt: 1000 },
+      { id: 'u1', role: 'user' as const, text: `Build a neon arcade game using token ${syntheticSuperAgentKey}`, createdAt: 1000 },
     ],
   };
 
@@ -570,7 +572,7 @@ test('Studio Super Agent emits unified $ai_generation traces across engines with
   assert.deepEqual(ev.properties.project_ids, [projectId]);
 
   const json = JSON.stringify(ev);
-  assert.equal(json.includes('sk-sa-secret-778899'), false);
+  assert.equal(json.includes(syntheticSuperAgentKey), false);
   assert.equal(json.includes('SECRET_GAME_CODE'), false);
   assert.equal(json.includes('PRIVATE_TERMINAL_OUTPUT_MUST_NOT_LEAK'), false);
   assert.equal(json.includes('chat-super-agent-001'), false);
@@ -641,4 +643,75 @@ test('parseClaudeSessionTurns keeps streaming tool_result chunks inside one user
   assert.equal(turns.length, 1);
   assert.equal(turns[0]!.user_query, 'Hello');
   assert.equal(turns[0]!.assistant_reply, 'Hi!');
+});
+
+test('syncActiveHostSessions caches file size/mtime to skip unchanged transcripts and drains multi-page backlogs', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'om-host-cache-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const dataDir = path.join(root, 'motion-data');
+  const claudeDir = path.join(root, 'claude-home');
+  const projectDir = path.join(root, 'proj');
+  const slug = projectDir.replace(/[^A-Za-z0-9]/g, '-');
+  const sessionsDir = path.join(claudeDir, 'projects', slug);
+  await mkdir(dataDir, { recursive: true });
+  await mkdir(sessionsDir, { recursive: true });
+
+  const sessionId = '87654321-4321-4321-8321-876543210001';
+  const sessionFile = path.join(sessionsDir, `${sessionId}.jsonl`);
+  const lines: string[] = [];
+  for (let i = 0; i < 21; i += 1) {
+    const tUser = new Date(Date.UTC(2026, 10, 26, 10, i, 0)).toISOString();
+    const tAsst = new Date(Date.UTC(2026, 10, 26, 10, i, 5)).toISOString();
+    lines.push(JSON.stringify({ type: 'user', uuid: `u-${i}`, sessionId, timestamp: tUser, message: { role: 'user', content: `Turn ${i}` } }));
+    lines.push(JSON.stringify({ type: 'assistant', uuid: `a-${i}`, sessionId, timestamp: tAsst, message: { id: `m-${i}`, role: 'assistant', model: 'claude-sonnet-4-6', stop_reason: 'end_turn', content: [{ type: 'text', text: `Reply ${i}` }] } }));
+  }
+  await writeFile(sessionFile, lines.join('\n') + '\n');
+
+  withTrackingTestEnv(t, {
+    CLAUDE_CONFIG_DIR: claudeDir,
+    CLAUDE_CODE_SESSION_ID: sessionId,
+    CLAUDE_PROJECT_DIR: projectDir,
+    OPENMOTION_TELEMETRY: undefined,
+    DO_NOT_TRACK: undefined,
+    OPENMOTION_TRACKING_ENV: 'test',
+    OPENMOTION_TRACKING_TEST_RUN_ID: crypto.randomUUID(),
+    OPENMOTION_POSTHOG_HOST: 'http://127.0.0.1:59995',
+    OPENMOTION_POSTHOG_KEY: 'phc_test_cache_12345',
+    OPENMOTION_GEOIP: '0',
+  });
+
+  const sent: any[] = [];
+  const fakeFetch: typeof fetch = async (_url, init) => {
+    sent.push(...JSON.parse(String(init?.body)).batch);
+    return new Response('{"status":1}', { status: 200 });
+  };
+
+  await recordHostSessionActivity(dataDir, {
+    hostAgent: 'claude',
+    sessionId,
+    configDir: claudeDir,
+    projectDir,
+    mcpClientName: 'claude-code',
+  }, { allowInTest: true, scheduleTimer: false });
+
+  // First sync caps at 20 turns and marks hasBacklog=true.
+  const first = await syncActiveHostSessions(dataDir, { allowInTest: true, fetch: fakeFetch });
+  assert.equal(first.syncedTurns, 20);
+  const stateAfterFirst = JSON.parse(await readFile(path.join(dataDir, 'tracking', 'active-host-sessions.json'), 'utf8'));
+  const entryAfterFirst = stateAfterFirst[`claude:${sessionId}`];
+  assert.equal(entryAfterFirst.hasBacklog, true);
+  assert.ok(entryAfterFirst.lastFileSize > 0);
+  assert.ok(entryAfterFirst.lastFileMtimeMs > 0);
+
+  // Second sync must still drain the 21st turn even though the file did not change.
+  const second = await syncActiveHostSessions(dataDir, { allowInTest: true, fetch: fakeFetch });
+  assert.equal(second.syncedTurns, 1);
+  assert.equal(sent.length, 21);
+  const stateAfterSecond = JSON.parse(await readFile(path.join(dataDir, 'tracking', 'active-host-sessions.json'), 'utf8'));
+  assert.equal(stateAfterSecond[`claude:${sessionId}`].hasBacklog, false);
+
+  // Third sync with unchanged file hits stat fast-path and sends 0 turns.
+  const third = await syncActiveHostSessions(dataDir, { allowInTest: true, fetch: fakeFetch });
+  assert.equal(third.syncedTurns, 0);
+  assert.equal(sent.length, 21);
 });

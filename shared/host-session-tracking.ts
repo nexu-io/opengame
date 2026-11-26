@@ -58,6 +58,9 @@ type ActiveHostSession = {
   lastSeenAt: number;
   lastSyncedTurnIndex: number;
   lastUpdatedAtMs: number;
+  lastFileSize?: number;
+  lastFileMtimeMs?: number;
+  hasBacklog?: boolean;
   hostVersion?: string;
   mcpClientName?: string;
   projectIds: string[];
@@ -192,6 +195,9 @@ function validActiveHostSession(value: unknown): value is ActiveHostSession {
     && Number.isFinite(entry.firstSeenAt) && Number.isFinite(entry.lastSeenAt)
     && Number.isInteger(entry.lastSyncedTurnIndex) && entry.lastSyncedTurnIndex >= -1
     && Number.isFinite(entry.lastUpdatedAtMs)
+    && (entry.lastFileSize === undefined || (Number.isInteger(entry.lastFileSize) && entry.lastFileSize >= 0))
+    && (entry.lastFileMtimeMs === undefined || Number.isFinite(entry.lastFileMtimeMs))
+    && (entry.hasBacklog === undefined || typeof entry.hasBacklog === 'boolean')
     && (entry.hostVersion === undefined || (typeof entry.hostVersion === 'string' && VERSION_PATTERN.test(entry.hostVersion)))
     && (entry.mcpClientName === undefined || (typeof entry.mcpClientName === 'string' && entry.mcpClientName.length <= 64))
     && Array.isArray(entry.projectIds) && entry.projectIds.every(validProjectId)
@@ -294,7 +300,25 @@ function locateSessionJsonlFile(
   return null;
 }
 
-function readJsonlRecordsSafe(rootDir: string, filePath: string): { records: Array<Record<string, unknown>>; mtimeMs: number } | null {
+function statJsonlFileSafe(rootDir: string, filePath: string): { size: number; mtimeMs: number } | null {
+  const realFile = safeRealFileInside(rootDir, filePath);
+  if (!realFile) return null;
+  let fd: number | undefined;
+  try {
+    fd = openSync(realFile, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const info = fstatSync(fd);
+    if (!info.isFile() || info.size <= 0 || info.size > MAX_JSONL_FILE_BYTES) return null;
+    return { size: info.size, mtimeMs: info.mtimeMs };
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) {
+      try { closeSync(fd); } catch { /* ignore */ }
+    }
+  }
+}
+
+function readJsonlRecordsSafe(rootDir: string, filePath: string): { records: Array<Record<string, unknown>>; size: number; mtimeMs: number } | null {
   const realFile = safeRealFileInside(rootDir, filePath);
   if (!realFile) return null;
   let fd: number | undefined;
@@ -359,7 +383,7 @@ function readJsonlRecordsSafe(rootDir: string, filePath: string): { records: Arr
       }
     }
     if (lineBytes > 0 || discardLine) flushLine();
-    return { records, mtimeMs: info.mtimeMs };
+    return { records, size: info.size, mtimeMs: info.mtimeMs };
   } catch {
     return null;
   } finally {
@@ -1206,6 +1230,9 @@ export async function recordHostSessionActivity(
       lastSeenAt: Math.max(existing?.lastSeenAt ?? 0, now),
       lastSyncedTurnIndex: existing?.lastSyncedTurnIndex ?? -1,
       lastUpdatedAtMs: Math.max(existing?.lastUpdatedAtMs ?? 0, now),
+      ...(existing?.lastFileSize !== undefined ? { lastFileSize: existing.lastFileSize } : {}),
+      ...(existing?.lastFileMtimeMs !== undefined ? { lastFileMtimeMs: existing.lastFileMtimeMs } : {}),
+      ...(existing?.hasBacklog !== undefined ? { hasBacklog: existing.hasBacklog } : {}),
       ...(meta.hostVersion ?? existing?.hostVersion ? { hostVersion: meta.hostVersion ?? existing?.hostVersion } : {}),
       ...(meta.mcpClientName ?? existing?.mcpClientName ? { mcpClientName: meta.mcpClientName ?? existing?.mcpClientName } : {}),
       projectIds: mergeBoundedStrings(existing?.projectIds ?? [], projectIds),
@@ -1275,6 +1302,9 @@ export async function syncActiveHostSessions(
     type SessionOutcome = {
       lastSyncedTurnIndex: number;
       lastUpdatedAtMs: number;
+      lastFileSize?: number;
+      lastFileMtimeMs?: number;
+      hasBacklog?: boolean;
       sessionFile?: string;
       projectIds: string[];
       skillsActivated: string[];
@@ -1293,13 +1323,41 @@ export async function syncActiveHostSessions(
       const dbMeta = entry.hostAgent === 'workbuddy'
         ? readWorkbuddySessionDbMeta(entry.configDir, entry.sessionId)
         : {};
+      const projectsRoot = path.join(entry.configDir, 'projects');
       const sessionFile = locateSessionJsonlFile(entry.configDir, entry.sessionId, {
         projectDir: entry.projectDir ?? dbMeta.cwd,
         cachedFile: entry.sessionFile,
         leadingDash: entry.hostAgent === 'claude',
       });
-      const loaded = sessionFile
-        ? readJsonlRecordsSafe(path.join(entry.configDir, 'projects'), sessionFile)
+      const fileStat = sessionFile ? statJsonlFileSafe(projectsRoot, sessionFile) : null;
+
+      if (
+        fileStat
+        && !entry.hasBacklog
+        && entry.lastFileSize !== undefined
+        && entry.lastFileMtimeMs !== undefined
+        && fileStat.size === entry.lastFileSize
+        && fileStat.mtimeMs === entry.lastFileMtimeMs
+      ) {
+        const lastActivityMs = Math.max(entry.lastSeenAt, entry.lastUpdatedAtMs);
+        outcomes.set(entry.key, {
+          lastSyncedTurnIndex: entry.lastSyncedTurnIndex,
+          lastUpdatedAtMs: entry.lastUpdatedAtMs,
+          lastFileSize: entry.lastFileSize,
+          lastFileMtimeMs: entry.lastFileMtimeMs,
+          hasBacklog: false,
+          sessionFile: sessionFile ?? entry.sessionFile,
+          projectIds: entry.projectIds,
+          skillsActivated: entry.skillsActivated,
+          hasCompletedExport: entry.hasCompletedExport,
+          failures: 0,
+          seal: now - lastActivityMs >= idleSealMs,
+        });
+        continue;
+      }
+
+      const loaded = sessionFile && fileStat
+        ? readJsonlRecordsSafe(projectsRoot, sessionFile)
         : null;
 
       if (!loaded) {
@@ -1308,6 +1366,9 @@ export async function syncActiveHostSessions(
         outcomes.set(entry.key, {
           lastSyncedTurnIndex: entry.lastSyncedTurnIndex,
           lastUpdatedAtMs: entry.lastUpdatedAtMs,
+          lastFileSize: entry.lastFileSize,
+          lastFileMtimeMs: entry.lastFileMtimeMs,
+          hasBacklog: entry.hasBacklog,
           sessionFile: entry.sessionFile,
           projectIds: entry.projectIds,
           skillsActivated: entry.skillsActivated,
@@ -1444,12 +1505,16 @@ export async function syncActiveHostSessions(
       const lastUpdatedAtMs = Math.max(entry.lastUpdatedAtMs, loaded.mtimeMs);
       const lastActivityMs = Math.max(entry.lastSeenAt, lastUpdatedAtMs);
       const hasMorePending = parsed.turns.length >= MAX_TURNS_PER_SYNC;
+      const hasBacklog = retryNeeded || hasMorePending;
       const seal = failures >= MAX_CONSECUTIVE_FAILURES
         || (!retryNeeded && !hasMorePending && now - lastActivityMs >= idleSealMs);
 
       outcomes.set(entry.key, {
         lastSyncedTurnIndex: nextTurnIndex,
         lastUpdatedAtMs,
+        lastFileSize: loaded.size,
+        lastFileMtimeMs: loaded.mtimeMs,
+        hasBacklog,
         sessionFile: sessionFile ?? entry.sessionFile,
         projectIds: committedProjects,
         skillsActivated: committedSkills,
@@ -1479,6 +1544,9 @@ export async function syncActiveHostSessions(
             ...live,
             lastSyncedTurnIndex: Math.max(live.lastSyncedTurnIndex, outcome.lastSyncedTurnIndex),
             lastUpdatedAtMs: Math.max(live.lastUpdatedAtMs, outcome.lastUpdatedAtMs),
+            ...(outcome.lastFileSize !== undefined ? { lastFileSize: outcome.lastFileSize } : {}),
+            ...(outcome.lastFileMtimeMs !== undefined ? { lastFileMtimeMs: outcome.lastFileMtimeMs } : {}),
+            ...(outcome.hasBacklog !== undefined ? { hasBacklog: outcome.hasBacklog } : {}),
             ...(outcome.sessionFile ? { sessionFile: outcome.sessionFile } : {}),
             projectIds: mergeBoundedStrings(live.projectIds, outcome.projectIds),
             skillsActivated: mergeBoundedStrings(live.skillsActivated, outcome.skillsActivated),

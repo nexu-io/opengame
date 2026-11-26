@@ -808,3 +808,25 @@ test('setup records an explicit attribution source and preserves it on untagged 
   assert.equal(updated.utm_source, 'partner');
   assert.equal(updated.installation_id, first.installation_id);
 });
+
+test('callInstalled resolves a sole non-Codex registered host when --host is omitted and forwards OPENMOTION_HOST_AGENT', { skip: process.platform === 'win32' }, async t => {
+  const options = await setupFixture(t);
+  const installed: any = await setup({ ...options, host: 'opencode', codex: undefined });
+  const tools = JSON.parse(await readFile(path.join(installed.appRoot, 'shared/mcp-profiles.json'), 'utf8')).phase1.tools;
+  await writeFile(installed.launcher, `import { createInterface } from 'node:readline';
+    for await (const line of createInterface({ input: process.stdin })) {
+      const q = JSON.parse(line); if (q.id === undefined) continue;
+      const result = q.method === 'initialize'
+        ? { serverInfo: { version: '1.2.3' } }
+        : q.method === 'tools/list'
+          ? { tools: ${JSON.stringify(tools.map((name: string) => ({ name, inputSchema: { type: 'object' } })))} }
+          : { structuredContent: { dataDirectory: ${JSON.stringify(installed.dataDirectory)}, hostEnv: process.env.OPENMOTION_HOST_AGENT || '' } };
+      console.log(JSON.stringify({ jsonrpc: '2.0', id: q.id, result }));
+    }`);
+  const cli = fileURLToPath(new URL('../scripts/npm-installer.mjs', import.meta.url));
+  const argsFile = path.join(options.home, 'call-args.json');
+  await writeFile(argsFile, '{}');
+  const out = JSON.parse(await runFile(process.execPath, [cli, 'call', 'openmotion_get_project', '--args-file', argsFile, '--home', options.home]));
+  assert.equal(out.structuredContent.dataDirectory, installed.dataDirectory);
+  assert.equal(out.structuredContent.hostEnv, 'opencode');
+});
