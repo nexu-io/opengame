@@ -258,10 +258,12 @@ test('GameProjects play and remix work from a source snapshot without .git or gi
   const studio = new GameProjects(workspace, templates);
   assert.equal((await studio.catalog()).games.length, 1);
   assert.equal((await studio.staticFile('selected', 'cover.webp')).data.toString(), 'poster');
+  await assert.rejects(studio.staticFile('selected', 'trailer/preview.mp4'), { code: 'ENOENT' });
   assert.equal(requests.length, 0);
 
   assert.equal((await studio.staticFile('selected', 'index.html')).data.toString(), '<p>Playable</p>');
   assert.equal((await studio.staticFile('selected', 'asset.bin')).data.toString(), 'snapshot asset payload');
+  await assert.rejects(studio.staticFile('selected', 'trailer/preview.mp4'), { code: 'ENOENT' });
   assert.equal(requests.length, 2);
 
   const draft = await studio.remix('selected');

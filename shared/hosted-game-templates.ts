@@ -3,11 +3,10 @@ import { execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { access, copyFile, link, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { setTimeout } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { lfsPointer } from './repository-template-catalog.ts';
 import { readProjectZip } from './project-zip.ts';
-import { boundedMediaBody, mediaDigest, mediaOrigin } from './repository-media.ts';
+import { boundedMediaBody, downloadVerifiedBytes, mediaDigest, mediaOrigin } from './repository-media.ts';
 
 export const gameBundlePrefix = 'open-game/games/objects/';
 export const maxGameBundleBytes = 150 * 1024 * 1024;
@@ -32,11 +31,6 @@ const defaultRunGit: GitRunner = promisify(execFile);
 const sourceDownloads = new Map<string, Promise<string>>();
 const lfsBatchChunkSize = 100;
 const lfsDownloadConcurrency = 8;
-const transientNetworkCodes = new Set([
-  'ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN', 'UND_ERR_SOCKET',
-  'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT',
-  'UND_ERR_RES_CONTENT_LENGTH_MISMATCH',
-]);
 
 function isLoopbackHost(hostname: string) {
   return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '[::1]' || hostname === '::1';
@@ -176,27 +170,14 @@ async function downloadLfsObject(
       if (typeof value === 'string') requestHeaders[key] = value;
     }
   }
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const response = await fetcher(href, {
-        headers: requestHeaders,
-        redirect: 'follow',
-        credentials: 'omit',
-        signal: AbortSignal.timeout(120_000),
-      });
-      const bytes = await boundedMediaBody(response, object.size);
-      assert.equal(bytes.length, object.size, `Git LFS object size mismatch for ${object.oid}`);
-      assert.equal(mediaDigest(bytes), object.oid, `Git LFS object SHA-256 mismatch for ${object.oid}`);
-      return bytes;
-    } catch (error) {
-      const interrupted = error instanceof Error && (
-        error.name === 'TimeoutError'
-        || transientNetworkCodes.has((error.cause as { code?: string })?.code ?? '')
-      );
-      if (attempt === 2 || !interrupted) throw error;
-      await setTimeout(250 * (attempt + 1));
-    }
-  }
+  return downloadVerifiedBytes(href, {
+    bytes: object.size,
+    sha256: object.oid,
+    headers: Object.keys(requestHeaders).length ? requestHeaders : undefined,
+    fetcher,
+    redirect: 'follow',
+    credentials: 'omit',
+  });
 }
 
 async function fetchMissingLfsObjects(

@@ -1598,7 +1598,12 @@ server.listen(port, '127.0.0.1', () => {
     let file: string;
     try { file = await safeFile(root, relative); }
     catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || card.source !== 'template' || relative === 'index.html') throw error;
+      if (
+        (error as NodeJS.ErrnoException).code !== 'ENOENT'
+        || card.source !== 'template'
+        || relative === 'index.html'
+        || (root !== card.dir && root !== cachedTemplateDir)
+      ) throw error;
       if (root !== card.dir) {
         const cacheExists = await access(root).then(() => true, () => false);
         if (cacheExists) throw error;

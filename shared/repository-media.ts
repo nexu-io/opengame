@@ -62,22 +62,55 @@ export async function boundedMediaBody(response: Response, limit: number): Promi
   return bytes;
 }
 
-export async function downloadMedia(file: MediaLock, fetcher: typeof fetch = fetch): Promise<Buffer> {
-  validateMediaLock(file);
-  const transientCodes = new Set(['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN', 'UND_ERR_SOCKET',
-    'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'UND_ERR_RES_CONTENT_LENGTH_MISMATCH']);
+const transientDownloadCodes = new Set([
+  'ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN', 'UND_ERR_SOCKET',
+  'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_RES_CONTENT_LENGTH_MISMATCH',
+]);
+
+export type VerifiedDownloadOptions = {
+  bytes: number;
+  sha256: string;
+  headers?: Record<string, string>;
+  fetcher?: typeof fetch;
+  redirect?: RequestRedirect;
+  credentials?: RequestCredentials;
+  timeoutMs?: number;
+};
+
+export async function downloadVerifiedBytes(url: string, options: VerifiedDownloadOptions): Promise<Buffer> {
+  const fetcher = options.fetcher ?? fetch;
+  const redirect = options.redirect ?? 'error';
+  const timeoutMs = options.timeoutMs ?? 120_000;
   for (let attempt = 0; ; attempt++) {
     try {
-      const response = await fetcher(file.url, { redirect: 'error', signal: AbortSignal.timeout(120_000) });
-      const bytes = await boundedMediaBody(response, file.bytes);
-      assert.equal(bytes.length, file.bytes, 'Media size mismatch');
-      assert.equal(mediaDigest(bytes), file.sha256, 'Media SHA-256 mismatch');
-      return bytes;
+      const init: RequestInit = {
+        redirect,
+        signal: AbortSignal.timeout(timeoutMs),
+        ...(options.headers ? { headers: options.headers } : {}),
+        ...(options.credentials ? { credentials: options.credentials } : {}),
+      };
+      const response = await fetcher(url, init);
+      const data = await boundedMediaBody(response, options.bytes);
+      assert.equal(data.length, options.bytes, 'Media size mismatch');
+      assert.equal(mediaDigest(data), options.sha256, 'Media SHA-256 mismatch');
+      return data;
     } catch (error) {
-      const interrupted = error instanceof Error && (error.name === 'TimeoutError' || transientCodes.has((error.cause as { code?: string })?.code ?? ''));
-      if (attempt === 2 || !interrupted)
-        throw new Error(`Media download failed for ${file.path}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+      const interrupted = error instanceof Error && (
+        error.name === 'TimeoutError'
+        || transientDownloadCodes.has((error.cause as { code?: string })?.code ?? '')
+      );
+      if (attempt === 2 || !interrupted) throw error;
       await setTimeout(250 * (attempt + 1));
     }
+  }
+}
+
+export async function downloadMedia(file: MediaLock, fetcher: typeof fetch = fetch): Promise<Buffer> {
+  validateMediaLock(file);
+  try {
+    return await downloadVerifiedBytes(file.url, { bytes: file.bytes, sha256: file.sha256, fetcher, redirect: 'error' });
+  } catch (error) {
+    throw new Error(`Media download failed for ${file.path}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   }
 }
