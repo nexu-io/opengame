@@ -9,7 +9,7 @@ import { createServer, request } from 'node:http';
 import { once } from 'node:events';
 import { GameProjects, GameRuntime, gameHttp, attachGameRooms, gameProjectsFor, starterLogic, dispatchGameTool, startGameBrowserPage } from '../game-projects.ts';
 import { gameTools } from '../shared/game-tools.ts';
-import { validateInput } from '../shared/phase1-tools.ts';
+import { normalizeToolInput, phase1Tools, validateInput } from '../shared/phase1-tools.ts';
 import type { GameBrief } from '../shared/game-contract.ts';
 
 // Legacy runtime tests deliberately exercise starter(), independent of new kit files.
@@ -164,8 +164,23 @@ test('MCP game tools author single-player games and preserve access to existing 
   for(const tool of gameTools) assert.match(tool.title,/^OpenMotion · /);
   validateInput(gameTools[0].inputSchema,brief);
   validateInput(gameTools[0].inputSchema,{prompt:brief.prompt});
+  validateInput(gameTools[0].inputSchema,normalizeToolInput(gameTools[0].inputSchema,{prompt:brief.prompt,genre:null,style:null,setting:null}));
   assert.throws(()=>validateInput(gameTools[0].inputSchema,{...brief,genre:'invalid'}));
-  assert.throws(()=>validateInput(gameTools[0].inputSchema,{...brief,multiplayer:true}));
+  assert.throws(()=>validateInput(gameTools[0].inputSchema,{...brief,multiplayer:'yes'}));
+  // Gemini function declarations reject non-string or empty enum values (e.g. null, false).
+  const checkEnums = (node: unknown, path: string) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray((node as { enum?: unknown }).enum)) {
+      for (const [i, value] of (node as { enum: unknown[] }).enum.entries()) {
+        assert.equal(typeof value, 'string', `${path}.enum[${i}] must be a string`);
+        assert.ok((value as string).length > 0, `${path}.enum[${i}] must be non-empty`);
+      }
+    }
+    for (const [key, child] of Object.entries(node)) {
+      if (key !== 'enum') checkEnums(child, `${path}.${key}`);
+    }
+  };
+  for (const tool of phase1Tools) checkEnums(tool.inputSchema, tool.name);
   for (const [name, args] of [
     ['openmotion_game_create',{...brief,multiplayer:true}],
     ['motion_game_create',{brief:{...brief,multiplayer:true}}],
@@ -609,7 +624,6 @@ test('expired reconnect tokens release seats without reclaiming the former ident
 }));
 
 import { runInNewContext } from 'node:vm';
-import { phase1Tools } from '../shared/phase1-tools.ts';
 import { tools as legacyTools } from '../mcp-tools.ts';
 
 test('sandbox previews get CORS and correct module/model MIME on both mounted prefixes',()=>fixture(async(_,workspace)=>{
