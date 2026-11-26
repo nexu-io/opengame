@@ -662,6 +662,34 @@ test('H5: HumanoidRigController eliminates 30Hz leg flicker, 1-frame joint snaps
   assert.ok(rig.playClip('Running_A', { fade: 0 }));
   for (let i = 0; i < 8; i++) rig.update(1 / 30);
   assert.ok(Number.isFinite(rig.bones.RightUpLeg.quaternion.x));
+
+  // Regression: retarget baking must evaluate t = duration without LoopRepeat wrapping back to t = 0.
+  assert.ok(rig.playOnce('Death_A', { fade: 0, holdEnd: true }));
+  rig.update(0.01);
+  const hipsStartQ = rig.bones.Hips.quaternion.clone();
+  for (let i = 0; i < 30; i++) rig.update(0.05); // 1.5s > Death_A duration (0.8s)
+  const hipsEndQ = rig.bones.Hips.quaternion.clone();
+  assert.ok(
+    hipsStartQ.angleTo(hipsEndQ) > 0.8,
+    `Expected retargeted Death_A holdEnd pose to hold fallen end pose (>0.8 rad from start), got ${hipsStartQ.angleTo(hipsEndQ)}`,
+  );
+
+  // Regression: low-FPS (20 fps) sharp turn + pose switch stays within controller per-second caps and passes rate-normalized assertions.
+  rig.stopClips(0);
+  rig.syncTransform(0, 0, 0, 0, 0, { immediate: true });
+  rig.update(0, { immediate: true, spineX: 0 });
+  rig.resetTelemetry();
+  for (let frame = 0; frame < 24; frame++) {
+    const dt = 1 / 20;
+    rig.syncTransform(frame * 0.15, 0, 0, frame >= 6 ? Math.PI : 0, dt);
+    rig.update(dt, { spineX: frame >= 6 ? 0.5 : -0.2, spineY: frame >= 6 ? 0.4 : -0.3 });
+  }
+  const lowFpsTelemetry = rig.getTelemetry();
+  assert.ok(lowFpsTelemetry.maxYawStepRad > 0.45, 'Expected 20fps turn per-frame yaw step > 0.45 rad');
+  assert.ok(lowFpsTelemetry.maxYawRadPerSec <= 14.05, `Expected yaw rate <= 14 rad/s, got ${lowFpsTelemetry.maxYawRadPerSec}`);
+  assert.ok(lowFpsTelemetry.maxBoneRadPerSec <= 16.05, `Expected bone rate <= 16 rad/s, got ${lowFpsTelemetry.maxBoneRadPerSec}`);
+  const lowFpsAssertions = normalizeKinematicsAssertions(lowFpsTelemetry);
+  assert.ok(lowFpsAssertions.every(a => a.passed), `20fps controller telemetry must pass kinematics assertions: ${JSON.stringify(lowFpsAssertions)}`);
   rig.dispose();
 });
 
@@ -749,13 +777,22 @@ export function mountActor(gltf) { const rig = createHumanoidRig(gltf, { height:
       /at most 8 screenshot/,
     );
 
-    // normalizeKinematicsAssertions passes clean telemetry and fails flickery/snapping/over-extended rigs.
+    // normalizeKinematicsAssertions passes clean rate-normalized & legacy step telemetry and fails flickery/snapping/over-extended rigs.
     const goodChecks = normalizeKinematicsAssertions({
-      hero: { frames: 60, walkZeroFlips: 0, maxBoneStepRad: 0.14, maxYawStepRad: 0.18, overExtendedIkCount: 4 },
+      hero: { frames: 60, walkZeroFlips: 0, maxBoneStepRad: 0.72, maxBoneRadPerSec: 15.8, maxYawStepRad: 0.68, maxYawRadPerSec: 13.9, overExtendedIkCount: 4 },
       boss: { frames: 60, walkZeroFlips: 0, maxBoneStepRad: 0.22, maxYawStepRad: 0.12, overExtendedIkCount: 0 },
     });
     assert.equal(goodChecks.length, 8);
     assert.ok(goodChecks.every(c => c.passed));
+
+    const badRateChecks = normalizeKinematicsAssertions({
+      frames: 60,
+      walkZeroFlips: 0,
+      maxBoneRadPerSec: 45,
+      maxYawRadPerSec: 32,
+    });
+    assert.equal(badRateChecks.find(c => c.name === 'kinematics:smoothBoneMotion')?.passed, false);
+    assert.equal(badRateChecks.find(c => c.name === 'kinematics:smoothYaw')?.passed, false);
 
     const badChecks = normalizeKinematicsAssertions({
       frames: 60,

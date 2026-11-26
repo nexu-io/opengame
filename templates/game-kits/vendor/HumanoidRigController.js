@@ -550,10 +550,14 @@ export function createHumanoidRig(gltf, options = {}) {
 
       srcMixer.stopAllAction();
       const srcAct = srcMixer.clipAction(rawClip);
+      // Use LoopOnce + clampWhenFinished so sampling at t = rawClip.duration evaluates the true
+      // terminal pose instead of wrapping back to t = 0 on Three.js's default LoopRepeat.
+      srcAct.setLoop(LoopOnce, 1);
+      srcAct.clampWhenFinished = true;
       srcAct.reset().play();
 
       for (let f = 0; f < frames; f++) {
-        times[f] = f * stepDt;
+        times[f] = f === frames - 1 ? rawClip.duration : f * stepDt;
         srcMixer.setTime(times[f]);
         srcRoot.updateMatrixWorld(true);
 
@@ -671,7 +675,9 @@ export function createHumanoidRig(gltf, options = {}) {
   const telemetry = {
     frames: 0,
     maxBoneStepRad: 0,
+    maxBoneRadPerSec: 0,
     maxYawStepRad: 0,
+    maxYawRadPerSec: 0,
     walkZeroFlips: 0,
     overExtendedIkCount: 0,
     clipPlayedFrames: 0,
@@ -680,7 +686,9 @@ export function createHumanoidRig(gltf, options = {}) {
   function resetTelemetry() {
     telemetry.frames = 0;
     telemetry.maxBoneStepRad = 0;
+    telemetry.maxBoneRadPerSec = 0;
     telemetry.maxYawStepRad = 0;
+    telemetry.maxYawRadPerSec = 0;
     telemetry.walkZeroFlips = 0;
     telemetry.overExtendedIkCount = 0;
     telemetry.clipPlayedFrames = 0;
@@ -719,8 +727,16 @@ export function createHumanoidRig(gltf, options = {}) {
     }
     root.rotation.y += yawStep;
     const observedYawStep = Math.abs(shortestAngleDelta(prevYaw, root.rotation.y));
-    if (telemetry.frames > 1 && observedYawStep > telemetry.maxYawStepRad) {
-      telemetry.maxYawStepRad = observedYawStep;
+    if (telemetry.frames > 1) {
+      if (observedYawStep > telemetry.maxYawStepRad) {
+        telemetry.maxYawStepRad = observedYawStep;
+      }
+      if (safeDt > 1e-4) {
+        const observedYawRate = observedYawStep / Math.max(safeDt, 1 / 120);
+        if (observedYawRate > telemetry.maxYawRadPerSec) {
+          telemetry.maxYawRadPerSec = observedYawRate;
+        }
+      }
     }
     prevYaw = root.rotation.y;
 
@@ -872,8 +888,16 @@ export function createHumanoidRig(gltf, options = {}) {
       bone.quaternion.copy(currentQ);
     }
 
-    if (telemetry.frames > 1 && frameMaxBoneStep > telemetry.maxBoneStepRad) {
-      telemetry.maxBoneStepRad = frameMaxBoneStep;
+    if (telemetry.frames > 1) {
+      if (frameMaxBoneStep > telemetry.maxBoneStepRad) {
+        telemetry.maxBoneStepRad = frameMaxBoneStep;
+      }
+      if (safeDt > 1e-4) {
+        const observedBoneRate = frameMaxBoneStep / Math.max(safeDt, 1 / 120);
+        if (observedBoneRate > telemetry.maxBoneRadPerSec) {
+          telemetry.maxBoneRadPerSec = observedBoneRate;
+        }
+      }
     }
     telemetry.frames++;
     initializedPose = true;

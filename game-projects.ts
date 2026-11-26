@@ -652,7 +652,11 @@ export function normalizeSelfTestAssertions(raw: unknown): Array<{ name: string;
 export function normalizeKinematicsAssertions(raw: unknown): Array<{ name: string; passed: boolean; expected: string; actual: unknown; reason?: string }> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
   const obj = raw as Record<string, unknown>;
-  const isSingleTelemetry = typeof obj.frames === 'number' || typeof obj.maxBoneStepRad === 'number' || typeof obj.walkZeroFlips === 'number';
+  const isSingleTelemetry = typeof obj.frames === 'number'
+    || typeof obj.maxBoneRadPerSec === 'number'
+    || typeof obj.maxBoneStepRad === 'number'
+    || typeof obj.maxYawRadPerSec === 'number'
+    || typeof obj.walkZeroFlips === 'number';
   const entries: Array<[string, Record<string, unknown>]> = isSingleTelemetry
     ? [['', obj]]
     : Object.entries(obj)
@@ -674,7 +678,16 @@ export function normalizeKinematicsAssertions(raw: unknown): Array<{ name: strin
         ...(passed ? {} : { reason: `Detected ${metrics.walkZeroFlips} adjacent-frame walk-blend drop-to-zero oscillations` }),
       });
     }
-    if (typeof metrics.maxBoneStepRad === 'number' && Number.isFinite(metrics.maxBoneStepRad)) {
+    if (typeof metrics.maxBoneRadPerSec === 'number' && Number.isFinite(metrics.maxBoneRadPerSec)) {
+      const passed = metrics.maxBoneRadPerSec <= 22;
+      rows.push({
+        name: `${prefix}smoothBoneMotion`,
+        passed,
+        expected: 'maxBoneRadPerSec <= 22 rad/s (frame-rate independent joint-snap guard)',
+        actual: +metrics.maxBoneRadPerSec.toFixed(2),
+        ...(passed ? {} : { reason: `Peak bone angular rate ${metrics.maxBoneRadPerSec.toFixed(2)} rad/s exceeds 22 rad/s` }),
+      });
+    } else if (typeof metrics.maxBoneStepRad === 'number' && Number.isFinite(metrics.maxBoneStepRad)) {
       const passed = metrics.maxBoneStepRad <= 0.65;
       rows.push({
         name: `${prefix}smoothBoneMotion`,
@@ -684,7 +697,16 @@ export function normalizeKinematicsAssertions(raw: unknown): Array<{ name: strin
         ...(passed ? {} : { reason: `Peak single-frame bone step ${metrics.maxBoneStepRad.toFixed(3)} rad exceeds 0.65 rad` }),
       });
     }
-    if (typeof metrics.maxYawStepRad === 'number' && Number.isFinite(metrics.maxYawStepRad)) {
+    if (typeof metrics.maxYawRadPerSec === 'number' && Number.isFinite(metrics.maxYawRadPerSec)) {
+      const passed = metrics.maxYawRadPerSec <= 18;
+      rows.push({
+        name: `${prefix}smoothYaw`,
+        passed,
+        expected: 'maxYawRadPerSec <= 18 rad/s (frame-rate independent yaw-jitter guard)',
+        actual: +metrics.maxYawRadPerSec.toFixed(2),
+        ...(passed ? {} : { reason: `Peak yaw angular rate ${metrics.maxYawRadPerSec.toFixed(2)} rad/s exceeds 18 rad/s` }),
+      });
+    } else if (typeof metrics.maxYawStepRad === 'number' && Number.isFinite(metrics.maxYawStepRad)) {
       const passed = metrics.maxYawStepRad <= 0.45;
       rows.push({
         name: `${prefix}smoothYaw`,
