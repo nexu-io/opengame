@@ -577,17 +577,31 @@ describe('SoundStudioWorkspace', () => {
       await act(async () => { georgeSelect.click(); });
       expect(host.querySelector('button[aria-label="Reset Speech voice"]')).toBeNull();
 
-      // 3. BytePlus Vivi uses a full-width single-column grid and exposes its bundled audition sample inline.
+      // 3. BytePlus exposes its 10 Cloud API preset voices in the multi-column grid and plays Vivi's bundled audition sample inline.
       expect(resolveVoicePreview(byteplusSpeech, 'zh_female_vv_uranus_bigtts')?.blobSource).toBe(true);
       expect(resolveVoicePreview(byteplusSpeech, 'zh_female_unlisted_voice')).toBeUndefined();
       const byteplusStudio = makeStudio('speech', byteplusSpeech.id, ['account'], [byteplusSpeech]);
       await renderSound(byteplusStudio, { assets: [] });
-      expect(host.querySelector('.om-sound-voice-grid')?.getAttribute('data-columns')).toBe('1');
+      expect(host.querySelector('.om-sound-voice-grid')?.getAttribute('data-columns')).toBeNull();
+      expect(host.querySelectorAll('.om-sound-voice-card').length).toBeGreaterThan(1);
       const previewVivi = host.querySelector<HTMLButtonElement>('button[aria-label="Preview Vivi"]');
       expect(previewVivi).not.toBeNull();
       await act(async () => { previewVivi!.click(); });
       const viviAudio = host.querySelector<HTMLAudioElement>('.om-sound-voice-audio-host audio');
       expect(viviAudio?.getAttribute('src')).toBe('blob:test-audio/mp4');
+
+      // 4. Single-voice speech models still collapse the voice grid to a full-width single column.
+      const singleVoiceByteplus: Model = {
+        ...byteplusSpeech,
+        generationOptions: {
+          delivery: 'provider',
+          fields: byteplusSpeech.generationOptions!.fields.map(field =>
+            field.key === 'voice' ? { ...field, choices: field.choices?.slice(0, 1) } : field),
+        },
+      };
+      const singleVoiceStudio = makeStudio('speech', singleVoiceByteplus.id, ['account'], [singleVoiceByteplus]);
+      await renderSound(singleVoiceStudio, { assets: [] });
+      expect(host.querySelector('.om-sound-voice-grid')?.getAttribute('data-columns')).toBe('1');
     } finally {
       fetchMock.mockRestore();
       URL.createObjectURL = originalCreateObjectUrl;

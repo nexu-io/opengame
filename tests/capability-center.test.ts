@@ -2088,7 +2088,16 @@ test('3d-asset aligns with OpenDesign Cloud API + Tripo v3 contract: preset norm
       );
       assert.equal(submitted.length, 1);
 
-      // 3) Quadruped rig auto-selects Tripo v3 model_version; mesh forwards model_seed & texture_seed; OD-documented segment op works.
+      // 3) Quadruped rig auto-selects Tripo v3 model_version; mesh forwards model_seed & texture_seed;
+      //    OD-documented GLB ops are discoverable and accepted via options.operation, while non-GLB ops fail fast with 0 submissions.
+      const described3d = await api.call('openmotion_capability_discover', { action: 'describe', capabilityId: '3d-asset' });
+      const opChoices = described3d.capability.input.controls
+        .find((c: any) => c.key === 'operation')
+        ?.choices.map((c: any) => c.value);
+      for (const expectedOp of ['multiview_to_model', 'decimate', 'texture', 'convert', 'segment', 'smartsegment', 'complete', 'uv', 'edit']) {
+        assert.ok(opChoices?.includes(expectedOp), `expected 3d-asset discovery to expose operation=${expectedOp}`);
+      }
+
       await api.call('openmotion_capability_run', {
         action: 'run',
         requestId: 'tripo-quadruped-seeds',
@@ -2109,9 +2118,36 @@ test('3d-asset aligns with OpenDesign Cloud API + Tripo v3 contract: preset norm
         requestId: 'tripo-segment-op',
         capabilityId: '3d-asset',
         model: 'opendesign:tripo-3.0',
-        parameters: { operation: 'segment', slim: false, original_model_task_id: 'tripo_2' },
+        options: { operation: 'segment' },
+        parameters: { slim: false, original_model_task_id: 'tripo_2' },
       });
       assert.equal(submitted[3].operation, 'segment');
+
+      const submittedBeforeRejects = submitted.length;
+      for (const nonGlbOp of ['image_to_splat', 'text_to_image', 'rig-check', '/v3/custom']) {
+        await assert.rejects(
+          api.call('openmotion_capability_run', {
+            action: 'run',
+            requestId: `tripo-reject-${nonGlbOp.replace(/[^a-z0-9]/gi, '_')}`,
+            capabilityId: '3d-asset',
+            model: 'opendesign:tripo-3.0',
+            parameters: { operation: nonGlbOp, original_model_task_id: 'tripo_2' },
+          }),
+          /Unsupported 3d-asset operation/,
+        );
+      }
+      await assert.rejects(
+        api.call('openmotion_capability_run', {
+          action: 'run',
+          requestId: 'tripo-reject-non-glb-format',
+          capabilityId: '3d-asset',
+          model: 'opendesign:tripo-3.0',
+          options: { operation: 'convert' },
+          parameters: { original_model_task_id: 'tripo_2', out_format: 'fbx' },
+        }),
+        /GLB outputs/i,
+      );
+      assert.equal(submitted.length, submittedBeforeRejects, 'non-GLB operations and formats must fail fast before submitting paid tasks');
     } finally {
       await gateway.close();
     }

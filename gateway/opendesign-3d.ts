@@ -736,11 +736,10 @@ const TRIPO_RIG_V3_MODEL_VERSION = 'v3.0-20260909';
 const TRIPO_RIG_V3_ONLY_SPECS = new Set(['actorcore', 'unity', 'unreal', 'vrm']);
 const TRIPO_TASK_CHAIN_OPERATIONS = new Set([
   'decimate', 'retarget', 'texture', 'convert',
-  'segment', 'smartsegment', 'complete', 'uv', 'edit', 'rig-check',
+  'segment', 'smartsegment', 'complete', 'uv', 'edit',
 ]);
 const TRIPO_MEDIA_PASSTHROUGH_OPERATIONS = new Set([
-  'multiview_to_model', 'image_to_splat', 'text_to_image', 'image_to_image',
-  'image_to_multiview', 'edit_multiview', 'import',
+  'multiview_to_model',
 ]);
 
 /** Normalize Tripo v3 animation identifiers to the required `preset:*` format and fail fast on invalid names. */
@@ -842,6 +841,8 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
   if (effectiveOp === 'auto') {
     if (originalTaskIdParam) {
       effectiveOp = hasRetargetAnimation ? 'rig_retarget' : 'rig';
+    } else if (ctx.references.length >= 2 && !hasRetargetAnimation && !rigOnlyPreset) {
+      effectiveOp = 'multiview_to_model';
     } else if (ctx.references.length === 1) {
       effectiveOp = hasRetargetAnimation ? 'rig_retarget' : rigOnlyPreset ? 'rig' : 'image_to_model';
     } else {
@@ -1006,7 +1007,10 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
     delete passthrough.jpeg_quality;
     delete passthrough.quad;
     if (effectiveOp === 'retarget' || effectiveOp === 'convert') {
-      passthrough.out_format ??= 'glb';
+      if (passthrough.out_format !== undefined && String(passthrough.out_format).trim().toLowerCase() !== 'glb') {
+        throw new Error(`3d-asset operation=${effectiveOp} only imports GLB outputs (out_format="glb")`);
+      }
+      passthrough.out_format = 'glb';
     }
     if (effectiveOp === 'retarget') {
       if (!hasRetargetAnimation) {
@@ -1033,7 +1037,10 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
       existingTaskId: checkpoint.retargetTaskId,
       onSubmitted: async id => { checkpoint.retargetTaskId = id; await saveCheckpoint(checkpointPath, checkpoint); },
     });
-  } else if (TRIPO_MEDIA_PASSTHROUGH_OPERATIONS.has(effectiveOp) || effectiveOp.startsWith('/v3/')) {
+  } else if (TRIPO_MEDIA_PASSTHROUGH_OPERATIONS.has(effectiveOp)) {
+    if (effectiveOp === 'multiview_to_model' && ctx.references.length < 2 && !Array.isArray(params.files)) {
+      throw new Error('3d-asset operation=multiview_to_model requires at least 2 reference image assets (or parameters.files)');
+    }
     const passthrough: Record<string, unknown> = { ...params };
     delete passthrough.model;
     delete passthrough.operation;
@@ -1063,7 +1070,7 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
     });
     baseTaskId = finalTask.taskId;
   } else {
-    throw new Error(`Unsupported 3d-asset operation: ${effectiveOp}`);
+    throw new Error(`Unsupported 3d-asset operation: ${effectiveOp} (3d-asset only supports GLB-producing Tripo operations)`);
   }
 
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'openmotion-3d-'));
