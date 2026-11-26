@@ -855,6 +855,9 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
     if (effectiveOp === 'image_to_model' && ctx.references.length !== 1) {
       throw new Error('3d-asset image_to_model requires exactly 1 reference image asset');
     }
+    if (effectiveOp === 'text_to_model' && ctx.references.length > 0) {
+      throw new Error('3d-asset text_to_model does not accept reference images (use image_to_model for 1 image or multiview_to_model for 2–4 images)');
+    }
     if (effectiveOp === 'text_to_model' && !ctx.prompt.trim()) {
       throw new Error('3d-asset text_to_model requires a non-empty prompt');
     }
@@ -896,6 +899,9 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
   let finalTask: TripoTaskResult;
 
   if (effectiveOp === 'text_to_model') {
+    if (ctx.references.length > 0) {
+      throw new Error('3d-asset text_to_model does not accept reference images (use image_to_model for 1 image or multiview_to_model for 2–4 images)');
+    }
     if (!ctx.prompt.trim()) {
       throw new Error('3d-asset text_to_model requires a non-empty prompt');
     }
@@ -926,6 +932,12 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
     });
     baseTaskId = finalTask.taskId;
   } else if (effectiveOp === 'rig_retarget' || effectiveOp === 'rig') {
+    if (ctx.references.length > 1) {
+      throw new Error(`3d-asset operation=${effectiveOp} accepts at most 1 reference image (use multiview_to_model first for 2–4 images, then pass parameters.original_model_task_id)`);
+    }
+    if (originalTaskIdParam && ctx.references.length > 0) {
+      throw new Error(`3d-asset operation=${effectiveOp} with parameters.original_model_task_id does not accept reference images`);
+    }
     if (!baseTaskId) {
       if (ctx.references.length === 1) {
         const uploadId = await ensureUploadedRef();
@@ -998,6 +1010,9 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
   } else if (TRIPO_TASK_CHAIN_OPERATIONS.has(effectiveOp)) {
     if (!originalTaskIdParam) {
       throw new Error(`3d-asset operation=${effectiveOp} requires parameters.original_model_task_id`);
+    }
+    if (ctx.references.length > 0) {
+      throw new Error(`3d-asset operation=${effectiveOp} operates on parameters.original_model_task_id and does not accept reference images`);
     }
     const passthrough: Record<string, unknown> = { ...params };
     delete passthrough.model;

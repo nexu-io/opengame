@@ -2147,7 +2147,61 @@ test('3d-asset aligns with OpenDesign Cloud API + Tripo v3 contract: preset norm
         }),
         /GLB outputs/i,
       );
-      assert.equal(submitted.length, submittedBeforeRejects, 'non-GLB operations and formats must fail fast before submitting paid tasks');
+
+      // 4) Per-operation reference count guards prevent silently dropping pinned images after maxReferences was raised to 4.
+      const refA = await api.call('openmotion_asset_manage', {
+        action: 'import',
+        requestId: 'tripo-ref-guard-a',
+        sourcePath: await makePng(store.directory, 'tripo-ref-a.png', '0x2563eb'),
+        name: 'Tripo Ref A',
+      });
+      const refB = await api.call('openmotion_asset_manage', {
+        action: 'import',
+        requestId: 'tripo-ref-guard-b',
+        sourcePath: await makePng(store.directory, 'tripo-ref-b.png', '0xdc2626'),
+        name: 'Tripo Ref B',
+      });
+      const twoRefs = [
+        { assetId: refA.asset.id, versionId: refA.asset.currentVersionId },
+        { assetId: refB.asset.id, versionId: refB.asset.currentVersionId },
+      ];
+      await assert.rejects(
+        api.call('openmotion_capability_run', {
+          action: 'run',
+          requestId: 'tripo-reject-t2m-multi-ref',
+          capabilityId: '3d-asset',
+          model: 'opendesign:tripo-3.0',
+          options: { operation: 'text_to_model' },
+          prompt: 'Armored battle wolf',
+          references: twoRefs,
+        }),
+        /text_to_model does not accept reference images/,
+      );
+      await assert.rejects(
+        api.call('openmotion_capability_run', {
+          action: 'run',
+          requestId: 'tripo-reject-rig-multi-ref',
+          capabilityId: '3d-asset',
+          model: 'opendesign:tripo-3.0',
+          options: { operation: 'rig' },
+          prompt: 'Armored battle wolf',
+          references: twoRefs,
+        }),
+        /accepts at most 1 reference image/,
+      );
+      await assert.rejects(
+        api.call('openmotion_capability_run', {
+          action: 'run',
+          requestId: 'tripo-reject-chain-ref',
+          capabilityId: '3d-asset',
+          model: 'opendesign:tripo-3.0',
+          options: { operation: 'segment' },
+          parameters: { original_model_task_id: 'tripo_2' },
+          references: [twoRefs[0]],
+        }),
+        /does not accept reference images/,
+      );
+      assert.equal(submitted.length, submittedBeforeRejects, 'non-GLB operations, formats, and mismatched reference counts must fail fast before submitting paid tasks');
     } finally {
       await gateway.close();
     }

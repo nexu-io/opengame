@@ -321,7 +321,7 @@ test('capability-center handbook documents live sound-effects, 3d-asset (.glb), 
   const asset3d = mcpScenarios.find(item => item.id === 'asset-3d-generate')!;
   assert.ok(asset3d);
   assert.match(asset3d.description, /\.glb/);
-  assert.match(asset3d.description, /at most 1 reference image/);
+  assert.match(asset3d.description, /1 reference image for 3d-asset image_to_model\/rig.*2–4.*multiview_to_model/);
   assert.ok(!(asset3d.tools as readonly string[]).includes('openmotion_job_manage'));
   assert.doesNotMatch(asset3d.prompt, /openmotion_job_manage/);
   assert.match(asset3d.prompt, /capabilityId="3d-asset"/);
