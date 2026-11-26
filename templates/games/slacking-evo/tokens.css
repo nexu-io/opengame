@@ -1,0 +1,72 @@
+/* ==========================================================================
+   Slacking Evolution — Tactile Stationery & Retro Desk Arcade Tokens
+   Standalone authored game artwork; independent of Studio interface themes.
+   ========================================================================== */
+
+:root {
+  /* Safe Area & Layout */
+  --xg-content-top: 12px;
+  --xg-shell-max-w: 440px;
+
+  /* Surfaces & Desk Mat */
+  --xg-bg-desk: #F3ECE0;
+  --xg-bg-dot: #DFD4C0;
+  --xg-bg-island: #FAF5E4;
+  --xg-surface-machine: #EAE1CE;
+  --xg-surface-paper: #FFFDF7;
+  --xg-surface-soft: #FAF5E8;
+  --xg-surface-tint-yellow: #FFF7D6;
+  --xg-surface-tint-green: #E8F6E6;
+  --xg-surface-tint-red: #FFE5E2;
+
+  /* Ink & Borders (Warm Espresso) */
+  --xg-ink: #3B2A1A;
+  --xg-ink-island: #5A3818;
+  --xg-ink-soft: #786653;
+  --xg-ink-muted: #9A8772;
+  --xg-line-dashed: #C7B99E;
+
+  /* Semantic Accents */
+  --xg-lemon: #FFD63B;
+  --xg-lemon-deep: #E0A82E;
+  --xg-melon: #6BBF4E;
+  --xg-melon-deep: #2E8B57;
+  --xg-coral: #E85A4F;
+  --xg-coral-deep: #C43D33;
+  --xg-teal: #19C8B9;
+  --xg-sky: #A8D8EA;
+  --xg-orange: #D96B27;
+
+  /* Hardware LCD Matrix */
+  --xg-lcd-bg: #1F2E25;
+  --xg-lcd-text: #C9F5B8;
+  --xg-lcd-muted: #7DA876;
+  --xg-lcd-alarm-bg: #3B1818;
+  --xg-lcd-alarm-text: #FFD0CC;
+
+  /* Borders (Hard Comic / Stationery Ink Outline) */
+  --xg-border-sm: 2px;
+  --xg-border-md: 2.5px;
+  --xg-border-lg: 3px;
+
+  /* Hard Tactile Elevation Shadows */
+  --xg-shadow-xs: 0 1px 0 var(--xg-ink);
+  --xg-shadow-sm: 0 2px 0 var(--xg-ink);
+  --xg-shadow-md: 0 3px 0 var(--xg-ink);
+  --xg-shadow-lg: 0 5px 0 var(--xg-ink);
+  --xg-shadow-pos: 0 6px 0 var(--xg-ink);
+  --xg-shadow-paper: 0 10px 24px rgba(59, 42, 26, 0.14);
+
+  /* Radii */
+  --xg-radius-xs: 8px;
+  --xg-radius-sm: 10px;
+  --xg-radius-md: 14px;
+  --xg-radius-lg: 18px;
+  --xg-radius-xl: 22px;
+  --xg-radius-sheet: 26px;
+  --xg-radius-pill: 999px;
+
+  /* Typography */
+  --xg-font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --xg-font-mono: "Menlo", "Monaco", "Courier New", monospace;
+}

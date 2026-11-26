@@ -2343,7 +2343,7 @@ test('Codex and Claude Super Agent prompts share unified gameAssetInstructions w
   }
 });
 
-test('SuperAgentConversations steers active turns while preserving threadId and drains queued items afterwards', () => fixture(async store => {
+test('SuperAgentConversations steers active turns while preserving threadId and drains queued items afterwards', context => fixture(async store => {
   const abortedPrompts: string[] = [];
   const seenThreads: (string | undefined)[] = [];
   let releaseFirst!: () => void;
@@ -2377,6 +2377,7 @@ test('SuperAgentConversations steers active turns while preserving threadId and 
   });
 
   const runtime = { origin: 'http://127.0.0.1:4120', phase1: () => ({} as Phase1Service) };
+  context.after(() => service.close());
   const chat = await service.create({ engine: 'claude' });
   await service.start(chat.id, { requestId: 'req-steer-1', text: 'Initial prompt' }, runtime);
   await firstStarted;
@@ -2389,20 +2390,18 @@ test('SuperAgentConversations steers active turns while preserving threadId and 
   assert.deepEqual(abortedPrompts, ['Initial prompt']);
 
   // Wait for steered turn and auto-dequeued follow-up to both finish.
-  let finalChat = await service.get(chat.id);
-  for (let i = 0; i < 40 && (finalChat.state === 'running' || (finalChat.queuedMessages?.length ?? 0) > 0); i++) {
-    await new Promise(r => setTimeout(r, 15));
-    finalChat = await service.get(chat.id);
-  }
-  assert.equal(finalChat.state, 'idle');
-  assert.equal(finalChat.queuedMessages, undefined);
-  assert.deepEqual(seenThreads, [undefined, 'claude-thread-steer', 'claude-thread-steer']);
+  const finalChat = await context.waitFor(async () => {
+    const chatState = await service.get(chat.id);
+    assert.equal(chatState.state, 'idle');
+    assert.equal(chatState.queuedMessages, undefined);
+    assert.deepEqual(seenThreads, [undefined, 'claude-thread-steer', 'claude-thread-steer']);
+    return chatState;
+  }, { timeout: 10_000 });
   assert.ok(finalChat.messages.some(m => m.role === 'user' && m.text === 'Steer prompt'));
   assert.ok(finalChat.messages.some(m => m.role === 'user' && m.text === 'Queued after steer'));
-  await service.close();
 }));
 
-test('SuperAgentConversations supports queue CRUD, sendQueuedMessageNow, auto-dequeue, and preserves queue on stop or error', () => fixture(async store => {
+test('SuperAgentConversations supports queue CRUD, sendQueuedMessageNow, auto-dequeue, and preserves queue on stop or error', context => fixture(async store => {
   const executed: { text: string; attachmentIds: string[]; tagLabels: string[] }[] = [];
   let releaseHold: (() => void) | null = null;
   const nextHold = () => new Promise<void>(resolve => { releaseHold = resolve; });
@@ -2432,6 +2431,7 @@ test('SuperAgentConversations supports queue CRUD, sendQueuedMessageNow, auto-de
   });
 
   const runtime = { origin: 'http://127.0.0.1:4120', phase1: () => ({} as Phase1Service) };
+  context.after(() => service.close());
   const chat = await service.create({ engine: 'claude' });
   const slowStarted = nextHold();
   await service.start(chat.id, { requestId: 'req-q-init', text: 'Slow run' }, runtime);
@@ -2465,14 +2465,13 @@ test('SuperAgentConversations supports queue CRUD, sendQueuedMessageNow, auto-de
 
   // Send Q3 immediately -> interrupts Slow run, removes Q3, runs Q3, then auto-dequeues Edited queued 1.
   await service.sendQueuedMessageNow(chat.id, q3Id, runtime);
-  let settled = await service.get(chat.id);
-  for (let i = 0; i < 40 && (settled.state === 'running' || (settled.queuedMessages?.length ?? 0) > 0); i++) {
-    await new Promise(r => setTimeout(r, 15));
-    settled = await service.get(chat.id);
-  }
-  assert.equal(settled.state, 'idle');
-  assert.equal(settled.queuedMessages, undefined);
-  assert.deepEqual(executed.map(e => e.text), ['Run immediately now', 'Edited queued 1']);
+  const settled = await context.waitFor(async () => {
+    const chatState = await service.get(chat.id);
+    assert.equal(chatState.state, 'idle');
+    assert.equal(chatState.queuedMessages, undefined);
+    assert.deepEqual(executed.map(entry => entry.text), ['Run immediately now', 'Edited queued 1']);
+    return chatState;
+  }, { timeout: 10_000 });
   const editedUserMsg = settled.messages.find(m => m.role === 'user' && m.text === 'Edited queued 1');
   assert.equal(editedUserMsg?.attachments?.[0]?.id, 'asset-b');
   assert.equal(editedUserMsg?.contextTags?.[0]?.label, '16:9');
@@ -2493,8 +2492,6 @@ test('SuperAgentConversations supports queue CRUD, sendQueuedMessageNow, auto-de
   const stoppedState = await service.stop(stopChat.id);
   assert.equal(stoppedState.state, 'cancelled');
   assert.equal(stoppedState.queuedMessages?.length, 1);
-
-  await service.close();
 }));
 
 test('SuperAgentConversations awaits closeAndWait() on steer and retries transient active-writer locks', () => fixture(async store => {
