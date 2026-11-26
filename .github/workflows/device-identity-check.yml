@@ -8,13 +8,21 @@ on:
       - 'tracking/**'
       - 'shared/tracking.ts'
       - 'tests/tracking-device*.test.ts'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/device-identity-check.yml'
+      - 'tracking/**'
+      - 'shared/tracking.ts'
+      - 'tests/tracking-device*.test.ts'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: device-identity-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: device-identity-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   native:
@@ -22,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, windows-2025, macos-26]
+        runner: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-24.04"]' || '["ubuntu-24.04","windows-2025","macos-26"]') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 5
     steps:

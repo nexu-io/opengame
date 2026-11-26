@@ -11,7 +11,7 @@ On 2026-11-08, the OpenMotion source `main` snapshot `21c3e5aaef1af34b0f126f7db9
 The complete tree comparison found 2,626 identical entries, three files differing only by a trailing blank line, and 72 remaining path differences. Those differences preserve the public migration contract described below:
 
 - Public licenses, contribution guides, installation URLs, documentation and source attribution replace source-repository-specific instructions and internal material.
-- GitHub CI and the positive distribution list retain standalone packaging checks and disabled publication; source-repository upload/release helpers are excluded.
+- At this checkpoint, OpenMotion CI checked standalone packages against the distribution file list. OpenGame's current CI scope is described below.
 - Upstream browser telemetry and automatic experiment assignment remain disabled; explicit Studio events use the installation-owned OpenMotion collector.
 - Recreation guidance retains the npm native-cache instructions alongside the complete ZIP runtime paths.
 
@@ -43,6 +43,6 @@ Upstream Studio/template attribution and font notices remain intact. Motion remo
 
 ## CI and acceptance
 
-`.github/workflows/ci.yml` installs locked dependencies, checks/builds Studio, runs focused packaging/workflow/recreation tests and Studio regression, and exercises the phase-one ZIP by successfully calling every registered public Tool name in `shared/mcp-profiles.json` (eighteen, including one asset compatibility alias). npm is the default manual artifact format; complete Mac/Windows ZIP assembly remains available. This CI workflow rejects publication and retains a candidate installation-guide preview for review; it does not publish npm/R2/Release artifacts or merge PRs. Separate manual [candidate and test publication controls](release-workflows.md) retain complete candidates and publish only after explicit authorization and their documented default-branch and npm-trust prerequisites are configured.
+OpenGame's `OpenGame checks` workflow validates repository policy and scans tracked source inside `Source checks`. Product changes also run Studio (two shards) and combined workspace/runtime regressions using locked npm dependencies. Pushes to `main` and manual runs add macOS/Windows workspace reliability plus transcript, export and rendering checks. OpenMotion owns `@openmotion/app` package builds, candidate guides, optional DSH plugin checks and installation validation. To build a test candidate, select `main`, `prepublish` and `test` in [OpenMotion's package and release workflow](https://github.com/nexu-io/openmotion/actions/workflows/motion-publish-test.yml).
 
 Build success does not prove target-machine installation, loaded host Skills/MCP, model creation or visual acceptance. Validate exact artifacts independently, using isolated profiles. Current platform limits and instructions are in [test packages](test-packages.md).

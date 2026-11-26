@@ -346,7 +346,7 @@ function mergeState() {
     labels: page([]), latestReviews: page([{ state: 'APPROVED' }]), reviewThreads: page([]),
     commits: { nodes: [{ commit: { oid: sourceSHA, statusCheckRollup: { contexts: page([
       { name: 'standalone', status: 'COMPLETED', conclusion: 'SUCCESS' },
-      { name: 'controls', status: 'COMPLETED', conclusion: 'SUCCESS' },
+      { name: 'controls', status: 'COMPLETED', conclusion: 'SKIPPED' },
     ]) } } }] } };
 }
 
@@ -360,7 +360,10 @@ test('the merge entry waits for new-head CI and then sends only a SHA-guarded Sq
         assert.match(query, /repository\(owner:\$owner,name:\$name\)/);
         assert.deepEqual(variables, { owner: 'nexu-io', name: 'opengame', number: 42 });
         const pr = mergeState();
-        if (++polls === 1) pr.commits.nodes[0].commit.statusCheckRollup.contexts.nodes.pop();
+        if (++polls === 1) {
+          const contexts = pr.commits.nodes[0].commit.statusCheckRollup.contexts;
+          contexts.nodes = contexts.nodes.filter(check => check.name !== 'standalone');
+        }
         return Response.json({ data: { repository: { pullRequest: pr } } });
       }
       assert.equal(url, 'https://api.github.com/repos/nexu-io/opengame/pulls/42/merge');
@@ -371,6 +374,13 @@ test('the merge entry waits for new-head CI and then sends only a SHA-guarded Sq
     },
   });
   assert.equal(polls, 2); assert.equal(waits, 1); assert.equal(merges, 1);
+});
+
+test('a prepared PR can merge when the controls check is absent', () => {
+  const pr = mergeState();
+  const contexts = pr.commits.nodes[0].commit.statusCheckRollup.contexts;
+  contexts.nodes = contexts.nodes.filter(check => check.name !== 'controls');
+  assert.equal(preparedMergeStatus(pr, sourceSHA), 'ready');
 });
 
 test('merge guards stop changed PRs, failed checks, requested changes, conflicts and holds without any merge write', async () => {

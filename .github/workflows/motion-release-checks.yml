@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   controls:
+    if: github.repository == 'nexu-io/openmotion'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
