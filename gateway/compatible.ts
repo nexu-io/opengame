@@ -1,5 +1,5 @@
 import type { ProviderAdapter } from './providers.ts';
-import { apiJson, publicProviderFetch, ProviderError } from './network.ts';
+import { apiJson, publicProviderFetch, ProviderError, readCappedText } from './network.ts';
 
 /** Explicit OpenAI-compatible image/speech operations; never guesses a video protocol. */
 export const compatibleProvider: ProviderAdapter = {
@@ -13,7 +13,16 @@ export const compatibleProvider: ProviderAdapter = {
       if (typeof parameters.voice !== 'string' || !parameters.voice.trim()) throw new Error('Choose a voice in parameters.voice');
       const response = await fetcher(context.baseUrl + '/audio/speech', { method: 'POST', headers, redirect: 'error', signal: context.signal,
         body: JSON.stringify({ ...parameters, model: job.model.modelId, input: job.prompt }) });
-      if (!response.ok) throw new ProviderError(`Provider HTTP ${response.status}`, response.status);
+      if (!response.ok) {
+        let upstreamCode: string | undefined;
+        try {
+          const errBody = JSON.parse(await readCappedText(response, 65_536)) as { error?: { code?: unknown }; code?: unknown };
+          const rawCode = typeof errBody?.error?.code === 'string' ? errBody.error.code
+            : typeof errBody?.code === 'string' ? errBody.code : undefined;
+          if (rawCode && /^[A-Za-z0-9_-]{1,64}$/.test(rawCode)) upstreamCode = rawCode;
+        } catch { /* Non-JSON error bodies simply omit upstreamCode. */ }
+        throw new ProviderError(`Provider HTTP ${response.status}`, response.status, upstreamCode, 'api');
+      }
       return [Buffer.from(await response.arrayBuffer())];
     }
     if (job.modality !== 'image') throw new Error('This compatible provider supports image generation and speech only');

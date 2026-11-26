@@ -80,6 +80,8 @@ export type MediaGenerationCancelSource = typeof mediaGenerationCancelSources[nu
 export const mediaGenerationUpstreamErrorCodes = [
   'unauthorized', 'invalid_request', 'tier_model_not_entitled', 'tier_request_kind_not_entitled',
   'model_access_denied', 'insufficient_balance', 'tier_limit_exceeded', 'provider_error',
+  'provider_concurrency_exceeded', 'upstream_rate_limited', 'upstream_request_failed',
+  'upstream_provider_forbidden', 'audio_outcome_unknown',
   'request_state_unknown', 'media_execution_unknown', 'asset_too_large', 'unsupported_media_type',
   'content_policy_violation', 'safety_blocked', 'rate_limit_exceeded', 'timeout',
   'cancelled', 'internal_error', 'service_unavailable', 'other',
@@ -87,7 +89,7 @@ export const mediaGenerationUpstreamErrorCodes = [
 export type MediaGenerationUpstreamErrorCode = typeof mediaGenerationUpstreamErrorCodes[number];
 export const mediaGenerationErrorCodes = [
   'AUTH_REJECTED', 'PLAN_NOT_ENTITLED', 'BALANCE_LOW', 'RATE_LIMITED', 'INVALID_REQUEST',
-  'UPSTREAM_5XX', 'NETWORK_ERROR', 'UPLOAD_FAILED', 'EMPTY_OUTPUT',
+  'CONTENT_BLOCKED', 'UPSTREAM_5XX', 'NETWORK_ERROR', 'UPLOAD_FAILED', 'EMPTY_OUTPUT',
   'PROVIDER_UNAVAILABLE', 'CONFIG_CHANGED',
   'TIMEOUT', 'WORKER_INTERRUPTED', 'DOWNLOAD_FAILED', 'INVALID_MEDIA', 'SAVE_FAILED',
   'SAVE_UNAVAILABLE', 'REMOTE_FAILED', 'CANCELLED', 'PROVIDER_ERROR',
@@ -95,8 +97,8 @@ export const mediaGenerationErrorCodes = [
 export type MediaGenerationErrorCode = typeof mediaGenerationErrorCodes[number];
 export const mediaGenerationErrorCategories = [
   'commercial_gate', 'byok_billing', 'auth_credential', 'rate_limit', 'client_validation',
-  'timeout', 'provider_unavailable', 'upstream_error', 'network_download', 'media_invalid',
-  'local_storage', 'client_interrupted', 'user_cancelled',
+  'content_policy', 'timeout', 'provider_unavailable', 'upstream_error', 'network_download',
+  'media_invalid', 'local_storage', 'client_interrupted', 'user_cancelled',
 ] as const;
 export type MediaGenerationErrorCategory = typeof mediaGenerationErrorCategories[number];
 export const mediaGenerationAspectRatios = [
@@ -307,6 +309,38 @@ export function toolResultFields(tool: string, input: unknown, result: unknown) 
   };
 }
 
+function inspectWrappedCause(error: unknown): 'timeout' | 'provider_unavailable' | 'network' | undefined {
+  let cur: unknown = error && typeof error === 'object' && 'cause' in error ? (error as { cause?: unknown }).cause : undefined;
+  for (let depth = 0; depth < 3 && cur && typeof cur === 'object'; depth++) {
+    const rec = cur as { name?: unknown; code?: unknown; killed?: unknown; signal?: unknown; message?: unknown; cause?: unknown };
+    const code = typeof rec.code === 'string' ? rec.code : '';
+    const msg = typeof rec.message === 'string' ? rec.message.toLowerCase() : '';
+    if (
+      rec.name === 'TimeoutError'
+      || code === 'ETIMEDOUT'
+      || (rec.killed === true && (rec.signal === 'SIGTERM' || rec.signal === 'SIGKILL'))
+      || msg.includes('timed out')
+      || msg.includes('timeout')
+    ) return 'timeout';
+    if (
+      rec.name === 'ConnectorUnavailable'
+      || code === 'ENOENT'
+      || msg.includes('connector unavailable')
+      || msg.includes('prepare the account service')
+    ) return 'provider_unavailable';
+    if (
+      /^(ECONNRESET|ECONNREFUSED|ECONNABORTED|EPIPE|ENOTFOUND|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|UND_ERR_)/.test(code)
+      || msg.includes('fetch failed')
+      || msg.includes('socket hang up')
+      || msg.includes('econnreset')
+      || msg.includes('enotfound')
+      || msg.includes('econnrefused')
+    ) return 'network';
+    cur = rec.cause;
+  }
+  return undefined;
+}
+
 export function mediaGenerationError(error: unknown, phase?: string): MediaGenerationErrorCode {
   if (phase === 'cancelled') return 'CANCELLED';
   if (phase === 'interrupted') return 'WORKER_INTERRUPTED';
@@ -316,9 +350,10 @@ export function mediaGenerationError(error: unknown, phase?: string): MediaGener
   const source = extractErrorSource(error);
   const text = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
   const lower = text.toLowerCase();
+  const causeKind = status === undefined && !upstreamCode ? inspectWrappedCause(error) : undefined;
   if (lower.startsWith('save_not_available:')) return 'SAVE_UNAVAILABLE';
-  // Timeouts (local deadline or remote timeout) take precedence over generic phase buckets.
-  if (upstreamCode === 'timeout' || lower.includes('timed out') || lower.includes('timeout')) return 'TIMEOUT';
+  // Timeouts (local deadline, subprocess kill timeout, or remote timeout) take precedence over generic phase buckets.
+  if (upstreamCode === 'timeout' || lower.includes('timed out') || lower.includes('timeout') || causeKind === 'timeout') return 'TIMEOUT';
   if (phase === 'uploading' && (source === 'storage' || lower.includes('reference upload storage') || lower.includes('reference image put failed'))) return 'UPLOAD_FAILED';
   if (phase === 'downloading' || source === 'download') {
     if (status === 401 && upstreamCode === 'unauthorized') return 'AUTH_REJECTED';
@@ -326,21 +361,23 @@ export function mediaGenerationError(error: unknown, phase?: string): MediaGener
   }
   if (phase === 'save_failed' || phase === 'saving') return 'SAVE_FAILED';
   if (phase === 'decoding') {
-    if (lower.includes('returned no media') || lower.includes('returned no images') || lower.includes('without media output') || lower.includes('without a downloadable')) return 'EMPTY_OUTPUT';
+    if (lower.includes('returned no media') || lower.includes('returned no images') || lower.includes('returned no generated image') || lower.includes('without media output') || lower.includes('without a downloadable')) return 'EMPTY_OUTPUT';
     return 'INVALID_MEDIA';
   }
+  if (upstreamCode === 'content_policy_violation' || upstreamCode === 'safety_blocked') return 'CONTENT_BLOCKED';
   if (upstreamCode === 'insufficient_balance' || status === 402) return 'BALANCE_LOW';
   if (upstreamCode === 'tier_model_not_entitled' || upstreamCode === 'tier_request_kind_not_entitled' || upstreamCode === 'model_access_denied') return 'PLAN_NOT_ENTITLED';
-  if (upstreamCode === 'tier_limit_exceeded' || upstreamCode === 'rate_limit_exceeded' || status === 429) return 'RATE_LIMITED';
+  if (upstreamCode === 'tier_limit_exceeded' || upstreamCode === 'rate_limit_exceeded' || upstreamCode === 'provider_concurrency_exceeded' || upstreamCode === 'upstream_rate_limited' || status === 429) return 'RATE_LIMITED';
+  if (upstreamCode === 'upstream_provider_forbidden') return 'PROVIDER_UNAVAILABLE';
   if (upstreamCode === 'unauthorized' || status === 401) return 'AUTH_REJECTED';
   if (upstreamCode === 'invalid_request' || upstreamCode === 'asset_too_large' || upstreamCode === 'unsupported_media_type' || status === 400 || status === 413 || status === 422) return 'INVALID_REQUEST';
   if (status !== undefined && status >= 500 && status <= 599) return 'UPSTREAM_5XX';
-  if (phase === 'remote_task') return 'REMOTE_FAILED';
+  if (upstreamCode === 'upstream_request_failed' || phase === 'remote_task') return 'REMOTE_FAILED';
+  if (causeKind === 'provider_unavailable' || lower.includes('codex cli is no longer installed')) return 'PROVIDER_UNAVAILABLE';
+  if (lower.includes('content policy') || lower.includes('safety policy') || lower.includes('safety system') || lower.includes('prohibited_content') || lower.includes('violates policy') || lower.includes('violates platform security policy')) return 'CONTENT_BLOCKED';
   if (lower.includes('plan does not include') || lower.includes('upgrade your plan')) return 'PLAN_NOT_ENTITLED';
   if (lower.includes('balance') || lower.includes('credit') || lower.includes('insufficient') || lower.includes('quota') || lower.includes('entitlement')) return 'BALANCE_LOW';
-  const decisiveNonAuthCode = upstreamCode === 'content_policy_violation'
-    || upstreamCode === 'safety_blocked'
-    || upstreamCode === 'cancelled';
+  const decisiveNonAuthCode = upstreamCode === 'cancelled';
   const genericApi403Message = status === 403 && lower === 'provider http 403: credentials or permissions rejected';
   const allowGeneric403Auth = !upstreamCode || upstreamCode === 'provider_error' || upstreamCode === 'internal_error' || upstreamCode === 'service_unavailable' || upstreamCode === 'request_state_unknown';
   if (
@@ -361,10 +398,10 @@ export function mediaGenerationError(error: unknown, phase?: string): MediaGener
   if (lower.includes('configuration changed') || lower.includes('origin changed') || lower.includes('account changed')) return 'CONFIG_CHANGED';
   if (lower.includes('no longer available') || lower.includes('unavailable')) return 'PROVIDER_UNAVAILABLE';
   if (lower.includes('worker stopped') || lower.includes('interrupted')) return 'WORKER_INTERRUPTED';
-  if (lower.includes('returned no media') || lower.includes('returned no images') || lower.includes('without media output')) return 'EMPTY_OUTPUT';
+  if (lower.includes('returned no media') || lower.includes('returned no images') || lower.includes('returned no generated image') || lower.includes('without media output')) return 'EMPTY_OUTPUT';
   if (lower.includes('unsupported media') || lower.includes('could not be decoded') || lower.includes('did not return valid')) return 'INVALID_MEDIA';
   if (lower.includes('download')) return 'DOWNLOAD_FAILED';
-  if (lower.includes('fetch failed') || lower.includes('econnreset') || lower.includes('enotfound') || lower.includes('econnrefused') || lower.includes('socket hang up') || lower.includes('public dns') || lower.includes('check your connection')) return 'NETWORK_ERROR';
+  if (causeKind === 'network' || lower.includes('fetch failed') || lower.includes('econnreset') || lower.includes('enotfound') || lower.includes('econnrefused') || lower.includes('socket hang up') || lower.includes('public dns') || lower.includes('check your connection')) return 'NETWORK_ERROR';
   if (lower.includes('task failed') || lower.includes('remote') || lower.includes('generation failed') || lower.includes('generation cancelled') || lower.includes('generation canceled')) return 'REMOTE_FAILED';
   if (status === 403 && !upstreamCode) return 'AUTH_REJECTED';
   return 'PROVIDER_ERROR';
@@ -377,6 +414,7 @@ export function mediaGenerationErrorCategory(
 ): MediaGenerationErrorCategory {
   if (errorCode === 'CANCELLED' || failurePhase === 'cancelled') return 'user_cancelled';
   if (errorCode === 'WORKER_INTERRUPTED' || failurePhase === 'interrupted') return 'client_interrupted';
+  if (errorCode === 'CONTENT_BLOCKED') return 'content_policy';
   if (errorCode === 'TIMEOUT') return 'timeout';
   if (errorCode === 'BALANCE_LOW' || errorCode === 'PLAN_NOT_ENTITLED') {
     return routeChannel === undefined || routeChannel === 'amr_account' || routeChannel === 'amr_opendesign'

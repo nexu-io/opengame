@@ -151,7 +151,7 @@ export class AccountRequestError extends Error {
   readonly status?: number;
   readonly code?: string;
   readonly upstreamCode?: string;
-  constructor(stderr: string) {
+  constructor(stderr: string, options?: { cause?: unknown }) {
     let parsedEnvelope: { status?: number; code?: string } | undefined;
     try {
       const parsed: unknown = JSON.parse(stderr.trim());
@@ -171,14 +171,17 @@ export class AccountRequestError extends Error {
       // Plain-text Vela stderr falls through to regex parsing below.
     }
     // Generic API errors read `API request failed with status 403: code`; media commands read `<text> (code, HTTP 400)`.
-    const api = /API request failed with status (\d{3})(?:: ([a-z0-9_]{1,64})(?=\s|$))?/.exec(stderr);
+    const api = /API request failed with status (\d{3})(?:: ([A-Za-z0-9_]{1,64})(?=\s|$))?/.exec(stderr);
     // A response without a JSON body has an empty code: `(, HTTP 502)`.
     const media = parsedEnvelope || api ? undefined : [...stderr.matchAll(/\(([^,()]{0,64}), HTTP (\d{3})\)/g)].at(-1);
     const status = parsedEnvelope?.status ?? (api ? Number(api[1]) : media ? Number(media[2]) : undefined);
-    const code = parsedEnvelope?.code ?? (api ? api[2] : media && /^[a-z0-9_]{1,64}$/.test(media[1]) ? media[1] : undefined);
+    const code = parsedEnvelope?.code ?? (api ? api[2] : media && /^[A-Za-z0-9_-]{1,64}$/.test(media[1]) ? media[1] : undefined);
     // Local CLI flag/argument rejections exit without an HTTP status; do not misreport them as connection or sign-in failures.
     const cliInvalid = !status && !code && /(?:^|\n)Error: (?:if any flags in the group |unknown (?:shorthand )?flag:|invalid argument |required flag\(s\) |flag needs an argument:)/.test(stderr);
-    super((code && requestMessages[code]) || (cliInvalid ? requestMessages.invalid_request : status === 401 ? requestMessages.unauthorized : status ? jobMessages.service : jobMessages.connection));
+    super(
+      (code && requestMessages[code]) || (cliInvalid ? requestMessages.invalid_request : status === 401 ? requestMessages.unauthorized : status ? jobMessages.service : jobMessages.connection),
+      options?.cause !== undefined ? { cause: options.cause } : undefined,
+    );
     this.status = status; this.code = code; this.upstreamCode = code;
   }
 }
@@ -448,7 +451,7 @@ export class OpenDesignAccount {
       });
       return stdout;
     } catch (error) {
-      throw new AccountRequestError(String((error as { stderr?: unknown }).stderr ?? ''));
+      throw new AccountRequestError(String((error as { stderr?: unknown }).stderr ?? ''), { cause: error });
     }
   }
   async run(args: string[], signal?: AbortSignal, envOverrides?: Record<string, string>) {
@@ -1017,7 +1020,7 @@ export class OpenDesignAccount {
         // A rejected sign-in still needs its sign-out hint: the account keeps reporting signed-in after a media 401.
         if (error instanceof AccountRequestError) {
           throw withErrorMeta(
-            new Error(error.status === 401 || error.code === 'unauthorized' ? jobMessages.resultUnauthorized : jobMessages.resultUnreadable),
+            new Error(error.status === 401 || error.code === 'unauthorized' ? jobMessages.resultUnauthorized : jobMessages.resultUnreadable, { cause: error }),
             { status: error.status, upstreamCode: error.code },
           );
         }
@@ -1061,7 +1064,7 @@ export class OpenDesignAccount {
         method: 'POST', headers: { ...headers, ...mediaSubmitHeaders(productionApi, job.id) }, redirect: 'error', signal,
         body: JSON.stringify({ ...cloudImageParameters(parameters), model: job.model.modelId, prompt: job.prompt, ...(images.length ? { images } : {}) }),
       });
-    } catch (error) { if (signal.aborted) throw error; throw new Error(jobMessages.connection); }
+    } catch (error) { if (signal.aborted) throw error; throw new Error(jobMessages.connection, { cause: error }); }
     // Only the service error code is kept; the response text can echo the prompt.
     const body = await response.json().catch(() => undefined) as { task_id?: unknown; error?: { code?: unknown }; code?: unknown } | undefined;
     if (!response.ok) {
@@ -1084,7 +1087,7 @@ export class OpenDesignAccount {
         method: 'POST', headers: { ...headers, ...mediaSubmitHeaders(access.baseUrl, job.id) }, redirect: 'error', signal,
         body: JSON.stringify({ model: job.model.modelId, parameters: { ...parameters, text: job.prompt } }),
       });
-    } catch (error) { if (signal.aborted) throw error; throw new Error(jobMessages.connection); }
+    } catch (error) { if (signal.aborted) throw error; throw new Error(jobMessages.connection, { cause: error }); }
     const body = await response.json().catch(() => undefined) as { task_id?: unknown; error?: { code?: unknown }; code?: unknown } | undefined;
     if (!response.ok) {
       const code = String(body?.error?.code ?? body?.code ?? '');
@@ -1111,8 +1114,8 @@ export class OpenDesignAccount {
       } catch (error) {
         const status = (error as { status?: number }).status;
         const upstreamCode = (error as { upstreamCode?: string }).upstreamCode;
-        if (status === 401) throw withErrorMeta(new Error(jobMessages.resultUnauthorized), { status, upstreamCode, errorSource: 'api' });
-        throw withErrorMeta(new Error(jobMessages.resultUnreadable), { status, upstreamCode, errorSource: status !== undefined ? 'api' : undefined });
+        if (status === 401) throw withErrorMeta(new Error(jobMessages.resultUnauthorized, { cause: error }), { status, upstreamCode, errorSource: 'api' });
+        throw withErrorMeta(new Error(jobMessages.resultUnreadable, { cause: error }), { status, upstreamCode, errorSource: status !== undefined ? 'api' : undefined });
       }
     };
     const assetFrom = (task: any) => {
@@ -1178,8 +1181,8 @@ export class OpenDesignAccount {
       } catch (error) {
         const status = (error as { status?: number }).status;
         const upstreamCode = (error as { upstreamCode?: string }).upstreamCode;
-        if (status === 401) throw withErrorMeta(new Error(jobMessages.resultUnauthorized), { status, upstreamCode, errorSource: 'api' });
-        throw withErrorMeta(new Error(jobMessages.resultUnreadable), { status, upstreamCode, errorSource: status !== undefined ? 'api' : undefined });
+        if (status === 401) throw withErrorMeta(new Error(jobMessages.resultUnauthorized, { cause: error }), { status, upstreamCode, errorSource: 'api' });
+        throw withErrorMeta(new Error(jobMessages.resultUnreadable, { cause: error }), { status, upstreamCode, errorSource: status !== undefined ? 'api' : undefined });
       }
     };
     const assetFrom = (task: any) => {
