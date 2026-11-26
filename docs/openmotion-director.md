@@ -5,7 +5,7 @@
 This update integrates the creative guidance developed after v1.4.5. The existing five Skill routes, eleven public Tools, MCP Resources, editable-preview handoff and requested-export boundary remain unchanged.
 
 - Describe a concrete visual event and its recognizable result, then design materials, subject motion, framing and timing together. Reference analysis transfers the viewing mechanism rather than copying a color palette or transition name.
-- Use the [shared material policy](../skills/openmotion-production/references/materials.md) for source priorities, acquisition and usability checks. Director decisions retain the relationship between materials, subject motion, framing, time and state.
+- Use the [shared material policy](../skills/openmotion-video/references/shared/materials.md) for source priorities, acquisition and usability checks. Director decisions retain the relationship between materials, subject motion, framing, time and state.
 - Keep the subject's important change legible when framing, occlusion and camera motion also change. Test difficult views and geometry before expanding the film.
 - Prototype the representative creative risk, including middle or ending sections when relevant. Preserve accepted implementations and timing while adding context; a successful opening does not validate the remaining film.
 - Choose sound materials and timing order for the task, then cross-check actual visible action phases against real audio events. Shared edit and verification guidance invalidates affected timing evidence after changes and separates technical integrity, player operation, event timing and normal-speed perception.
@@ -24,7 +24,7 @@ v1.4.2 补充按范围读取依赖、记录完整正文和跨阶段复用；v1.4
 
 ## v1.4 冻结归档
 
-[openmotion-director](../skills/openmotion-director/SKILL.md) 是导演与编排层 Skill，帮助 Agent 从产品事实和素材形成动态叙事、动作脚本、镜头关系、声音职责，并根据实际输出修正。适用于从零创作、已有影片修改和审片；工具与工程能力继续由既有制作规范负责。
+[openmotion-director](../skills/openmotion-video/workflows/director.md) 是导演与编排层 Skill，帮助 Agent 从产品事实和素材形成动态叙事、动作脚本、镜头关系、声音职责，并根据实际输出修正。适用于从零创作、已有影片修改和审片；工具与工程能力继续由既有制作规范负责。
 
 下述历史归档保存的是 2026-11-04 三轮递归实验后冻结的 v1.4，创作内容与已使用版本一致。未修改 `openmotion-production`、MCP 默认工作流、Studio 或渲染器。Skill 检查器允许标准 frontmatter 中包含 metadata，以保留版本信息，仍验证名称和描述。
 

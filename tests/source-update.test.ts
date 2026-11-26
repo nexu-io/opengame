@@ -1308,3 +1308,19 @@ test('syncInstalledHostSkills does not create missing host directories', async t
   const synced = await syncInstalledHostSkills(checkout, { homeDirectory: fakeHome, env: {} });
   assert.deepEqual(synced, []);
 });
+
+test('syncInstalledHostSkills refreshes consolidated openmotion-video copies in host directories', async t => {
+  const { checkout, fakeHome } = await createGitFixtures(t);
+  await mkdir(path.join(checkout, 'skills/openmotion-video/workflows'), { recursive: true });
+  await writeFile(path.join(checkout, 'skills/openmotion-video/SKILL.md'), '---\nname: openmotion-video\ndescription: updated\n---\nupdated body\n');
+  await writeFile(path.join(checkout, 'skills/openmotion-video/workflows/director.md'), '# director\n');
+
+  const installedDir = path.join(fakeHome, '.codex/skills/openmotion-video');
+  await mkdir(installedDir, { recursive: true });
+  await writeFile(path.join(installedDir, 'SKILL.md'), '---\nname: openmotion-video\ndescription: stale\n---\nstale body\n');
+
+  const synced = await syncInstalledHostSkills(checkout, { homeDirectory: fakeHome, env: {} });
+  assert.ok(synced.some(entry => entry.endsWith('openmotion-video')), synced.join(', '));
+  assert.match(await readFile(path.join(installedDir, 'SKILL.md'), 'utf8'), /updated body/);
+  assert.match(await readFile(path.join(installedDir, 'workflows/director.md'), 'utf8'), /# director/);
+});

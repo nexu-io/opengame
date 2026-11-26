@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { editorRequest, readEditor, sharedEditorEnabled } from '../editor-runtime.ts';
 import { SOURCE_BUILD_INPUTS, SOURCE_BUILD_OUTPUTS } from '../scripts/source-build-state.mjs';
 import { withProcessLock } from './process-lock.ts';
+import { packagedSkills } from './workflow.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -53,15 +54,9 @@ function isStudioBuildInputPath(normalizedPath: string): boolean {
 }
 
 const SYNCABLE_SKILLS = [
+  'opengame',
   'openmotion',
-  'openmotion-game',
-  'openmotion-production',
-  'openmotion-director',
-  'openmotion-media',
-  'openmotion-design',
-  'openmotion-recreate',
-  'openmotion-template-to-video',
-  'openmotion-video-to-template',
+  ...packagedSkills,
 ] as const;
 
 export type ExecCommandOptions = {

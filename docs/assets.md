@@ -8,7 +8,7 @@ The editor’s upload menu offers local upload and library import. A library imp
 
 ## Agent generation route
 
-Discover configured providers with `openmotion_media_use` inspect/reference/models, then use `openmotion_assets_use` to generate with a full model ID, poll the original job, inspect an exact asset/version, and import only the selected version into an explicit project before composing. Standalone assets require no carrier project. When only the compatible `openmotion_assets` name is discovered, use its actions and inspect adopted local files with available media tools; it has no read action. Existing project-direct media_use jobs retain their original Tool/projectId/jobId and must not be re-generated or imported a second time. Follow the single [generation boundary](../skills/openmotion-production/references/materials.md#generation-boundary).
+Discover configured providers with `openmotion_media_use` inspect/reference/models, then use `openmotion_assets_use` to generate with a full model ID, poll the original job, inspect an exact asset/version, and import only the selected version into an explicit project before composing. Standalone assets require no carrier project. When only the compatible `openmotion_assets` name is discovered, use its actions and inspect adopted local files with available media tools; it has no read action. Existing project-direct media_use jobs retain their original Tool/projectId/jobId and must not be re-generated or imported a second time. Follow the single [generation boundary](../skills/openmotion-media/references/materials.md#generation-boundary).
 
 ## Storage and jobs
 

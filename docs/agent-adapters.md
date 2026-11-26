@@ -31,7 +31,7 @@ Codex、Claude Code、DeepSeek Harness（DSH）与 WorkBuddy 从同一份已安�
 
 ```sh
 npx skills add ./skills --list
-npx skills add ./skills --skill openmotion-director openmotion-production openmotion-template-to-video openmotion-recreate openmotion-video-to-template
+npx skills add ./skills --skill openmotion-video openmotion-game openmotion-design openmotion-media
 ```
 
 显式选择五个正式入口，保留相互引用的同级目录。选择目标宿主后按 CLI 提示安装，不使用 `--all` 扩大安装范围。Skills CLI 有自己的 Node 要求；README 使用 CI 固定的 Node 26.11.1。

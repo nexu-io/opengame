@@ -8,7 +8,7 @@ Each family now includes construction traits and conditional brand fit (`brandFi
 
 The shared typography guide distinguishes original marks/packaging, prescribed brand reading text and open creative roles. Phone-led reviews inspect required titles, claims, supporting labels and CTA/URL at a stated display width with actual copy and timing. Its illustrative size ranges are editing starting points, not universal gates; actual legibility and the applicable identity decide the result.
 
-Open choices use a role-led actual-copy comparison: state the visible distinction, compare relevant constructions at equal display conditions, then tune the selected treatment in the real frame. The optional offline `scripts/font-specimen.ts <request.json> <new-output-directory>` helper checks supplied prepared resources against catalog hashes and produces portable HTML, copied fonts/licenses and a JSON input/resource record. It performs no downloads or project writes. Its [input schema and review procedure](../skills/openmotion-production/references/fonts.md#compare-prepared-faces-with-actual-copy) cover mixed-script stacks and explicit coverage gaps; generated output is comparison material, not visual acceptance.
+Open choices use a role-led actual-copy comparison: state the visible distinction, compare relevant constructions at equal display conditions, then tune the selected treatment in the real frame. The optional offline `scripts/font-specimen.ts <request.json> <new-output-directory>` helper checks supplied prepared resources against catalog hashes and produces portable HTML, copied fonts/licenses and a JSON input/resource record. It performs no downloads or project writes. Its [input schema and review procedure](../skills/openmotion-video/references/shared/fonts.md#compare-prepared-faces-with-actual-copy) cover mixed-script stacks and explicit coverage gaps; generated output is comparison material, not visual acceptance.
 
 | Family ID | Family | Language focus | Character / likely role |
 | --- | --- | --- | --- |
@@ -76,7 +76,7 @@ The language-specific additions include Traditional Chinese, Japanese, Korean, A
 3. Import the returned local `importItems` with the existing `openmotion_import_assets` Tool. Font files and optional license text become one versioned project change; the Tool returns actual font metadata and project-relative @font-face CSS.
 4. Read the new revision/version, save the relevant CSS/text through `openmotion_edit_project`, then inspect the actual copy and reading window. For nested stylesheets, resolve CSS URLs relative to their location.
 
-The authoritative [metadata](../skills/openmotion-production/fonts/catalog.json) lives with the Skill so installed Skill-only hosts can filter it locally. MCP's index and family details are projections of the same file. [Typography guidance](../skills/openmotion-production/references/typography.md) and the [resource workflow](../skills/openmotion-production/references/fonts.md) describe selection and validation.
+The authoritative [metadata](../skills/openmotion-video/fonts/catalog.json) lives with the Skill so installed Skill-only hosts can filter it locally. MCP's index and family details are projections of the same file. [Typography guidance](../skills/openmotion-video/references/shared/typography.md) and the [resource workflow](../skills/openmotion-video/references/shared/fonts.md) describe selection and validation.
 
 ## Storage and delivery
 

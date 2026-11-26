@@ -250,7 +250,7 @@ function withoutFences(content: string) {
 }
 
 // Inline links and reference-link definitions; ignore fenced examples and inline code.
-function markdownHrefs(content: string) {
+export function markdownHrefs(content: string) {
   const prose = withoutFences(content).replace(/(`+)[^\n]*?\1/g, '');
   return [
     ...prose.matchAll(/\]\(\s*(?:<([^>]+)>|([^\s)]+))(?:\s+[^)]*)?\)/g),

@@ -9,9 +9,9 @@ Start from an editable Studio project or a local template package. Their source 
 | [NYT Graph](../../template-library/nyt-graph/) | 15 seconds | Values, labels, chart explanation and annotations. |
 | [Decision Tree](../../template-library/decision-tree/) | 10 seconds | Question, branch labels and reveal order. |
 
-These are editable examples with source and posters. Open **Studio → Templates → Ready to edit** to create an independent project. Use [openmotion-template-to-video](../../skills/openmotion-template-to-video/SKILL.md) for adaptation. Validate your own changed copy and export.
+These are editable examples with source and posters. Open **Studio → Templates → Ready to edit** to create an independent project. Use [openmotion-template-to-video](../../skills/openmotion-video/workflows/template-to-video.md) for adaptation. Validate your own changed copy and export.
 
-To contribute another template, use the [entry checklist](../ENTRY_TEMPLATE.md), supply the editable source, preview and `TEMPLATE.md` instructions, and record the version and changes you actually tested. Follow the existing [template-production workflow](../../skills/openmotion-video-to-template/SKILL.md) when producing a reusable template from a video. Adding a folder here alone does not register a Studio template.
+To contribute another template, use the [entry checklist](../ENTRY_TEMPLATE.md), supply the editable source, preview and `TEMPLATE.md` instructions, and record the version and changes you actually tested. Follow the existing [template-production workflow](../../skills/openmotion-video/workflows/video-to-template.md) when producing a reusable template from a video. Adding a folder here alone does not register a Studio template.
 
 ## Published motion guidance source
 

@@ -11,7 +11,7 @@ These briefs turn the seven README scenarios into concrete requests. The stills 
 3. Have the agent inspect the reference before proposing a shot list and cut. Retrieval, transcription and audio analysis depend on host tools; missing media or timecodes must be supplied, not inferred from a description.
 4. Review the actual project in Studio at normal speed, including text and sound, before exporting MP4. Keep the editable source for the next revision.
 
-These are reference-led creative inputs, not new runtime tools, automatic platform adaptation or one-click generation guarantees. Existing editable templates use the [template reuse route](../skills/openmotion-template-to-video/SKILL.md); video reconstruction uses [openmotion-recreate](../skills/openmotion-recreate/SKILL.md). GIF previews are silent; voice, music and sound synchronization must be reviewed in the actual project.
+These are reference-led creative inputs, not new runtime tools, automatic platform adaptation or one-click generation guarantees. Existing editable templates use the [template reuse route](../skills/openmotion-video/workflows/template-to-video.md); video reconstruction uses [openmotion-recreate](../skills/openmotion-video/workflows/recreate.md). GIF previews are silent; voice, music and sound synchronization must be reviewed in the actual project.
 
 <a id="talking-head"></a>
 

@@ -99,9 +99,9 @@ MCP 工具说明和领域执行位于 `mcp-tools.ts`；`mcp.ts` 保留初始化�
 | openmotion-video / workflows/template-to-video.md | template | start、unchanged、firstuse、recipes、adaptation（共 5 项） |
 | openmotion-video / workflows/recreate.md | recreate | start、rebuild、reconstruction、rendering、rendercode、verification |
 | openmotion-video / workflows/video-to-template.md | video-to-template | start、measure、rebuild、project、verification、sources |
-| openmotion-media（多模态原子能力与共享素材契约） | media | start、materials、planning、setup、jobs、inspection、account、compatible、fal、opendesign、atlascloud、wavespeed（共 12 项） |
-| openmotion-design | design | start、scenarios、systems、comments、deck |
-| openmotion-game | game | start、architecture、animation、playable、audio、review |
+| openmotion-media（多模态原子能力与共享素材契约） | media | start、materials、planning、setup、jobs、inspection、account、compatible、fal、opendesign、atlascloud、wavespeed、codex（共 13 项） |
+| openmotion-design | design | start、scenarios、iterate、export、systems（共 5 项） |
+| openmotion-game | game | start、provenance、brief、gates、controls、craft、lookup、genres、playable、flow、design、style、sprites、animation、procedural、audio、textures、review、wechat（共 19 项） |
 
 ```json
 {"uri":"openmotion://workflow/director/start"}
@@ -127,7 +127,7 @@ A prior local trial used only “做一个哈利波特宣传片” in a fresh gp
 
 原创制作按任务读取动作脚本、动态表现和短句参考，无需用户额外说“Motion 感”。多段/截图/状态延续、声音设计和动态审片按职责加载相应参考。模板与复刻按影响复用相同标准，不强制换成原创叙事、固定动效或固定音乐结构。
 
-一期公开接口已收敛为 [18 个 openmotion_ 注册名](mcp-phase1-tools.md)（17 项领域能力，含素材库兼容别名）。旧 28 项实现只留内部兼容；读文件、任务查询及技术校验分别并入项目读取与导出流程。一期插件和四宿主薄适配器包含上述五个创作入口、支撑 Skill `openmotion-media` 及其参考；源码中原有的 reference-video 兼容入口已在确认无源码安装、提示词或宿主配置按名称调用后删除。核心 Skill 指引同步使用新契约；不新增制作引擎或自动复刻算法。
+一期公开接口已收敛为 [18 个 openmotion_ 注册名](mcp-phase1-tools.md)（17 项领域能力，含素材库兼容别名）。旧 28 项实现只留内部兼容；读文件、任务查询及技术校验分别并入项目读取与导出流程。一期插件和四宿主薄适配器打包分发 `openmotion-video`（内置上述五条视频子工作流及共享参考）、`openmotion-game`、`openmotion-design` 和 `openmotion-media` 四个对称核心域 Skill；源码中原有的 reference-video 兼容入口已在确认无源码安装、提示词或宿主配置按名称调用后删除。核心 Skill 指引同步使用新契约；不新增制作引擎或自动复刻算法。
 
 ## Shared production reading scope
 

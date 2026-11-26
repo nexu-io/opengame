@@ -8,7 +8,7 @@ import { releaseProfile } from '../shared/mcp-registry.ts';
 import { checkDesign } from './design-check.ts';
 import { checkI18n } from './check-i18n.ts';
 import { checkRouting } from './check-routing.ts';
-import { getWorkflow, markdownAnchors, workflowLinkAnchors, workflowRegistry, phase1WorkflowNames, packagedSkills } from '../shared/workflow.ts';
+import { getWorkflow, markdownAnchors, markdownHrefs, workflowLinkAnchors, workflowRegistry, phase1WorkflowNames, packagedSkills } from '../shared/workflow.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
@@ -78,7 +78,6 @@ export async function check() {
 
   // Enforce strict L1 Skill DAG: openmotion-media has zero cross-Skill links, and creative domains never cross-link each other.
   const creativeDomains = new Set(['openmotion-video', 'openmotion-game', 'openmotion-design']);
-  const stripCode = (text: string) => text.replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?^ {0,3}\1[^\n]*$/gm, ' ').replace(/`[^`\n]*`/g, ' ');
   for (const skill of topSkills) {
     const skillDir = path.join(root, 'skills', skill);
     const mdFiles = (await readdir(skillDir, { recursive: true }))
@@ -87,8 +86,9 @@ export async function check() {
     for (const rel of mdFiles) {
       const text = await readFile(path.join(skillDir, rel), 'utf8');
       const docRel = path.posix.join(skill, rel);
-      for (const [, target] of stripCode(text).matchAll(/\]\(<?([^)\s>#]+)/g)) {
-        if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(target) || target.startsWith('/')) continue;
+      for (const rawTarget of markdownHrefs(text)) {
+        const target = rawTarget.split('#')[0];
+        if (!target || /^[a-z][a-z0-9+.-]*:|^\/\//i.test(target) || target.startsWith('/')) continue;
         const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(docRel), target));
         if (resolved.startsWith('..')) continue; // Outside skills/ (e.g. docs/)
         const targetSkill = resolved.split('/')[0];

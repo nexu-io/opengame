@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { getWorkflow, readWorkflowResource, workflowDocumentAliases, workflowReferences } from '../shared/workflow.ts';
+import { getWorkflow, markdownHrefs, readWorkflowResource, workflowDocumentAliases, workflowReferences } from '../shared/workflow.ts';
 
 test('legacy video Skill paths resolve through aliases without leaving stale copies on disk', async () => {
   for (const [legacy, canonical] of Object.entries(workflowDocumentAliases)) {
@@ -195,8 +195,9 @@ test('the media Skill stays self-contained (zero cross-Skill links) and serves e
   for (const { file, text } of await skillMarkdown()) {
     if (!file.startsWith('openmotion-media/')) continue;
     assert.doesNotMatch(text, /openmotion-(?:director|recreate|template-to-video|video-to-template)\b|workflow\/(?:director|recreate|template|video-to-template)\//, file);
-    for (const [, target] of withoutCode(text).matchAll(/\]\(<?([^)\s>#]+)/g)) {
-      if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(target) || target.startsWith('/')) continue;
+    for (const rawTarget of markdownHrefs(text)) {
+      const target = rawTarget.split('#')[0];
+      if (!target || /^[a-z][a-z0-9+.-]*:|^\/\//i.test(target) || target.startsWith('/')) continue;
       const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), target));
       if (!resolved.startsWith('..') && resolved.split('/')[0] !== 'openmotion-media') crossings.push(`${file} -> ${resolved}`);
     }
@@ -209,8 +210,9 @@ test('creative domains form a strict DAG with zero cross-linking between video, 
   for (const { file, text } of await skillMarkdown()) {
     const [owner] = file.split('/');
     if (!creativeDomains.includes(owner)) continue;
-    for (const [, target] of withoutCode(text).matchAll(/\]\(<?([^)\s>#]+)/g)) {
-      if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(target) || target.startsWith('/')) continue;
+    for (const rawTarget of markdownHrefs(text)) {
+      const target = rawTarget.split('#')[0];
+      if (!target || /^[a-z][a-z0-9+.-]*:|^\/\//i.test(target) || target.startsWith('/')) continue;
       const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), target));
       if (resolved.startsWith('..')) continue;
       const [entry] = resolved.split('/');
@@ -226,8 +228,9 @@ test('non-media Skills reach openmotion-media only through its SKILL.md or share
   for (const { file, text } of await skillMarkdown()) {
     const [owner] = file.split('/');
     if (owner === 'openmotion-media') continue;
-    for (const [, target] of withoutCode(text).matchAll(/\]\(<?([^)\s>#]+)/g)) {
-      if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(target)) continue;
+    for (const rawTarget of markdownHrefs(text)) {
+      const target = rawTarget.split('#')[0];
+      if (!target || /^[a-z][a-z0-9+.-]*:|^\/\//i.test(target)) continue;
       const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), target));
       const [entry, ...rest] = resolved.split('/');
       if (entry === 'openmotion-media' && !allowedMediaTargets.has(rest.join('/'))) crossings.push(`${file} -> ${resolved}`);

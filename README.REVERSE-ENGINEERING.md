@@ -344,7 +344,7 @@ The rotating field becomes a vinyl record; the title lands on its sleeve.<br>
 
 ![Your local agent, optional media-model accounts and creative resources feed a workflow of understanding the reference, coding scenes, generating missing media, editing and rendering MP4 with reusable source.](docs/readme/diagrams/creation-stack.svg)
 
-**Write it. Watch it. Change it. Render it.** Ask your agent to replace the product, tighten the hook, add a presenter, change the captions or try another ending. It edits the project source; you review the result in the visual editor. Local MCP clients use the project tools, while agents with shell access can follow the Skills and pinned CLI workflow. [Agent setup](#agent-setup) · [Native composition guide](skills/openmotion-production/references/native.md) · [Example HTML project](template-library/product-promo/index.html)
+**Write it. Watch it. Change it. Render it.** Ask your agent to replace the product, tighten the hook, add a presenter, change the captions or try another ending. It edits the project source; you review the result in the visual editor. Local MCP clients use the project tools, while agents with shell access can follow the Skills and pinned CLI workflow. [Agent setup](#agent-setup) · [Native composition guide](skills/openmotion-video/references/shared/native.md) · [Example HTML project](template-library/product-promo/index.html)
 
 #### What you can change in Studio
 
@@ -608,22 +608,22 @@ From the checkout, discover and install the five core workflows with the [Skills
 
 ```sh
 npx skills add ./skills --list
-npx skills add ./skills --skill openmotion-director openmotion-production openmotion-template-to-video openmotion-recreate openmotion-video-to-template
+npx skills add ./skills --skill openmotion-video openmotion-game openmotion-design openmotion-media
 ```
 
 This copies instructions; it does not install the runtime or register MCP. Keep the shared documentation available and connect the app separately, or use the integrated local installer above.
 
 | Skill | Use it for |
 | --- | --- |
-| [openmotion-recreate](skills/openmotion-recreate/SKILL.md) | Reconstructing a reference video and comparing the result |
-| [openmotion-template-to-video](skills/openmotion-template-to-video/SKILL.md) | Adapting an existing editable template |
-| [openmotion-director](skills/openmotion-director/SKILL.md) | Original films, narrative, movement, sound and creative review |
-| [openmotion-video-to-template](skills/openmotion-video-to-template/SKILL.md) | Producing a portable reusable template |
-| [openmotion-production](skills/openmotion-production/SKILL.md) | Scoped edits, preview, checks, troubleshooting and export |
+| [openmotion-recreate](skills/openmotion-video/workflows/recreate.md) | Reconstructing a reference video and comparing the result |
+| [openmotion-template-to-video](skills/openmotion-video/workflows/template-to-video.md) | Adapting an existing editable template |
+| [openmotion-director](skills/openmotion-video/workflows/director.md) | Original films, narrative, movement, sound and creative review |
+| [openmotion-video-to-template](skills/openmotion-video/workflows/video-to-template.md) | Producing a portable reusable template |
+| [openmotion-production](skills/openmotion-video/workflows/production.md) | Scoped edits, preview, checks, troubleshooting and export |
 
 <a id="local-agent-connection"></a>
 
-**Connect a local agent** · Open **Connect Agent** in Studio to copy the launch command for your workspace. Use the configuration below in clients with local stdio MCP support. In a shell-based agent, open the project directory and use the [local engine CLI](skills/openmotion-production/references/native.md) to preview and render the HTML scenes.
+**Connect a local agent** · Open **Connect Agent** in Studio to copy the launch command for your workspace. Use the configuration below in clients with local stdio MCP support. In a shell-based agent, open the project directory and use the [local engine CLI](skills/openmotion-video/references/shared/native.md) to preview and render the HTML scenes.
 
 <a id="manual-mcp"></a>
 
@@ -643,7 +643,7 @@ The **eighteen registered public MCP tool names** (including one asset compatibi
 
 Find a template with `openmotion_list_templates`, inspect it with `openmotion_get_template`, then create an editable copy with `openmotion_create_project`. [Template catalog](docs/template-catalog.md)
 
-Use `npm start` for the app and `npm run mcp` for stdio. Shell-capable agents can inspect and render with the pinned engine CLI returned by the runtime; managed edits retain project revision checks. [Native authoring](skills/openmotion-production/references/native.md)
+Use `npm start` for the app and `npm run mcp` for stdio. Shell-capable agents can inspect and render with the pinned engine CLI returned by the runtime; managed edits retain project revision checks. [Native authoring](skills/openmotion-video/references/shared/native.md)
 
 <a id="your-agent-your-studio"></a>
 
@@ -659,7 +659,7 @@ Use `npm start` for the app and `npm run mcp` for stdio. Shell-capable agents ca
 | **Typography and identity** — type hierarchy, color and composition | Your fonts, palette and words, recorded in Motion.md’s Brand Kit section |
 | **Sound and rhythm** — speech timing, music cues and emphasis | Your voice, supplied music and sound direction |
 
-Supply the clip and timecodes if your agent cannot open the social link. Start from the reference with the [recreation workflow](skills/openmotion-recreate/SKILL.md), or use the [template workflow](skills/openmotion-template-to-video/SKILL.md) when you already have editable source.
+Supply the clip and timecodes if your agent cannot open the social link. Start from the reference with the [recreation workflow](skills/openmotion-video/workflows/recreate.md), or use the [template workflow](skills/openmotion-video/workflows/template-to-video.md) when you already have editable source.
 
 ```text
 Use OpenMotion to reverse-engineer the attached reference for our brand.
