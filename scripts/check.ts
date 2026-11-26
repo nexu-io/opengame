@@ -67,11 +67,11 @@ export async function check() {
     .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
     .map(entry => entry.name)
     .sort();
-  assert.deepEqual(topSkills, ['openmotion', ...packagedSkills].sort(),
-    'Top-level skills/ must contain only the public entry openmotion plus packagedSkills');
+  assert.deepEqual(topSkills, ['opengame', 'openmotion', ...packagedSkills].sort(),
+    'Top-level skills/ must contain only the public entries (opengame, openmotion) plus packagedSkills');
 
   // Thin routers must remain concise so future changes do not inline full playbooks into entry prompts.
-  for (const thinEntry of ['skills/openmotion/SKILL.md', 'skills/openmotion-video/SKILL.md']) {
+  for (const thinEntry of ['skills/opengame/SKILL.md', 'skills/openmotion/SKILL.md', 'skills/openmotion-video/SKILL.md']) {
     const content = await readFile(path.join(root, thinEntry), 'utf8');
     assert.ok(content.length <= 8000, `${thinEntry} exceeds thin-router budget (${content.length} > 8000 chars)`);
   }

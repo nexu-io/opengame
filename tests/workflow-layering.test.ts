@@ -263,9 +263,10 @@ test('no long sentence is copied between Skill files', async () => {
     for (let index = 0; index + width <= words.length; index++) {
       const shingle = words.slice(index, index + width).join(' ');
       const first = seen.get(shingle);
-      // Each provider guide follows the same template and must stand alone.
+      // Provider guides and standalone public entry Skills (openmotion, opengame) must each stand alone.
       const providers = (name: string) => name.startsWith('openmotion-media/references/providers/');
-      if (first && first !== file && !(providers(first) && providers(file))) copies.add(`${first} | ${file}: ${shingle}`);
+      const publicEntry = (name: string) => name === 'opengame/SKILL.md' || name === 'openmotion/SKILL.md';
+      if (first && first !== file && !(providers(first) && providers(file)) && !(publicEntry(first) || publicEntry(file))) copies.add(`${first} | ${file}: ${shingle}`);
       else if (!first) seen.set(shingle, file);
     }
   }
