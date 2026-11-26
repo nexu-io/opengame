@@ -79,7 +79,7 @@ export const mediaGenerationCancelSources = ['studio', 'mcp', 'unknown'] as cons
 export type MediaGenerationCancelSource = typeof mediaGenerationCancelSources[number];
 export const mediaGenerationUpstreamErrorCodes = [
   'unauthorized', 'invalid_request', 'tier_model_not_entitled', 'tier_request_kind_not_entitled',
-  'model_access_denied', 'insufficient_balance', 'tier_limit_exceeded', 'provider_error',
+  'model_access_denied', 'insufficient_balance', 'tier_limit_exceeded', 'video_concurrency_limit_exceeded', 'provider_error',
   'provider_concurrency_exceeded', 'upstream_rate_limited', 'upstream_request_failed',
   'upstream_provider_forbidden', 'audio_outcome_unknown',
   'request_state_unknown', 'media_execution_unknown', 'asset_too_large', 'unsupported_media_type',
@@ -367,7 +367,7 @@ export function mediaGenerationError(error: unknown, phase?: string): MediaGener
   if (upstreamCode === 'content_policy_violation' || upstreamCode === 'safety_blocked') return 'CONTENT_BLOCKED';
   if (upstreamCode === 'insufficient_balance' || status === 402) return 'BALANCE_LOW';
   if (upstreamCode === 'tier_model_not_entitled' || upstreamCode === 'tier_request_kind_not_entitled' || upstreamCode === 'model_access_denied') return 'PLAN_NOT_ENTITLED';
-  if (upstreamCode === 'tier_limit_exceeded' || upstreamCode === 'rate_limit_exceeded' || upstreamCode === 'provider_concurrency_exceeded' || upstreamCode === 'upstream_rate_limited' || status === 429) return 'RATE_LIMITED';
+  if (upstreamCode === 'tier_limit_exceeded' || upstreamCode === 'video_concurrency_limit_exceeded' || upstreamCode === 'rate_limit_exceeded' || upstreamCode === 'provider_concurrency_exceeded' || upstreamCode === 'upstream_rate_limited' || status === 429) return 'RATE_LIMITED';
   if (upstreamCode === 'upstream_provider_forbidden') return 'PROVIDER_UNAVAILABLE';
   if (upstreamCode === 'unauthorized' || status === 401) return 'AUTH_REJECTED';
   if (upstreamCode === 'invalid_request' || upstreamCode === 'asset_too_large' || upstreamCode === 'unsupported_media_type' || status === 400 || status === 413 || status === 422) return 'INVALID_REQUEST';

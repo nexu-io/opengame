@@ -102,6 +102,7 @@ export function detectMonetizationGateFromError(error: { status?: number; code?:
   if (
     code === 'concurrency_limit'
     || code === 'concurrency_limit_exceeded'
+    || code === 'video_concurrency_limit_exceeded'
     || code === 'too_many_concurrent_tasks'
     || message.includes('concurrency limit')
     || message.includes('concurrent tasks limit')

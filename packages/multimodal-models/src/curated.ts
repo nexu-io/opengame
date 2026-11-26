@@ -271,6 +271,7 @@ function generationOptionToParameterField(option: GenerationOption, modality: Mu
 const openDesignVideoById = new Map(openDesignVideoModels.map(entry => [entry.modelId, entry]));
 
 const OPENDESIGN_VIDEO_RATIOS: Record<string, readonly string[]> = {
+  'magi-2': ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
   'doubao-seedance-2-5-260628': ['adaptive', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
   'doubao-seedance-2-5-flash-261115': ['adaptive', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
   'wan-2.7': ['adaptive', '16:9', '9:16', '1:1', '4:3', '3:4'],
@@ -346,15 +347,15 @@ function buildOpenDesignCuratedEndpoints(): ModelEndpointEntry[] {
         maxItems: refCap,
         description: `Up to ${refCap} reference ${refCap === 1 ? 'image' : 'images'} accepted on /images/edits.`,
       });
-    } else if (model.modality === 'video' && model.modelId.startsWith('doubao-seedance-')) {
+    } else if (model.modality === 'video' && (model.modelId.startsWith('doubao-seedance-') || model.modelId === 'magi-2')) {
       parameters.push({
         key: 'images',
         standardKey: 'referenceImages',
-        label: 'First Frame / Reference Images',
+        label: model.modelId === 'magi-2' ? 'First Frame Image' : 'First Frame / Reference Images',
         type: 'array',
         itemType: 'string',
         required: false,
-        maxItems: 10,
+        maxItems: model.modelId === 'magi-2' ? 1 : 10,
       });
     }
 
@@ -401,7 +402,7 @@ function buildOpenDesignCuratedEndpoints(): ModelEndpointEntry[] {
         tags: [
           'opendesign',
           'verified',
-          ...(videoMeta?.badge === 'New' ? ['fast'] : []),
+          ...(model.modelId.includes('flash') ? ['fast'] : []),
           ...(nativeAudio ? ['native-audio'] : []),
           ...(primaryTask === 'text-to-speech' ? ['tts'] : []),
           ...(primaryTask === 'text-to-music' ? ['music'] : []),

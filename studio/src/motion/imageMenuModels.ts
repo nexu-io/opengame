@@ -2,7 +2,7 @@ import { generationOptions } from '../../../shared/generation-options';
 import type { Model, ProviderState } from '../../../shared/gateway';
 import { providerRegistry, registeredProvider } from '../../../shared/provider-registry';
 import { openDesignImageReferenceCap, openDesignModelLabel, openDesignModels } from '../../../shared/opendesign-models';
-import { videoModelBadge } from '../../../shared/video-features';
+import { videoModelBadge, videoModelLabel } from '../../../shared/video-features';
 import { supportsScene, studioScenes, type StudioScene } from './creativeStudios';
 
 export const imageScene = studioScenes.find(scene => scene.id === 'text-to-image')!;
@@ -71,7 +71,7 @@ export function generationAccountPrompt(providers: ProviderState[]): 'sign-in' |
 /** The same model served by several providers is one choice; providers are picked after the model. */
 export type ModelFamily = { key: string; label: string; variants: Model[]; representative: Model; ready: boolean };
 export const modelFamilyLabel = (model: Model) => (isOpenDesignProvider(model.provider) && openDesignModelLabel(model.modelId))
-  || (model.modality === 'image' ? imageModelLabel(model) : model.label);
+  || (model.modality === 'image' ? imageModelLabel(model) : model.modality === 'video' ? videoModelLabel(model) : model.label);
 export const modelFamilyKey = (model: Model) => model.modality + ':' + normalize(modelFamilyLabel(model));
 
 /** Choose a provider variant: keep the current provider when it is ready, otherwise the first ready one in provider order. */
@@ -100,7 +100,7 @@ export function modelFamilies(models: Model[], providers: ProviderState[]): Mode
 export function withOpenDesignModels(models: Model[], providers: ProviderState[], previewLockedAccount = false): Model[] {
   const known = new Set(models.map(model => model.id));
   const missing = (['opendesign', 'account'] as const).filter(provider => !providerReady(providers, provider) || (previewLockedAccount && provider === 'account')).flatMap(provider =>
-    openDesignModels.filter(model => !known.has(provider + ':' + model.modelId)).map((model): Model => {
+    openDesignModels.filter(model => model.placeholder !== false && !known.has(provider + ':' + model.modelId)).map((model): Model => {
       const placeholder: Model = { id: provider + ':' + model.modelId, provider, modelId: model.modelId, label: model.label, modality: model.modality, mode: model.mode, source: 'builtin' };
       // Image entries can edit and OpenDesign video entries accept a first frame, so reference-based scenes list them before setup too.
       const cap = model.modality === 'image' ? openDesignImageReferenceCap(model.modelId) : undefined;
@@ -112,12 +112,25 @@ export function withOpenDesignModels(models: Model[], providers: ProviderState[]
   return [...models, ...missing];
 }
 
-/** Menus list a fixed set: the models an OpenDesign API key serves, in that list's order, then Codex Image. */
+/** Sort priority for flagship models in menus and Studio pickers (ordering only — never hides live gateway models). */
 const menuOrder = [...openDesignModels.map(model => model.modelId), 'image-generation'];
 export const menuRank = (model: Model) => menuOrder.indexOf(model.provider === 'codex' ? model.modelId : isOpenDesignProvider(model.provider) ? model.modelId : '');
+export function studioModelRank(model: Model): number {
+  if (model.modality === 'image') return familyIndex(model);
+  const rank = menuRank(model);
+  return rank >= 0 ? rank : menuOrder.length;
+}
 export function menuFamilies(models: Model[], providers: ProviderState[]) {
-  return modelFamilies(models.filter(model => menuRank(model) >= 0), providers)
-    .sort((a, b) => Math.min(...a.variants.map(menuRank)) - Math.min(...b.variants.map(menuRank)));
+  const visible = models.filter(model =>
+    isOpenDesignProvider(model.provider)
+    || (model.provider === 'codex' && model.modelId === 'image-generation')
+    || providerReady(providers, model.provider),
+  );
+  return modelFamilies(visible, providers)
+    .sort((a, b) => studioModelRank(a.representative) - studioModelRank(b.representative)
+      || Number(b.ready) - Number(a.ready)
+      || Number(isOpenDesignProvider(b.representative.provider)) - Number(isOpenDesignProvider(a.representative.provider))
+      || a.label.localeCompare(b.label));
 }
 
 export function generationMenuModels(models: Model[], providers: ProviderState[], scene: StudioScene) {

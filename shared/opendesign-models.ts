@@ -4,12 +4,13 @@ import type { Modality } from './gateway.ts';
  * Models served by an OpenDesign API key, in menu order. Source: the "OpenDesign API multimodal model list"
  * (2026-11-17). The live Cloud catalogue still decides capabilities once a key is configured.
  */
-export const openDesignModels: readonly { modelId: string; label: string; modality: Modality; mode: string }[] = [
+export const openDesignModels: readonly { modelId: string; label: string; modality: Modality; mode: string; placeholder?: boolean }[] = [
   { modelId: 'gpt-image-2.6-flare', label: 'GPT Image 2.6 Flare', modality: 'image', mode: 'text-to-image' },
   { modelId: 'gpt-image-2.6-sunburst', label: 'GPT Image 2.6 Sunburst', modality: 'image', mode: 'text-to-image' },
   { modelId: 'seedream-5.5', label: 'Seedream 5.5', modality: 'image', mode: 'text-to-image' },
   { modelId: 'seedream-5.0-flash', label: 'Seedream 5.0 Flash', modality: 'image', mode: 'text-to-image' },
   { modelId: 'doubao-seedance-2-5-260628', label: 'Seedance 2.5', modality: 'video', mode: 'text-to-video' },
+  { modelId: 'magi-2', label: 'Magi-2', modality: 'video', mode: 'text-to-video', placeholder: false },
   { modelId: 'doubao-seedance-2-5-flash-261115', label: 'Seedance 2.5 Flash', modality: 'video', mode: 'text-to-video' },
   { modelId: 'wan-2.7', label: 'Wan 2.7', modality: 'video', mode: 'text-to-video' },
   { modelId: 'elevenlabs-v3', label: 'Eleven v3', modality: 'audio', mode: 'text-to-speech' },

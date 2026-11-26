@@ -63,6 +63,7 @@ describe('OpenGame monetization attribution & gate hooks', () => {
       .toMatchObject({ kind: 'balance', reason: 'insufficient_balance' });
     expect(detectMonetizationGateFromError({ code: 'quota_exceeded' })).toMatchObject({ kind: 'balance', reason: 'quota_exceeded' });
     expect(detectMonetizationGateFromError({ code: 'concurrency_limit' })).toMatchObject({ kind: 'concurrency', reason: 'concurrency_limit' });
+    expect(detectMonetizationGateFromError({ code: 'video_concurrency_limit_exceeded' })).toMatchObject({ kind: 'concurrency', reason: 'concurrency_limit' });
     expect(detectMonetizationGateFromError({ status: 503, message: 'insufficient balance' })).toBeNull();
     expect(detectMonetizationGateFromError({ status: 502, message: 'Bad Gateway' })).toBeNull();
     expect(readPreviewGateFromSearch('?previewGate=balance')).toMatchObject({ kind: 'balance' });

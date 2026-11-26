@@ -300,7 +300,7 @@ function sortResolutions(values: string[]): string[] {
 }
 
 const seedance25Models = new Set(['doubao-seedance-2-5-260628', 'doubao-seedance-2-5-flash-261115']);
-const alwaysOnVideoAudioModels = new Set(['wan-2.7']);
+const alwaysOnVideoAudioModels = new Set(['wan-2.7', 'magi-2']);
 
 function parseAudioBoolean(value: string): boolean | undefined {
   const normalized = value.trim().toLowerCase();
@@ -309,7 +309,15 @@ function parseAudioBoolean(value: string): boolean | undefined {
   return undefined;
 }
 
+function publishedAudioAlwaysOn(model: Model): boolean {
+  const envelope = publishedStrings(model.nativeOptions?.audio, true);
+  if (!envelope) return false;
+  const parsed = [...new Set(envelope.values.map(parseAudioBoolean).filter((v): v is boolean => v !== undefined))];
+  return parsed.length === 1 && parsed[0] === true;
+}
+
 function publishedAudioToggle(model: Model): { default: boolean } | undefined {
+  if (publishedAudioAlwaysOn(model)) return undefined;
   const envelope = publishedStrings(model.nativeOptions?.audio, true);
   if (envelope) {
     const parsed = envelope.values.map(parseAudioBoolean).filter((v): v is boolean => v !== undefined);
@@ -324,13 +332,14 @@ function publishedAudioToggle(model: Model): { default: boolean } | undefined {
 
 /** Whether an OpenDesign Cloud/account video model permanently generates native audio with no toggle. */
 export function videoAudioAlwaysOn(model: Model): boolean {
-  return isOpenDesignMedia(model) && model.modality === 'video' && alwaysOnVideoAudioModels.has(model.modelId);
+  return isOpenDesignMedia(model) && model.modality === 'video'
+    && (alwaysOnVideoAudioModels.has(model.modelId) || publishedAudioAlwaysOn(model));
 }
 
 /** Whether an OpenDesign Cloud/account video model enables native audio when `generate_audio` is omitted. */
 export function defaultVideoAudioEnabled(model: Model): boolean {
   return isOpenDesignMedia(model) && model.modality === 'video'
-    && (publishedAudioToggle(model)?.default === true || alwaysOnVideoAudioModels.has(model.modelId));
+    && (publishedAudioToggle(model)?.default === true || videoAudioAlwaysOn(model));
 }
 
 const qualityChoiceOrder = ['low', 'medium', 'high'] as const;

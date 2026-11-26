@@ -26,12 +26,14 @@ export function boundedUpstreamCode(raw: unknown): string | undefined {
 export async function readUpstreamErrorCode(response: Response, maxBytes = 65_536): Promise<string | undefined> {
   try {
     const errBody = JSON.parse(await readCappedText(response, maxBytes)) as {
-      error?: { code?: unknown; error_code?: unknown };
+      error?: string | { code?: unknown; error_code?: unknown };
       code?: unknown;
       error_code?: unknown;
     };
-    return boundedUpstreamCode(errBody?.error?.code)
-      ?? boundedUpstreamCode(errBody?.error?.error_code)
+    const errorObj = typeof errBody?.error === 'object' && errBody.error ? errBody.error : undefined;
+    return boundedUpstreamCode(errBody?.error)
+      ?? boundedUpstreamCode(errorObj?.code)
+      ?? boundedUpstreamCode(errorObj?.error_code)
       ?? boundedUpstreamCode(errBody?.error_code)
       ?? boundedUpstreamCode(errBody?.code);
   } catch {

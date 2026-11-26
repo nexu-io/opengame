@@ -16,8 +16,8 @@ export type OpenDesignVideoEntry = {
 };
 
 /**
- * OpenDesign video models verified against core/amr main + live API (2026-11-20).
- * Order reflects menu priority: flagship first, newly added Flash right beside it, then Wan 2.7.
+ * OpenDesign video models verified against core/amr + live API.
+ * Order reflects menu priority: flagship & newly onboarded models first.
  */
 export const openDesignVideoModels: readonly OpenDesignVideoEntry[] = [
   {
@@ -27,6 +27,14 @@ export const openDesignVideoModels: readonly OpenDesignVideoEntry[] = [
     tagline: '4–30s cinematic video up to 1080p with native audio.',
     durations: { min: 4, max: 30, default: 5 },
     resolutions: ['480p', '720p', '1080p'],
+  },
+  {
+    modelId: 'magi-2',
+    label: 'Magi-2',
+    badge: 'New',
+    tagline: '4–30s 1080p cinematic video with built-in synchronized audio.',
+    durations: { min: 4, max: 30, default: 5 },
+    resolutions: ['1080p'],
   },
   {
     modelId: 'doubao-seedance-2-5-flash-261115',
@@ -49,7 +57,12 @@ export const openDesignVideoModels: readonly OpenDesignVideoEntry[] = [
 const openDesignVideoById = new Map(openDesignVideoModels.map(entry => [entry.modelId, entry]));
 
 export function videoModelLabel(model: Pick<Model, 'modelId' | 'label'>) {
-  return openDesignVideoById.get(model.modelId)?.label ?? model.label;
+  const known = openDesignVideoById.get(model.modelId)?.label;
+  if (known) return known;
+  if (model.label === model.modelId && /^doubao-seedance-2[.-]0-\d{6}$/i.test(model.modelId)) {
+    return 'Seedance 2.0';
+  }
+  return model.label;
 }
 
 export function videoModelBadge(model: Pick<Model, 'modelId'>) {

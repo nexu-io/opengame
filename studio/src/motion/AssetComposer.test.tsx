@@ -652,7 +652,7 @@ it('hides reference controls when unsupported and clears image references when s
   expect(container.querySelector('.om-creation-reference')).toBeNull();
 });
 
-it('chooses a provider, then one of its fixed-list models, keeping unconfigured providers visible but unavailable', async () => {
+it('chooses a provider, then any live gateway model for it in flagship order, keeping unconfigured providers visible but unavailable', async () => {
   const { findMediaStudio } = await import('../../../shared/studio-catalog');
   const { studioDestination } = await import('./creativeStudios');
   const base = { modality: 'image' as const, mode: 'text-to-image' as const, source: 'live' as const };
@@ -673,7 +673,7 @@ it('chooses a provider, then one of its fixed-list models, keeping unconfigured 
   const options = () => [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')];
   const names = () => options().map(option => option.querySelector('strong')?.textContent);
   await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Provider"]')!.click());
-  expect(names()).toEqual(['OpenDesign', 'OpenDesign Cloud', 'Codex']);
+  expect(names()).toEqual(['OpenDesign', 'OpenDesign Cloud', 'Codex', 'fal.ai']);
   expect(document.querySelector('.om-picker-popover .om-picker-footer')?.textContent).toContain('Manage providers & API keys');
   expect(options()[0].disabled).toBe(false);
   expect(options()[1].disabled).toBe(true);
@@ -681,8 +681,8 @@ it('chooses a provider, then one of its fixed-list models, keeping unconfigured 
   await act(async () => document.querySelector<HTMLButtonElement>('.om-picker-setup')!.click());
   expect(chrome.openProviderSettings).toHaveBeenCalledExactlyOnceWith('opendesign');
   await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Generation model"]')!.click());
-  // Only the chosen provider's models from the fixed list; others such as Nano Banana and FLUX are not offered.
-  expect(names()).toEqual(['GPT Image 2.6 Flare', 'Seedream 5.5']);
+  // Every live model returned by the chosen provider appears in flagship-first order without a static allowlist.
+  expect(names()).toEqual(['GPT Image 2.6 Flare', 'Seedream 5.5', 'Nano Banana 2']);
   expect(document.querySelector('.om-picker-popover .om-picker-footer')).toBeNull();
   await act(async () => options()[0].click());
   expect(chooseModel).toHaveBeenCalledExactlyOnceWith(flare.id);
@@ -704,10 +704,10 @@ it('offers only OpenDesign providers for feature entries and keeps the prompt wh
     destination: studioDestination(findMediaStudio('design')!, sceneId, null),
   }} />));
   const names = () => [...document.querySelectorAll('[role="option"] strong')].map(node => node.textContent);
-  // Ordinary non-feature Studio entries keep Codex Image alongside OpenDesign and persist choices via studio.chooseModel.
+  // Ordinary non-feature Studio entries include every configured catalog provider and persist choices via studio.chooseModel.
   await render('text-to-image', [flux, cloud, codex], [{ id: 'opendesign', label: 'OpenDesign Cloud', available: true }, { id: 'fal', label: 'fal.ai', available: true }, { id: 'codex', label: 'Codex', available: true }, { id: 'account', label: 'OpenDesign', available: false }]);
   await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Provider"]')!.click());
-  expect(names()).toEqual(['OpenDesign Cloud', 'OpenDesign', 'Codex']);
+  expect(names()).toEqual(['OpenDesign Cloud', 'OpenDesign', 'Codex', 'fal.ai']);
   await act(async () => [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')][2].click());
   expect(chooseModel).toHaveBeenCalledWith(codex.id);
   // Feature scenes restrict strictly to OpenDesign providers and preserve the prompt when OpenDesign needs setup.
@@ -914,7 +914,7 @@ it.each([
     expect(offer.querySelector('p')?.textContent).toBe(modality === 'image' ? imageDetails : 'Enjoy this offer with Plus or higher');
     expect(container.querySelector<HTMLButtonElement>('.om-creation-submit-button')!.disabled).toBe(true);
     await click(picker('Provider'));
-    expect(optionNames()).toEqual(['OpenDesign', 'OpenDesign Cloud', ...(hasCodex ? ['Codex'] : [])]);
+    expect(optionNames()).toEqual(['OpenDesign', 'OpenDesign Cloud', ...(hasCodex ? ['Codex', 'fal.ai'] : [])]);
     await click(picker('Provider'));
     await click(picker('Generation model'));
     const names = optionNames();
@@ -1352,8 +1352,54 @@ it('renders VideoMegaMenu with open video scenes, Omni reference, Soon items, an
   expect(buttons.some(button => button.textContent?.includes('Seedance 2.5') && !button.disabled)).toBe(true);
   expect(buttons.some(button => button.textContent?.includes('Wan 2.7') && !button.disabled)).toBe(true);
   expect(buttons.some(button => button.textContent?.includes('Seedance 2.5 Flash') && button.disabled)).toBe(true);
+  expect(buttons.some(button => button.textContent?.includes('Magi-2') && button.disabled)).toBe(true);
   await act(async () => buttons.find(button => button.textContent?.includes('Multi-shot'))!.click());
   expect(navigate).toHaveBeenCalledWith(expect.objectContaining({ scene: expect.objectContaining({ id: 'video-multi-shot' }), model: null }));
+});
+
+it('shows Magi-2 and newly published live OpenDesign video models in VideoMegaMenu and creation picker without static allowlists', async () => {
+  const { VideoMegaMenu } = await import('./VideoMegaMenu');
+  const { sceneDestination, studioScenes } = await import('./creativeStudios');
+  const navigate = vi.fn();
+  const magi: Model = { id: 'opendesign:magi-2', provider: 'opendesign', modelId: 'magi-2', label: 'magi-2', modality: 'video', mode: 'text-to-video', source: 'live', maxInputImages: 1 };
+  const dynamicVideo: Model = { id: 'opendesign:future-cinema-v9', provider: 'opendesign', modelId: 'future-cinema-v9', label: 'Future Cinema v9', modality: 'video', mode: 'text-to-video', source: 'live', maxInputImages: 1 };
+  const unconfiguredFalWan: Model = { id: 'fal:fal-ai/wan/v2.2-a14b/text-to-video', provider: 'fal', modelId: 'fal-ai/wan/v2.2-a14b/text-to-video', label: 'Wan 2.2', modality: 'video', mode: 'text-to-video', source: 'builtin' };
+  const catalog = {
+    models: [magi, dynamicVideo, unconfiguredFalWan],
+    status: { routes: {}, providers: [{ id: 'opendesign', label: 'OpenDesign Cloud', available: true }, { id: 'fal', label: 'fal.ai', available: false }] },
+  };
+  await act(async () => root.render(<VideoMegaMenu catalog={catalog} destination={null} onNavigate={navigate} />));
+  const modelButtons = [...container.querySelectorAll<HTMLButtonElement>('section[aria-label="Models"] button')];
+  expect(modelButtons.some(button => button.textContent?.includes('Magi-2') && button.textContent?.includes('New') && !button.disabled)).toBe(true);
+  expect(modelButtons.some(button => button.textContent?.includes('Future Cinema v9') && !button.disabled)).toBe(true);
+  // Unconfigured third-party BYOK presets (e.g. fal Wan 2.2) must never leak into VideoMegaMenu as "Soon".
+  expect(modelButtons.some(button => button.textContent?.includes('Wan 2.2'))).toBe(false);
+
+  await act(async () => root.render(<AssetComposer {...props} draft={{ modality: 'video', prompt: 'Ocean cliff', references: [] }} studio={{
+    catalog: { catalog, failed: false, retry: vi.fn() }, chooseModel: vi.fn(), remember: vi.fn(),
+    destination: sceneDestination(studioScenes.find(item => item.id === 'text-to-video')!),
+  }} />));
+  // Unconfigured third-party BYOK providers (fal.ai) must not leak into the Studio Provider picker either.
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Provider"]')!.click());
+  const providerNames = [...document.querySelectorAll<HTMLButtonElement>('[role="option"] strong')].map(el => el.textContent);
+  expect(providerNames).not.toContain('fal.ai');
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Generation model"]')!.click());
+  const names = [...document.querySelectorAll<HTMLButtonElement>('[role="option"] strong')].map(el => el.textContent);
+  expect(names).toEqual(['Magi-2', 'Future Cinema v9']);
+
+  // Flagship OpenDesign image models stay ranked ahead of ready Codex/BYOK models for guests, and Magi-2 is not injected as a guest default placeholder.
+  const { menuFamilies, withOpenDesignModels } = await import('./imageMenuModels');
+  const guestProviders = [
+    { id: 'opendesign', label: 'OpenDesign Cloud', available: false },
+    { id: 'account', label: 'OpenDesign', available: false },
+    { id: 'codex', label: 'Codex', available: true },
+  ];
+  const codexImg: Model = { id: 'codex:image-generation', provider: 'codex', modelId: 'image-generation', label: 'Codex Image', modality: 'image', mode: 'text-to-image', source: 'builtin' };
+  const guestModels = withOpenDesignModels([codexImg], guestProviders);
+  expect(guestModels.some(m => m.modelId === 'magi-2')).toBe(false);
+  const guestImageFamilies = menuFamilies(guestModels.filter(m => m.modality === 'image'), guestProviders);
+  expect(guestImageFamilies[0]?.label).toBe('GPT Image 2.6 Flare');
+  expect(guestImageFamilies.at(-1)?.label).toBe('Codex Image');
 });
 
 it('automatically includes newly published capable OpenDesign models in feature pickers without hardcoded allowlists', async () => {

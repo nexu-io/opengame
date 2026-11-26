@@ -820,6 +820,12 @@ const CANONICAL_RULES: readonly CanonicalRule[] = [
     canonical: (m) => `openai/sora-${m[1].replace('-', '.')}${m[2] ? `-${m[2].toLowerCase()}` : ''}`,
   },
   {
+    pattern: /magi[-_/]?v?(\d+(?:[.-]\d+)?)/i,
+    creator: 'Sand.ai',
+    family: 'magi',
+    canonical: (m) => `sandai/magi-${m[1].replace('-', '.')}`,
+  },
+  {
     pattern: /kling[-_/]?v?(\d+(?:[.-]\d+)?)(?:[-_/]?(pro|master|turbo|o1|standard|std))?/i,
     creator: 'Kuaishou',
     family: 'kling',

@@ -128,6 +128,7 @@ const requestMessages: Record<string, string> = {
   model_access_denied: 'Your OpenDesign plan does not include this model. Choose another model or upgrade your plan.',
   insufficient_balance: 'Your OpenDesign balance is too low for this request. Top up, then try again.',
   tier_limit_exceeded: 'OpenDesign media rate or concurrency limit reached. Wait for running tasks to finish, then try again.',
+  video_concurrency_limit_exceeded: 'OpenDesign media rate or concurrency limit reached. Wait for running tasks to finish, then try again.',
   provider_error: 'The model provider could not complete this request. Try again later or choose another model.',
   request_state_unknown: 'OpenDesign could not confirm whether this request ran, so it was not resubmitted. Check your OpenDesign history before retrying.',
   media_execution_unknown: 'OpenDesign could not confirm whether this request ran, so it was not resubmitted. Check your OpenDesign history before retrying.',
@@ -179,7 +180,7 @@ export class AccountRequestError extends Error {
     // Local CLI flag/argument rejections exit without an HTTP status; do not misreport them as connection or sign-in failures.
     const cliInvalid = !status && !code && /(?:^|\n)Error: (?:if any flags in the group |unknown (?:shorthand )?flag:|invalid argument |required flag\(s\) |flag needs an argument:)/.test(stderr);
     super(
-      (code && requestMessages[code]) || (cliInvalid ? requestMessages.invalid_request : status === 401 ? requestMessages.unauthorized : status ? jobMessages.service : jobMessages.connection),
+      (code && requestMessages[code]) || (cliInvalid ? requestMessages.invalid_request : status === 401 ? requestMessages.unauthorized : status === 429 ? requestMessages.tier_limit_exceeded : status ? jobMessages.service : jobMessages.connection),
       options?.cause !== undefined ? { cause: options.cause } : undefined,
     );
     this.status = status; this.code = code; this.upstreamCode = code;
@@ -1066,11 +1067,11 @@ export class OpenDesignAccount {
       });
     } catch (error) { if (signal.aborted) throw error; throw new Error(jobMessages.connection, { cause: error }); }
     // Only the service error code is kept; the response text can echo the prompt.
-    const body = await response.json().catch(() => undefined) as { task_id?: unknown; error?: { code?: unknown }; code?: unknown } | undefined;
+    const body = await response.json().catch(() => undefined) as { task_id?: unknown; error?: string | { code?: unknown }; code?: unknown } | undefined;
     if (!response.ok) {
-      const code = String(body?.error?.code ?? body?.code ?? '');
+      const code = typeof body?.error === 'string' ? body.error : String(body?.error?.code ?? body?.code ?? '');
       throw withErrorMeta(
-        new Error((Object.hasOwn(requestMessages, code) ? requestMessages[code] : undefined) ?? (response.status === 401 ? requestMessages.unauthorized : jobMessages.service)),
+        new Error((Object.hasOwn(requestMessages, code) ? requestMessages[code] : undefined) ?? (response.status === 401 ? requestMessages.unauthorized : response.status === 429 ? requestMessages.tier_limit_exceeded : jobMessages.service)),
         { status: response.status, upstreamCode: code || undefined, errorSource: 'api' },
       );
     }
@@ -1088,11 +1089,11 @@ export class OpenDesignAccount {
         body: JSON.stringify({ model: job.model.modelId, parameters: { ...parameters, text: job.prompt } }),
       });
     } catch (error) { if (signal.aborted) throw error; throw new Error(jobMessages.connection, { cause: error }); }
-    const body = await response.json().catch(() => undefined) as { task_id?: unknown; error?: { code?: unknown }; code?: unknown } | undefined;
+    const body = await response.json().catch(() => undefined) as { task_id?: unknown; error?: string | { code?: unknown }; code?: unknown } | undefined;
     if (!response.ok) {
-      const code = String(body?.error?.code ?? body?.code ?? '');
+      const code = typeof body?.error === 'string' ? body.error : String(body?.error?.code ?? body?.code ?? '');
       throw withErrorMeta(
-        new Error((Object.hasOwn(requestMessages, code) ? requestMessages[code] : undefined) ?? (response.status === 401 ? requestMessages.unauthorized : jobMessages.service)),
+        new Error((Object.hasOwn(requestMessages, code) ? requestMessages[code] : undefined) ?? (response.status === 401 ? requestMessages.unauthorized : response.status === 429 ? requestMessages.tier_limit_exceeded : jobMessages.service)),
         { status: response.status, upstreamCode: code || undefined, errorSource: 'api' },
       );
     }

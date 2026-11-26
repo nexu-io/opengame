@@ -4,17 +4,12 @@ import { imageFeatures } from '../../../shared/image-features';
 import { videoFeatures } from '../../../shared/video-features';
 import { isFeatureScene, sceneFeature, sceneVideoFeature, supportsScene, type StudioDestination, type StudioScene } from './creativeStudios';
 import type { loadGateway } from './gatewayClient';
-import { generationAccountPrompt, isOpenDesignProvider, menuRank, providerRank, providerReady, withOpenDesignModels } from './imageMenuModels';
-
-const studioSortRank = (model: Model) => {
-  const rank = menuRank(model);
-  return rank < 0 ? Number.MAX_SAFE_INTEGER : rank;
-};
+import { generationAccountPrompt, isOpenDesignProvider, modelFamilyLabel, providerRank, providerReady, studioModelRank, withOpenDesignModels } from './imageMenuModels';
 
 /**
  * Resolves eligible models for Studio scenes and ordinary Assets library generation.
- * Feature scenes match OpenDesign models dynamically by declared capabilities (`supportsScene`)
- * rather than restricting to static menu IDs, so newly published OpenDesign models appear automatically.
+ * Every scene matches models dynamically by modality and declared capabilities (`supportsScene`)
+ * without static model-ID allowlists, so newly published OpenDesign models appear automatically.
  * With two or more image references, models that accept fewer drop out (e.g. Seedream 5.5 accepts 1).
  */
 export function creationModels(
@@ -34,13 +29,15 @@ export function creationModels(
   const featureScene = isFeatureScene(scene);
   const mediaStudio = destination?.studio.id === 'design' || destination?.studio.id === 'cinema';
   const accountPrompt = mediaStudio ? generationAccountPrompt(providers) : undefined;
-  // Non-feature Studio scenes follow the navigation menu model set; feature scenes accept any capability-matched OpenDesign model.
+  // Every Studio scene follows the live gateway catalog without static model-ID allowlists; flagship rank orders display only.
+  // Keep unconfigured third-party BYOK presets out of Studio pickers unless that provider is ready or explicitly pinned.
   const listed = (gateway ? (scene ? withOpenDesignModels(gateway.models, providers, accountPrompt === 'upgrade') : gateway.models).filter(model => model.modality === modality
-    && (!scene || featureScene || strictCapabilityFilter || menuRank(model) >= 0 || model.id === modelId)
+    && (!scene || isOpenDesignProvider(model.provider) || (model.provider === 'codex' && model.modelId === 'image-generation') || providerReady(providers, model.provider) || model.id === modelId)
     && (!scene || supportsScene(model, scene))
     && (!strictCapabilityFilter || !activeCap || capabilitySupportsModel(activeCap, model))
     && (!featureScene || isOpenDesignProvider(model.provider))) : [])
-    .sort((a, b) => providerRank(a.provider) - providerRank(b.provider) || (scene ? studioSortRank(a) - studioSortRank(b) : 0));
+    .sort((a, b) => providerRank(a.provider) - providerRank(b.provider)
+      || (scene ? studioModelRank(a) - studioModelRank(b) || modelFamilyLabel(a).localeCompare(modelFamilyLabel(b)) : 0));
   // When nothing takes every reference, keep the list so the page can explain the limit instead of offering setup.
   const fitting = referenceCount >= 2 && modality === 'image' ? listed.filter(model => modelReferenceLimit(model) >= referenceCount) : listed;
   const compatible = fitting.length ? fitting : listed;

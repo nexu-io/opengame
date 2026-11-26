@@ -628,11 +628,15 @@ test('OpenDesign account and Cloud image models without profiles reject incomple
   } finally { account.close(); }
 }));
 
-test('videoModelLabel and videoModelBadge cover Seedance 2.5, Seedance 2.5 Flash, Wan 2.7 and BYOK passthrough', () => {
+test('videoModelLabel and videoModelBadge cover Magi-2, Seedance 2.5, Seedance 2.5 Flash, Wan 2.7 and BYOK passthrough', () => {
+  assert.equal(videoModelLabel({ modelId: 'magi-2', label: 'magi-2' }), 'Magi-2');
   assert.equal(videoModelLabel({ modelId: 'doubao-seedance-2-5-260628', label: 'doubao-seedance-2-5-260628' }), 'Seedance 2.5');
   assert.equal(videoModelLabel({ modelId: 'doubao-seedance-2-5-flash-261115', label: 'doubao-seedance-2-5-flash-261115' }), 'Seedance 2.5 Flash');
   assert.equal(videoModelLabel({ modelId: 'wan-2.7', label: 'wan-2.7' }), 'Wan 2.7');
+  assert.equal(videoModelLabel({ modelId: 'doubao-seedance-2-0-260128', label: 'doubao-seedance-2-0-260128' }), 'Seedance 2.0');
+  assert.equal(videoModelLabel({ modelId: 'doubao-seedance-2-0-fast-260128', label: 'doubao-seedance-2-0-fast-260128' }), 'doubao-seedance-2-0-fast-260128');
   assert.equal(videoModelLabel({ modelId: 'fal-ai/wan/v2.2', label: 'Wan 2.2' }), 'Wan 2.2');
+  assert.equal(videoModelBadge({ modelId: 'magi-2' }), 'New');
   assert.equal(videoModelBadge({ modelId: 'doubao-seedance-2-5-flash-261115' }), 'New');
   assert.equal(videoModelBadge({ modelId: 'doubao-seedance-2-5-260628' }), 'Popular');
   assert.equal(videoModelBadge({ modelId: 'wan-2.7' }), 'Popular');
@@ -1052,3 +1056,109 @@ test('OpenDesign Cloud API doc alignment: BytePlus 10 voices, music duration->mu
   await runMusic('Upbeat synth loop', { duration: 15 });
   assert.deepEqual(musicBodies[0], { model: 'elevenlabs-music-v2', parameters: { music_length_ms: 15000, prompt: 'Upbeat synth loop' } });
 });
+
+test('Magi-2 video compatibility: capabilities, always-on audio, first-frame fixed ratio, account CLI --generate-audio, and 429 concurrency code', () => fixture(async store => {
+  const { defaultVideoAudioEnabled, videoAudioAlwaysOn } = await import('../shared/generation-options.ts');
+  const { AccountRequestError } = await import('../gateway/account.ts');
+  const { apiJson } = await import('../gateway/network.ts');
+  const magiDurations = [5, 4, ...Array.from({ length: 25 }, (_, i) => i + 6)];
+  for (const provider of ['opendesign', 'account'] as const) {
+    const magi: Model = {
+      id: `${provider}:magi-2`,
+      provider,
+      modelId: 'magi-2',
+      label: 'magi-2',
+      modality: 'video',
+      mode: 'text-to-video',
+      source: 'live',
+      maxInputImages: 1,
+      nativeOptions: {
+        durations: magiDurations,
+        ratios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
+        resolutions: ['1080p'],
+        max_input_images: 5,
+      },
+    };
+    const schema = generationOptions(magi)!;
+    assert.deepEqual(schema.fields.map(f => f.key), ['ratio', 'resolution', 'duration']);
+    assert.equal(schema.fields.find(f => f.key === 'ratio')!.default, '16:9');
+    assert.deepEqual(schema.fields.find(f => f.key === 'resolution')!.choices!.map(c => c.value), ['1080p']);
+    const duration = schema.fields.find(f => f.key === 'duration')!;
+    assert.deepEqual([duration.kind, duration.min, duration.max, duration.default], ['number', 4, 30, 5]);
+    assert.equal(videoAudioAlwaysOn(magi), true);
+    assert.equal(defaultVideoAudioEnabled(magi), true);
+    // Magi-2 accepts explicit fixed ratios alongside input images.
+    assert.equal(usesInputImageRatio(magi, true), false);
+    assert.deepEqual(resolveGenerationParameters(magi, { ratio: '16:9', duration: 5, resolution: '1080p' }, true), { ratio: '16:9', duration: 5, resolution: '1080p' });
+    assert.throws(() => validateGenerationOptions(magi, { duration: 5, generate_audio: false }), /does not support generate_audio=false/);
+    assert.throws(() => validateGenerationOptions(magi, { resolution: '720p' }), /Invalid Resolution/);
+    assert.doesNotThrow(() => validateGenerationOptions(magi, { duration: 30, resolution: '1080p', ratio: '21:9' }));
+  }
+
+  // Future AMR video models that publish single-value always-on audio work automatically without hardcoding.
+  const futureAlwaysOn: Model = {
+    id: 'opendesign:future-always-audio-video',
+    provider: 'opendesign',
+    modelId: 'future-always-audio-video',
+    label: 'Future Video',
+    modality: 'video',
+    mode: 'text-to-video',
+    source: 'live',
+    nativeOptions: { audio: { values: ['on'], default: 'on' }, durations: [5, 10] },
+  };
+  assert.equal(videoAudioAlwaysOn(futureAlwaysOn), true);
+  assert.equal(defaultVideoAudioEnabled(futureAlwaysOn), true);
+  assert.throws(() => validateGenerationOptions(futureAlwaysOn, { duration: 5, generate_audio: false }), /does not support generate_audio=false/);
+
+  // Account CLI forwards --generate-audio for magi-2 so vela-cli@0.1.10 does not default to generate_audio=false.
+  const calls: string[][] = [];
+  const account = new OpenDesignAccount(store.directory, {
+    pollMs: 0,
+    run: async args => {
+      calls.push(args);
+      if (args[1] === 'gen') return JSON.stringify({ task_id: 'vt_magi_1' });
+      if (args[1] === 'get') {
+        await writeFile(args[args.indexOf('--output') + 1], Buffer.from('mp4'));
+        return JSON.stringify({ task_id: args[2], status: 'succeeded' });
+      }
+      throw new Error(`unexpected call: ${args.join(' ')}`);
+    },
+  });
+  account.identity = async () => 'fixture-session';
+  account.summary = async () => ({ state: 'signed-in' } as AccountSummary);
+  try {
+    const magiAccount: Model = {
+      id: 'account:magi-2', provider: 'account', modelId: 'magi-2', label: 'Magi-2',
+      modality: 'video', mode: 'text-to-video', source: 'live', maxInputImages: 1,
+    };
+    await account.generate(
+      { id: fixtureJobId, model: magiAccount, modality: 'video', prompt: 'Ocean sunset', providerOrigin: 'fixture-session', parameters: { duration: 5, resolution: '1080p', ratio: '16:9' } } as GenerationJob,
+      store.directory, new AbortController().signal, async () => {},
+    );
+    const submit = calls.find(args => args[0] === 'video' && args[1] === 'gen')!;
+    assert.ok(submit.includes('--generate-audio'));
+    assert.ok(!submit.includes('--generate-audio=false'));
+  } finally { account.close(); }
+
+  // 429 video_concurrency_limit_exceeded maps cleanly in AccountRequestError (api, media, JSON, bare 429) and apiJson.
+  const accountErr = new AccountRequestError('API request failed with status 429: video_concurrency_limit_exceeded');
+  assert.equal(accountErr.status, 429);
+  assert.equal(accountErr.code, 'video_concurrency_limit_exceeded');
+  assert.match(accountErr.message, /rate or concurrency limit reached/i);
+  const mediaErr = new AccountRequestError('video request rejected (video_concurrency_limit_exceeded, HTTP 429)');
+  assert.equal(mediaErr.status, 429);
+  assert.equal(mediaErr.code, 'video_concurrency_limit_exceeded');
+  assert.match(mediaErr.message, /rate or concurrency limit reached/i);
+  const bare429 = new AccountRequestError('API request failed with status 429');
+  assert.equal(bare429.status, 429);
+  assert.match(bare429.message, /rate or concurrency limit reached/i);
+
+  await assert.rejects(
+    apiJson(
+      (async () => Response.json({ error: 'video_concurrency_limit_exceeded' }, { status: 429 })) as typeof fetch,
+      'https://cloud.example/api/v1/media/videos/tasks',
+      { method: 'POST' },
+    ),
+    (err: any) => err.status === 429 && err.upstreamCode === 'video_concurrency_limit_exceeded',
+  );
+}));
