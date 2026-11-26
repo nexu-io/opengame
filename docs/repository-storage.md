@@ -52,6 +52,8 @@ For a contributed catalog template, use the [template-specific pull command](tem
 
 Contributors edit their original PR normally. A new catalog video, audio file or large image/font can be committed under `<id>/source/assets/` (at most 50 MiB per file). Git LFS remains a supported input, not a required account or separate upload step. Keep small imported assets and small README artwork in ordinary Git. Raw media can make the policy check red until final preparation; do not repeatedly transfer every draft update.
 
+Each PR can transfer up to 100 changed media files and 320 MiB of media in total. Split larger additions into separate PRs and prepare each batch independently.
+
 After the content review, a maintainer opens `nexu-io/opengame` in GitHub, chooses **Actions → Prepare and merge PR → Run workflow**, selects `main` and enters the original PR number. Starting this workflow authorizes preparation and subsequent Squash merge of the prepared commit:
 
 1. Lock the current PR commit and check maintainer identity, fork edit permission and Squash-only repository settings.
