@@ -18,7 +18,7 @@ test('an extracted specimen command uses the existing dependency runtime without
   const source = fileURLToPath(new URL('../', import.meta.url));
   try {
     const plugin = path.join(directory, 'plugin');
-    for (const name of ['scripts/font-specimen.ts', 'shared/font-catalog.ts', 'shared/studio-fonts.ts', 'shared/asset-limits.ts', 'shared/entry.ts', 'skills/openmotion-production/fonts/catalog.json']) {
+    for (const name of ['scripts/font-specimen.ts', 'shared/font-catalog.ts', 'shared/studio-fonts.ts', 'shared/asset-limits.ts', 'shared/entry.ts', 'skills/openmotion-video/fonts/catalog.json']) {
       const target = path.join(plugin, name); await mkdir(path.dirname(target), { recursive: true }); await cp(path.join(source, name), target);
     }
     await writeFile(path.join(plugin, 'package.json'), '{"type":"module"}');

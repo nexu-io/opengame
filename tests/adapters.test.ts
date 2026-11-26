@@ -24,17 +24,17 @@ test('local adapters share one runtime, launch outside its cwd and preserve prev
       assert.equal(await readFile(path.join(output, host, 'openmotion/remix-icon-LICENSE.txt'), 'utf8'), await readFile(path.join(source, 'packages/design-system/remix-icon-LICENSE.txt'), 'utf8'));
       const { readdir } = await import('node:fs/promises');
       assert.deepEqual((await readdir(path.join(output, host, 'openmotion/skills'))).sort(), [...packagedSkills].sort());
-      for (const skill of ['openmotion-director', 'openmotion-template-to-video', 'openmotion-video-to-template']) {
-        assert.equal(await readFile(path.join(output, host, 'openmotion/skills', skill, 'SKILL.md'), 'utf8'), await readFile(path.join(source, 'skills', skill, 'SKILL.md'), 'utf8'));
+      for (const workflow of ['director.md', 'production.md', 'recreate.md', 'template-to-video.md', 'video-to-template.md']) {
+        assert.equal(await readFile(path.join(output, host, 'openmotion/skills/openmotion-video/workflows', workflow), 'utf8'), await readFile(path.join(source, 'skills/openmotion-video/workflows', workflow), 'utf8'));
       }
-      for (const file of ['references/unchanged-export.md', 'scripts/delivery.mjs', 'scripts/playback.mjs']) {
-        assert.equal(await readFile(path.join(output, host, 'openmotion/skills/openmotion-template-to-video', file), 'utf8'), await readFile(path.join(source, 'skills/openmotion-template-to-video', file), 'utf8'));
+      for (const file of ['references/template-to-video/unchanged-export.md', 'scripts/delivery.mjs', 'scripts/playback.mjs']) {
+        assert.equal(await readFile(path.join(output, host, 'openmotion/skills/openmotion-video', file), 'utf8'), await readFile(path.join(source, 'skills/openmotion-video', file), 'utf8'));
       }
-      for (const file of ['references/typography.md', 'references/fonts.md', 'fonts/catalog.json']) {
-        assert.equal(await readFile(path.join(output, host, 'openmotion/skills/openmotion-production', file), 'utf8'), await readFile(path.join(source, 'skills/openmotion-production', file), 'utf8'));
+      for (const file of ['references/shared/typography.md', 'references/shared/fonts.md', 'fonts/catalog.json']) {
+        assert.equal(await readFile(path.join(output, host, 'openmotion/skills/openmotion-video', file), 'utf8'), await readFile(path.join(source, 'skills/openmotion-video', file), 'utf8'));
       }
-      for (const name of ['SKILL.md', 'references/rebuild.md', 'references/verify.md', 'references/rendering.md', 'assets/reconstruction.js', 'scripts/measure_frame.mjs', 'scripts/register_motion.py', 'scripts/measure_motion.py', 'scripts/observe_marks.py', 'scripts/vision-tools.mjs']) {
-        assert.equal(await readFile(path.join(output, host, 'openmotion/skills/openmotion-recreate', name), 'utf8'), await readFile(path.join(source, 'skills/openmotion-recreate', name), 'utf8'));
+      for (const name of ['SKILL.md', 'references/recreate/rebuild.md', 'references/recreate/verify.md', 'references/recreate/rendering.md', 'assets/reconstruction.js', 'scripts/measure_frame.mjs', 'scripts/register_motion.py', 'scripts/measure_motion.py', 'scripts/observe_marks.py', 'scripts/vision-tools.mjs']) {
+        assert.equal(await readFile(path.join(output, host, 'openmotion/skills/openmotion-video', name), 'utf8'), await readFile(path.join(source, 'skills/openmotion-video', name), 'utf8'));
       }
     }
     for (const host of exported.hosts) assert.ok(existsSync(path.join(output, `openmotion-${host}-${exported.version}-local.zip`)));
@@ -75,7 +75,7 @@ test('local adapters share one runtime, launch outside its cwd and preserve prev
         assert.deepEqual(marketplace.plugins[0], { name: 'openmotion', source: { source: 'local', path: './openmotion' },
           policy: { installation: 'AVAILABLE', authentication: 'ON_INSTALL' }, category: 'Productivity' });
       }
-      assert.equal(await readFile(path.join(plugin, 'skills/openmotion-production/SKILL.md'), 'utf8'), await readFile(path.join(source, 'skills/openmotion-production/SKILL.md'), 'utf8'));
+      assert.equal(await readFile(path.join(plugin, 'skills/openmotion-video/SKILL.md'), 'utf8'), await readFile(path.join(source, 'skills/openmotion-video/SKILL.md'), 'utf8'));
       for (const filename of ['AGENTS.md', 'CLAUDE.md', 'docs/README.md', 'docs/product/architecture.md']) {
         assert.equal(await readFile(path.join(plugin, filename), 'utf8'), await readFile(path.join(source, filename), 'utf8'));
       }

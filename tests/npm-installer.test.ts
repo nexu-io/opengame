@@ -33,7 +33,7 @@ function clearNativeEnvironment(t: any) {
 }
 async function setupFixture(t: any) {
   const directory = await fixture(t), application = path.join(directory, 'source'), home = path.join(directory, 'install'), skillsDirectory = path.join(directory, 'skills');
-  for (const name of ['scripts', 'shared', 'studio/build', 'skills/openmotion-production', 'docs', 'mcp-ui/template-recommendations']) await mkdir(path.join(application, name), { recursive: true });
+  for (const name of ['scripts', 'shared', 'studio/build', 'skills/openmotion-video', 'docs', 'mcp-ui/template-recommendations']) await mkdir(path.join(application, name), { recursive: true });
   for (const name of ['mcp.ts', 'scripts/npm-runtime.mjs', 'studio/build/index.html', 'README.md', 'AGENTS.md', 'CLAUDE.md']) await writeFile(path.join(application, name), 'fixture');
   for (const file of ['docs/install.md', 'scripts/install-onboarding.mjs', 'scripts/inline-onboarding.mjs', 'scripts/codex-host-handoff.mjs', 'scripts/check-installed-mcp.mjs', 'shared/onboarding-templates.ts', 'scripts/runtime-assets.mjs', 'scripts/open-template-library.ts', 'shared/workspace-url.ts', 'shared/studio-catalog.ts', 'shared/capability-registry.ts', 'shared/model-capabilities.ts', 'shared/gateway.ts', 'shared/generation-options.ts', 'shared/opendesign-models.ts', 'shared/provider-registry.ts', 'shared/provider-presets.json', 'mcp-ui/template-recommendations/i18n.ts']) await cp(new URL('../' + file, import.meta.url), path.join(application, file));
   for (const file of ['shared/install-attribution.ts', 'packages/multimodal-models/src/schema.ts', 'packages/multimodal-models/src/normalize.ts', 'tracking/node.ts', 'tracking/core.ts', 'tracking/host.ts', 'tracking/device.ts', 'tracking/events.ts', 'tracking/tool-fields.ts', 'tracking/studio-events.ts']) {
@@ -43,7 +43,7 @@ async function setupFixture(t: any) {
   await writeFile(path.join(application, 'shared/tracking.ts'), 'export function trackingLocked(){return false} export function trackingPreference(){return true} export async function createAppTracking(){return {track(){}}} export async function closeTracking(){}');
   await writeFile(path.join(application, 'workspace.ts'), 'export class WorkspaceStore { constructor(directory = process.env.MOTION_DATA_DIR) { this.directory = directory; } }');
   await writeFile(path.join(application, 'preview.ts'), `export async function ensureService(store) { if (store.directory !== process.env.MOTION_DATA_DIR) throw new Error('Wrong workspace'); return { previewUrl: 'http://127.0.0.1:4173' }; }`);
-  await writeFile(path.join(application, 'skills/openmotion-production/SKILL.md'), '---\nname: openmotion-production\ndescription: fixture\n---\nFixture');
+  await writeFile(path.join(application, 'skills/openmotion-video/SKILL.md'), '---\nname: openmotion-video\ndescription: fixture\n---\nFixture');
   await writeJSON(path.join(application, 'shared/template-config.json'), { environment: 'prod' });
   await cp(new URL('../shared/mcp-profiles.json', import.meta.url), path.join(application, 'shared/mcp-profiles.json'));
   await writeJSON(path.join(application, 'package.json'), { name: 'motion-fixture', version: '1.2.3', private: true });
@@ -139,10 +139,10 @@ for (const host of ['workbuddy', 'claude', 'codex', 'deepseek']) {
     const installed = await setup({ ...options, ...extra, host });
     const flat = host === 'claude' || host === 'workbuddy';
     const root = flat ? options.skillsDirectory : path.join(host === 'codex' ? path.join(options.skillsDirectory, 'openmotion-workflows') : installed.hostInstallation.bundleDirectory, 'skills');
-    const retired = ['motion-director', 'motion-production', 'motion-recreate', 'motion-template-to-video', 'motion-video-to-template', 'reference-video'];
+    const retired = ['motion-director', 'motion-production', 'motion-recreate', 'motion-template-to-video', 'motion-video-to-template', 'reference-video', 'openmotion-director', 'openmotion-production', 'openmotion-recreate', 'openmotion-template-to-video', 'openmotion-video-to-template'];
     for (const name of retired) {
       const old = path.join(root, name); await mkdir(old);
-      if (flat) await cp(path.join(root, 'openmotion-production/openmotion-install.json'), path.join(old, 'openmotion-install.json'));
+      if (flat) await cp(path.join(root, 'openmotion-video/openmotion-install.json'), path.join(old, 'openmotion-install.json'));
       await writeFile(path.join(old, 'SKILL.md'), 'Retired workflow');
     }
     const foreign = path.join(options.skillsDirectory, 'user-owned');
@@ -159,7 +159,7 @@ for (const host of ['workbuddy', 'claude', 'codex', 'deepseek']) {
     assert.equal(await readFile(path.join(installed.dataDirectory, 'keep.txt'), 'utf8'), 'Existing project data');
     const upgradedRoot = host === 'deepseek' ? path.join(upgraded.hostInstallation.bundleDirectory, 'skills') : root;
     for (const name of retired) await assert.rejects(readdir(path.join(upgradedRoot, name)), { code: 'ENOENT' });
-    await readFile(path.join(upgradedRoot, 'openmotion-production/SKILL.md'));
+    await readFile(path.join(upgradedRoot, 'openmotion-video/SKILL.md'));
     if (host === 'deepseek') {
       assert.notEqual(upgradedRoot, root);
       await readFile(path.join(root, retired[0], 'SKILL.md')); // The running host's old bundle is untouched.
@@ -396,7 +396,7 @@ test('setup installs complete Skills and MCP without waiting for native download
   assert.equal(first.nativeDependencies, 'background-preparation; status and retry available in Studio');
   const scope = JSON.parse(await readFile(path.join(options.skillsDirectory, 'openmotion-workflows/scope.json'), 'utf8'));
   assert.equal(scope.runtimeRoot, first.appRoot);
-  assert.match(await readFile(path.join(options.skillsDirectory, 'openmotion-workflows/skills/openmotion-production/SKILL.md'), 'utf8'), /openmotion-production/);
+  assert.match(await readFile(path.join(options.skillsDirectory, 'openmotion-workflows/skills/openmotion-video/SKILL.md'), 'utf8'), /openmotion-video/);
   assert((await readdir(path.join(options.home, 'cache/native/fixture'))).includes('preparation.log'));
   await mkdir(first.dataDirectory, { recursive: true });
   await writeFile(path.join(first.dataDirectory, 'keep.txt'), 'user work');
@@ -461,7 +461,7 @@ test('WorkBuddy installs flat Skills and preserves other hosts and native MCP se
   const config = JSON.parse(await readFile(path.join(clientHome, 'mcp.json'), 'utf8'));
   assert.equal(config.settings.keep, true); assert.equal(config.mcpServers.unrelated.command, 'keep-me');
   assert.equal(config.mcpServers.openmotion.args[0], buddy.launcher);
-  const marker = JSON.parse(await readFile(path.join(options.skillsDirectory, 'openmotion-production/openmotion-install.json'), 'utf8'));
+  const marker = JSON.parse(await readFile(path.join(options.skillsDirectory, 'openmotion-video/openmotion-install.json'), 'utf8'));
   assert.equal(marker.host, 'workbuddy'); assert.equal(marker.runtimeRoot, buddy.appRoot);
   assert.equal((await setup({ ...options, host: 'workbuddy' })).appRoot, buddy.appRoot);
   assert.equal((await readdir(path.join(options.home, 'apps'))).length, 1);
@@ -496,16 +496,16 @@ test('Claude flat Skills keep external document links and refuse an unowned skil
   const claude = path.join(options.directory, 'claude-cli'), config = path.join(clientHome, '.claude.json');
   await writeJSON(config, { keep: true });
   await writeFile(claude, `#!${process.execPath}\nimport fs from 'node:fs';\nconst f=${JSON.stringify(config)},v=JSON.parse(fs.readFileSync(f,'utf8'));const a=process.argv.slice(2);v.mcpServers={...v.mcpServers,openmotion:JSON.parse(a[5])};fs.writeFileSync(f,JSON.stringify(v));\n`, { mode: 0o755 });
-  await mkdir(path.join(options.application, 'skills/openmotion-production/references'));
+  await mkdir(path.join(options.application, 'skills/openmotion-video/references/shared'), { recursive: true });
   await writeFile(path.join(options.application, 'docs/model-gateway.md'), 'Shared gateway');
-  await writeFile(path.join(options.application, 'skills/openmotion-production/references/production.md'), '[gateway](../../../docs/model-gateway.md)');
+  await writeFile(path.join(options.application, 'skills/openmotion-video/references/shared/production.md'), '[gateway](../../../../docs/model-gateway.md)');
   const manifest = JSON.parse(await readFile(options.manifest, 'utf8'));
   manifest.application = await archive(options.directory, options.application, 'with-links'); await writeJSON(options.manifest, manifest);
   const installed = await setup({ ...options, host: 'claude', claude });
   assert.equal(JSON.parse(await readFile(config, 'utf8')).keep, true);
-  assert.match(await readFile(path.join(options.skillsDirectory, 'openmotion-production/references/production.md'), 'utf8'), /\]\(<.*apps\/.*docs\/model-gateway\.md>\)/);
+  assert.match(await readFile(path.join(options.skillsDirectory, 'openmotion-video/references/shared/production.md'), 'utf8'), /\]\(<.*apps\/.*docs\/model-gateway\.md>\)/);
   assert.equal((await setup({ ...options, host: 'claude', claude })).appRoot, installed.appRoot);
-  const other = path.join(options.directory, 'unowned-skills/openmotion-production'); await mkdir(other, { recursive: true }); await writeFile(path.join(other, 'SKILL.md'), 'keep');
+  const other = path.join(options.directory, 'unowned-skills/openmotion-video'); await mkdir(other, { recursive: true }); await writeFile(path.join(other, 'SKILL.md'), 'keep');
   await assert.rejects(setup({ ...options, host: 'claude', claude, skillsDirectory: path.dirname(other) }), /not owned/);
   assert.equal(await readFile(path.join(other, 'SKILL.md'), 'utf8'), 'keep');
   for (const invalid of [false, 0, '', { mcpServers: [] }]) {
@@ -526,7 +526,7 @@ test('Harness installs a bundle with its own direct Skill root and recognizes re
   const patch = JSON.parse(await readFile(path.join(bundle, 'cordis.patch.yml'), 'utf8'))[0].insert;
   assert.equal(patch[0].config.args[0], first.launcher);
   assert.deepEqual(patch[1].config.customSkillDirs, [path.join(bundle, 'skills')]);
-  await readFile(path.join(bundle, 'skills/openmotion-production/SKILL.md'));
+  await readFile(path.join(bundle, 'skills/openmotion-video/SKILL.md'));
   assert.equal((await setup({ ...options, host: 'deepseek', dsh })).appRoot, first.appRoot);
   await assert.rejects(setup({ ...options, host: 'deepseek', dsh, profile: '../bad' }), /simple/);
   await writeJSON(path.join(profile, 'package.json'), false);
@@ -541,8 +541,8 @@ test('a failed new host registration restores the shared install and earlier hos
   const codex = await setup(options), before = await readFile(path.join(options.home, 'install.json'), 'utf8');
   await assert.rejects(setup({ ...options, host: 'claude', claude: '/missing-claude' }));
   assert.equal(await readFile(path.join(options.home, 'install.json'), 'utf8'), before);
-  await readFile(path.join(options.skillsDirectory, 'openmotion-workflows/skills/openmotion-production/SKILL.md'));
-  await assert.rejects(readdir(path.join(options.skillsDirectory, 'openmotion-production')), { code: 'ENOENT' });
+  await readFile(path.join(options.skillsDirectory, 'openmotion-workflows/skills/openmotion-video/SKILL.md'));
+  await assert.rejects(readdir(path.join(options.skillsDirectory, 'openmotion-video')), { code: 'ENOENT' });
   assert.equal(JSON.parse(before).appRoot, codex.appRoot);
 });
 
@@ -570,13 +570,13 @@ test('flat Skill upgrades remove only this host installation\'s obsolete entries
   const first = await setup({ ...options, host: 'workbuddy' });
   for (const name of ['obsolete-entry', '.openmotion-backup', 'other-host']) {
     await mkdir(path.join(options.skillsDirectory, name));
-    const marker = JSON.parse(await readFile(path.join(options.skillsDirectory, 'openmotion-production/openmotion-install.json'), 'utf8'));
+    const marker = JSON.parse(await readFile(path.join(options.skillsDirectory, 'openmotion-video/openmotion-install.json'), 'utf8'));
     if (name === 'other-host') marker.host = 'claude';
     await writeJSON(path.join(options.skillsDirectory, name, 'openmotion-install.json'), marker);
   }
   await setup({ ...options, host: 'workbuddy' });
   await assert.rejects(readdir(path.join(options.skillsDirectory, 'obsolete-entry')), { code: 'ENOENT' });
-  for (const name of ['.openmotion-backup', 'other-host', 'openmotion-production']) await readdir(path.join(options.skillsDirectory, name));
+  for (const name of ['.openmotion-backup', 'other-host', 'openmotion-video']) await readdir(path.join(options.skillsDirectory, name));
   assert.equal(JSON.parse(await readFile(path.join(options.home, 'install.json'), 'utf8')).appRoot, first.appRoot);
 });
 
@@ -633,7 +633,7 @@ test('failed Harness upgrade preserves the registered bundle and removes its unu
   await assert.rejects(setup({ ...options, host: 'deepseek', dsh: cli }), /registration failed/);
   assert.equal(await readFile(path.join(options.home, 'install.json'), 'utf8'), original);
   assert.deepEqual(await readdir(path.join(options.home, 'hosts')), bundles);
-  await readFile(path.join(installed.hostInstallation.bundleDirectory, 'skills/openmotion-production/SKILL.md'));
+  await readFile(path.join(installed.hostInstallation.bundleDirectory, 'skills/openmotion-video/SKILL.md'));
 });
 
 async function harnessRecoveryFixture(t: any) {
@@ -726,7 +726,7 @@ test('an Agent without an adapter gets the same application, launcher and Skills
   assert.match(installed.agentRegistration.instructions, /openmotion_get_project/);
   assert.deepEqual(installed.onboarding.directAccess.toolsArgs.slice(-4), ['--home', installed.launcher.replace(/[/\\]run-mcp.mjs$/, ''), '--host', 'opencode']);
   assert.equal(await readFile(options.config, 'utf8'), codexConfig, 'no other host configuration is touched');
-  const marker = JSON.parse(await readFile(path.join(options.skillsDirectory, 'openmotion-production/openmotion-install.json'), 'utf8'));
+  const marker = JSON.parse(await readFile(path.join(options.skillsDirectory, 'openmotion-video/openmotion-install.json'), 'utf8'));
   assert.equal(marker.host, 'agents'); assert.equal(marker.runtimeRoot, installed.appRoot);
   // A second adapter-less Agent shares the same Skills root instead of being refused as a foreign owner.
   const cursor: any = await setup({ ...options, host: 'cursor-agent', codex: undefined });
@@ -773,7 +773,7 @@ test('Codex workflow bundle coexists with the standalone primary Skill', { skip:
   const result = await setup(options);
   assert.equal(await readFile(path.join(options.skillsDirectory, 'openmotion/SKILL.md'), 'utf8'), 'standalone primary Skill');
   assert.equal(result.publicSkill.status, 'skipped');
-  assert.match(await readFile(path.join(options.skillsDirectory, 'openmotion-workflows/skills/openmotion-production/SKILL.md'), 'utf8'), /openmotion-production/);
+  assert.match(await readFile(path.join(options.skillsDirectory, 'openmotion-workflows/skills/openmotion-video/SKILL.md'), 'utf8'), /openmotion-video/);
 });
 
 test('legacy Codex bundle migration preserves the old bundle on failed registration', { skip: process.platform === 'win32' }, async t => {
@@ -791,7 +791,7 @@ test('legacy Codex bundle migration preserves the old bundle on failed registrat
   await writeJSON(options.config, {});
   await setup(options);
   await assert.rejects(readFile(path.join(legacy, 'scope.json')), { code: 'ENOENT' });
-  assert.match(await readFile(path.join(target, 'skills/openmotion-production/SKILL.md'), 'utf8'), /openmotion-production/);
+  assert.match(await readFile(path.join(target, 'skills/openmotion-video/SKILL.md'), 'utf8'), /openmotion-video/);
 });
 
 

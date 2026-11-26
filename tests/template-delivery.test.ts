@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { packageProject } from '../skills/openmotion-template-to-video/scripts/delivery.mjs';
-import { playbackServer, byteRange } from '../skills/openmotion-template-to-video/scripts/playback.mjs';
+import { packageProject } from '../skills/openmotion-video/scripts/delivery.mjs';
+import { playbackServer, byteRange } from '../skills/openmotion-video/scripts/playback.mjs';
 import { WorkspaceStore } from '../workspace.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -135,7 +135,7 @@ test('thin exported helper resolves scope metadata instead of assuming a reposit
   const f = await fixture();
   try {
     const thin = path.join(f.directory, 'thin/scripts'); await mkdir(thin, { recursive: true });
-    await writeFile(path.join(thin, 'delivery.mjs'), await readFile(path.join(root, 'skills/openmotion-template-to-video/scripts/delivery.mjs')));
+    await writeFile(path.join(thin, 'delivery.mjs'), await readFile(path.join(root, 'skills/openmotion-video/scripts/delivery.mjs')));
     await writeFile(path.join(f.directory, 'thin/scope.json'), JSON.stringify({ runtimeRoot: root }));
     const detail = path.join(f.directory, 'detail.json'); await writeFile(detail, JSON.stringify(f.detail));
     const child = spawnSync(process.execPath, [path.join(thin, 'delivery.mjs'), 'package', '--project-json', detail, '--output', path.join(f.directory, 'thin-output')], { encoding: 'utf8' });

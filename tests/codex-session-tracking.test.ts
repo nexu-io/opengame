@@ -8,6 +8,7 @@ import test from 'node:test';
 import { rpc, releaseRegistry } from '../mcp.ts';
 import {
   extractCodexThreadMeta,
+  extractSkillsFromText,
   isCompletedExportToolResult,
   recordCodexThreadActivity,
   syncActiveCodexThreads,
@@ -775,4 +776,24 @@ test('enforces the 5-failure eviction cap across 19, 20, and 21-turn backlogs wh
   assert.equal(page2.syncedTurns, 1);
   assert.equal(page2.activeThreads, 0);
   assert.deepEqual(receivedIndices, Array.from({ length: 21 }, (_, i) => i));
+});
+
+test('extractSkillsFromText recognizes consolidated openmotion-video router, sub-workflows, legacy paths, and MCP URIs', () => {
+  assert.deepEqual(extractSkillsFromText('cat skills/openmotion-video/SKILL.md'), ['openmotion-video']);
+  assert.deepEqual(
+    extractSkillsFromText('cat skills/openmotion-video/workflows/director.md'),
+    ['openmotion-video', 'openmotion-director'],
+  );
+  assert.deepEqual(
+    extractSkillsFromText('sed -n 1,80p skills/openmotion-video/workflows/template-to-video.md'),
+    ['openmotion-video', 'openmotion-template-to-video'],
+  );
+  assert.deepEqual(
+    extractSkillsFromText('cat skills/openmotion-director/SKILL.md'),
+    ['openmotion-director'],
+  );
+  assert.deepEqual(
+    extractSkillsFromText('openmotion://workflow/video/start openmotion://workflow/recreate/start'),
+    ['openmotion-video', 'openmotion-recreate'],
+  );
 });

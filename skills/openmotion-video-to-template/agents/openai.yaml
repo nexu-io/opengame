@@ -1,3 +1,0 @@
-interface:
-  display_name: "OpenMotion Video to Template"
-  short_description: "Rebuild a reference video into a reusable template in OpenMotion"

@@ -6,18 +6,18 @@ description: >-
   Capability Center (openmotion_capability_discover, openmotion_capability_run, openmotion_job_manage, openmotion_asset_manage,
   with openmotion_media_use and openmotion_assets_use retained for compatibility) across configured BYOK providers or a signed-in
   OpenDesign account. Prefer dedicated capabilityId execution over simulating atomic edits with generic model prompts. Native-only tasks with no new speech or music stay outside generation unless explicitly requested. Not a whole-film entry point: creating, recreating, templating, editing or exporting a whole video
-  belongs to the OpenMotion video entries.
+  belongs to openmotion-video.
 ---
 
 # OpenMotion Media Generation
 
 Produce verified image, video, speech or music assets that fulfill a specific creative or standalone purpose, returning pinned asset/version identities, provider/model/job identities, measured technical specifications and honest quality observations; import only the selected versions into a film project.
 
-Apply the [shared material policy](../openmotion-production/references/materials.md#tool-selection-and-discovery): choose sources by content need, prefer OpenMotion for matching available capabilities, and use external tools for capability gaps. Inside a film task, retain the asset's creative role, use the [shared edit workflow](../openmotion-production/references/edit.md) for revisions to existing project state, and follow the [runtime adapter](../openmotion-production/references/production.md) when continuing project edits.
+Apply the [shared material policy](references/materials.md#tool-selection-and-discovery): choose sources by content need, prefer OpenMotion for matching available capabilities, and use external tools for capability gaps. Inside a film, design, or game task, retain the asset's creative role and follow the calling workflow's revision-protected edit and runtime rules.
 
-Apply the shared [asset naming contract](../openmotion-production/references/materials.md#asset-naming) when assigning names, including standalone media.
+Apply the shared [asset naming contract](references/materials.md#asset-naming) when assigning names, including standalone media.
 
-Apply the shared [generation boundary](../openmotion-production/references/materials.md#generation-boundary) before discovering or generating media.
+Apply the shared [generation boundary](references/materials.md#generation-boundary) before discovering or generating media.
 
 Keep credentials strictly isolated: the shared local media service reads saved workspace keys and injects authentication. Never read `secrets.json`, print or log keys, place credentials into prompts or parameters, or ask the user to paste an API key into chat. Keep user-facing setup, consent and delivery messages in plain language in the user's language; never expose internal Skill names, Tool names, guidance file paths, quoted rule text or internal labels (`mg`, `media`, `replaced — not scored`) in any message to the user.
 
@@ -42,4 +42,4 @@ Read the applicable references before their operations; reuse complete bodies al
 | Submit a new asset, track/resume an existing job, recover a failure or regenerate | [Submission and job recovery](references/jobs.md); new generation prefers `openmotion_capability_run` / `openmotion_job_manage` (with `openmotion_assets_use` compatible), existing `media_use` jobs retain their original route |
 | Inspect completed candidates, import selected versions or deliver results | [Inspection, adoption and handback](references/inspection.md) |
 
-MCP-only clients read this entry at `openmotion://workflow/media/start`; the references are `media/planning`, `media/setup`, `media/jobs` and `media/inspection`, and each provider guide is `media/<provider ID>`, listed in the job procedure.
+MCP-only clients read this entry at `openmotion://workflow/media/start`; the references are `media/materials`, `media/planning`, `media/setup`, `media/jobs` and `media/inspection`, and each provider guide is `media/<provider ID>`, listed in the job procedure.

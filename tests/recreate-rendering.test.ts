@@ -11,7 +11,7 @@ test('recreation helpers preserve source pixels, sprite detail and seekable stat
   t.after(() => browser.close());
   const page = await browser.newPage();
   await page.setContent('<!doctype html><html><body></body></html>');
-  await page.addScriptTag({ content: await readFile(new URL('../skills/openmotion-recreate/assets/reconstruction.js', import.meta.url), 'utf8') });
+  await page.addScriptTag({ content: await readFile(new URL('../skills/openmotion-video/assets/reconstruction.js', import.meta.url), 'utf8') });
 
   await t.test('complete glyph texture moves through its mask with exact scale and crop offsets', async () => {
     const result = await page.evaluate(() => {

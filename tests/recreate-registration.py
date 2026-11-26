@@ -12,7 +12,7 @@ import cv2
 import numpy as np
 
 
-source = Path(__file__).resolve().parents[1] / 'skills/openmotion-recreate/scripts/register_motion.py'
+source = Path(__file__).resolve().parents[1] / 'skills/openmotion-video/scripts/register_motion.py'
 spec = importlib.util.spec_from_file_location('register_motion', source)
 registration = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(registration)

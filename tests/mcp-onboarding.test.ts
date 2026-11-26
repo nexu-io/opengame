@@ -57,8 +57,8 @@ test('guide-draft handoff is discoverable and translated with its actual recover
   }
   const shared = readFileSync(new URL('../shared/integration.ts', import.meta.url), 'utf8');
   assert.match(shared, /\$\{templateGuideContinuationInstruction\}/);
-  const templateSkill = readFileSync(new URL('../skills/openmotion-template-to-video/SKILL.md', import.meta.url), 'utf8');
-  const reference = readFileSync(new URL('../skills/openmotion-production/references/templates.md', import.meta.url), 'utf8');
+  const templateSkill = readFileSync(new URL('../skills/openmotion-video/workflows/template-to-video.md', import.meta.url), 'utf8');
+  const reference = readFileSync(new URL('../skills/openmotion-video/references/shared/templates.md', import.meta.url), 'utf8');
   assert.match(templateSkill, /guideDraft.*narrow exception/);
   assert.match(reference, /guideDraft.*projectType|projectType.*guideDraft/s);
   assert.match(reference, /applied=false.*unknown outcomes/s);

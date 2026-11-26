@@ -25,7 +25,7 @@ test('legacy projects and conversation files become sessions without changing pr
   assert.equal(await readFile(path.join(store.directory, 'sessions/project.json'), 'utf8'), saved);
   assert.equal((await store.get()).revision, before);
   const read = await callTool('openmotion_get_session', { sessionId: 'project' }, store) as any;
-  assert.equal(read.title, '会话名称'); assert.equal(read.skill, 'openmotion-production');
+  assert.equal(read.title, '会话名称'); assert.equal(read.skill, 'openmotion-video');
   assert.deepEqual(read.artifacts, JSON.parse(JSON.stringify(session.artifacts)));
   const reply = { sessionId: 'project', id: crypto.randomUUID(), role: 'assistant', content: '已读取现有需求，接下来保留原始素材。' };
   for (let i = 0; i < 2; i++) await callTool('openmotion_append_message', reply, store);

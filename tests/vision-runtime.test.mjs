@@ -79,10 +79,10 @@ for (const layout of ['source', 'flat', 'bundle']) {
     const directory = await realpath(await mkdtemp(path.join(os.tmpdir(), 'motion-vision-entry-')));
     t.after(() => rm(directory, { recursive: true, force: true }));
     const application = path.join(directory, 'application # 1');
-    const skill = layout === 'source' ? path.join(application, 'skills/openmotion-recreate') : path.join(directory, 'host/skills/openmotion-recreate');
+    const skill = layout === 'source' ? path.join(application, 'skills/openmotion-video') : path.join(directory, 'host/skills/openmotion-video');
     await mkdir(path.join(application, 'scripts'), { recursive: true });
     await mkdir(path.join(skill, 'scripts'), { recursive: true });
-    await cp(path.join(root, 'skills/openmotion-recreate/scripts/vision-tools.mjs'), path.join(skill, 'scripts/vision-tools.mjs'));
+    await cp(path.join(root, 'skills/openmotion-video/scripts/vision-tools.mjs'), path.join(skill, 'scripts/vision-tools.mjs'));
     await writeFile(path.join(application, 'scripts/vision-runtime.mjs'), `export async function ensureVisionRuntime(root) { return {python: root, runtime: {vision: {fixture: true}}}; } export function visionEnvironment() { return {}; }`);
     if (layout !== 'source') await writeFile(path.join(layout === 'flat' ? skill : path.dirname(path.dirname(skill)), layout === 'flat' ? 'openmotion-install.json' : 'scope.json'), JSON.stringify({ runtimeRoot: application }));
     const output = JSON.parse(await runFile(process.execPath, [path.join(skill, 'scripts/vision-tools.mjs'), 'prepare'], { cwd: os.tmpdir() }));

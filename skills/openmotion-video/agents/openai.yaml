@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenMotion Video"
+  short_description: "Create, recreate, template-adapt, edit, preview, and export motion videos in OpenMotion"
+  default_prompt: "Use OpenMotion $openmotion-video to plan, create, recreate, adapt templates, edit, preview, or export an editable motion video project."

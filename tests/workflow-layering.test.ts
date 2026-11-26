@@ -4,20 +4,22 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getWorkflow, readWorkflowResource, workflowDocumentAliases, workflowReferences } from '../shared/workflow.ts';
 
-test('legacy director resources return the shared body while references use production identity', async () => {
+test('legacy video Skill paths resolve through aliases without leaving stale copies on disk', async () => {
   for (const [legacy, canonical] of Object.entries(workflowDocumentAliases)) {
-    const section = canonical.endsWith('/review.md') ? 'review' : 'decisions';
+    await assert.rejects(readFile(new URL('../' + legacy, import.meta.url), 'utf8'), { code: 'ENOENT' }, 'Old local paths must not keep a forwarding copy: ' + legacy);
+    const linked = workflowReferences(`[legacy](/${legacy})`.replace('(/' + legacy, '(../../' + legacy.replace(/^skills\//, '')), 'skills/openmotion-video/workflows/recreate.md');
+    assert.equal(linked.length, 1);
+    assert.equal(linked[0].documentId, canonical);
+  }
+  for (const section of ['decisions', 'review'] as const) {
     const current = await getWorkflow(section, 'production');
     const previous = JSON.parse((await readWorkflowResource(`openmotion://workflow/director/${section}`, '/unused')).text);
     assert.equal(previous.workflow, 'director');
     assert.equal(previous.section, section);
-    assert.equal(previous.documentId, canonical);
+    assert.equal(previous.documentId, current.documentId);
     assert.equal(previous.content, current.content);
     assert.equal(previous.contentHash, current.contentHash);
     assert.deepEqual(previous.references, current.references);
-    const linked = workflowReferences(`[legacy](../openmotion-director/references/${legacy.split('/').at(-1)})`, 'skills/openmotion-recreate/SKILL.md');
-    assert.deepEqual(linked, [{ workflow: 'production', section, documentId: canonical }]);
-    await assert.rejects(readFile(new URL('../' + legacy, import.meta.url), 'utf8'), { code: 'ENOENT' }, 'Old local paths must not keep a forwarding copy');
   }
 });
 
@@ -148,7 +150,7 @@ test('cold-start scoped examples expose only the shared methods needed by each r
 
 test('reference-video routes share one reading and measurement method and keep only their own rules', async () => {
   const shared = await getWorkflow('reference');
-  assert.equal(shared.documentId, 'skills/openmotion-production/references/reference-video.md');
+  assert.equal(shared.documentId, 'skills/openmotion-video/references/shared/reference-video.md');
   assert.ok(!shared.references.some(reference => reference.workflow !== 'production'));
   assert.ok(!/openmotion-(recreate|video-to-template)|TEMPLATE\.md/.test(shared.content), 'Shared reading must not name a selecting entry or its record format');
   for (const phrase of ['never evidence of motion', 'measure probe', 'two consecutive fixes', 'Restore a missing original hard cut', 'distinctive lettering', 'runtime/media/bin']) {
@@ -170,14 +172,15 @@ test('reference-video routes share one reading and measurement method and keep o
     assert.ok([...start.references, ...rebuild.references].some(reference => reference.workflow === 'production' && reference.section === 'reference'), workflow);
   }
   const context = await getWorkflow('context');
-  for (const request of ['| 复刻视频', '| 明确要求视频转可复用模板']) {
+  for (const request of ['| 复刻视频', '| 视频转可复用模板']) {
     const row = context.content.split('\n').find(line => line.startsWith(request));
     assert.ok(row && workflowReferences(row, context.documentId).some(reference => reference.section === 'reference'), request);
   }
 });
 
 const skillRoot = new URL('../skills/', import.meta.url);
-const creativeEntries = ['openmotion-director', 'openmotion-recreate', 'openmotion-template-to-video', 'openmotion-video-to-template'];
+const videoWorkflows = ['director', 'production', 'recreate', 'template-to-video', 'video-to-template'];
+const creativeDomains = ['openmotion-video', 'openmotion-game', 'openmotion-design'];
 
 async function skillMarkdown() {
   const { readdir } = await import('node:fs/promises');
@@ -187,28 +190,38 @@ async function skillMarkdown() {
 
 const withoutCode = (text: string) => text.replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?^ {0,3}\1[^\n]*$/gm, ' ').replace(/`[^`\n]*`/g, ' ');
 
-test('the media Skill serves every entry without naming any of them', async () => {
+test('the media Skill stays self-contained (zero cross-Skill links) and serves every domain without naming sub-routes', async () => {
+  const crossings: string[] = [];
   for (const { file, text } of await skillMarkdown()) {
     if (!file.startsWith('openmotion-media/')) continue;
     assert.doesNotMatch(text, /openmotion-(?:director|recreate|template-to-video|video-to-template)\b|workflow\/(?:director|recreate|template|video-to-template)\//, file);
-  }
-});
-
-test('an entry reaches another creative entry only through its SKILL.md', async () => {
-  const crossings: string[] = [];
-  for (const { file, text } of await skillMarkdown()) {
     for (const [, target] of withoutCode(text).matchAll(/\]\(<?([^)\s>#]+)/g)) {
-      if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(target)) continue;
+      if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(target) || target.startsWith('/')) continue;
       const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), target));
-      const [owner] = file.split('/');
-      const [entry, ...rest] = resolved.split('/');
-      if (entry !== owner && creativeEntries.includes(entry) && rest.join('/') !== 'SKILL.md') crossings.push(`${file} -> ${resolved}`);
+      if (!resolved.startsWith('..') && resolved.split('/')[0] !== 'openmotion-media') crossings.push(`${file} -> ${resolved}`);
     }
   }
   assert.deepEqual(crossings, []);
 });
 
-test('non-media Skills reach openmotion-media only through its SKILL.md', async () => {
+test('creative domains form a strict DAG with zero cross-linking between video, game and design', async () => {
+  const crossings: string[] = [];
+  for (const { file, text } of await skillMarkdown()) {
+    const [owner] = file.split('/');
+    if (!creativeDomains.includes(owner)) continue;
+    for (const [, target] of withoutCode(text).matchAll(/\]\(<?([^)\s>#]+)/g)) {
+      if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(target) || target.startsWith('/')) continue;
+      const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), target));
+      if (resolved.startsWith('..')) continue;
+      const [entry] = resolved.split('/');
+      if (entry !== owner && creativeDomains.includes(entry)) crossings.push(`${file} -> ${resolved}`);
+    }
+  }
+  assert.deepEqual(crossings, []);
+});
+
+test('non-media Skills reach openmotion-media only through its SKILL.md or shared media contracts', async () => {
+  const allowedMediaTargets = new Set(['SKILL.md', 'references/materials.md']);
   const crossings: string[] = [];
   for (const { file, text } of await skillMarkdown()) {
     const [owner] = file.split('/');
@@ -217,21 +230,25 @@ test('non-media Skills reach openmotion-media only through its SKILL.md', async 
       if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(target)) continue;
       const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), target));
       const [entry, ...rest] = resolved.split('/');
-      if (entry === 'openmotion-media' && rest.join('/') !== 'SKILL.md') crossings.push(`${file} -> ${resolved}`);
+      if (entry === 'openmotion-media' && !allowedMediaTargets.has(rest.join('/'))) crossings.push(`${file} -> ${resolved}`);
     }
   }
   assert.deepEqual(crossings, []);
 });
 
-test('entry routing tables in openmotion and openmotion-production cover every creative entry consistently', async () => {
+test('entry routing tables in openmotion and openmotion-video cover every domain and video workflow consistently', async () => {
   const bootstrap = await readFile(new URL('openmotion/SKILL.md', skillRoot), 'utf8');
-  const production = await getWorkflow('start', 'production');
-  for (const entry of creativeEntries) {
-    assert.ok(bootstrap.includes(entry), `openmotion/SKILL.md missing ${entry}`);
-    assert.ok(production.content.includes(`../${entry}/SKILL.md`), `openmotion-production/SKILL.md missing link to ${entry}`);
+  for (const domain of ['openmotion-video', 'openmotion-game', 'openmotion-design', 'openmotion-media']) {
+    assert.ok(bootstrap.includes(domain), `openmotion/SKILL.md missing ${domain}`);
   }
-  assert.ok(bootstrap.includes('openmotion-production'), 'openmotion/SKILL.md missing openmotion-production');
-  assert.ok(bootstrap.includes('openmotion-media'), 'openmotion/SKILL.md missing openmotion-media');
+  const videoRouter = await getWorkflow('start', 'video');
+  const production = await getWorkflow('start', 'production');
+  for (const workflow of videoWorkflows) {
+    assert.ok(videoRouter.content.includes(`workflows/${workflow}.md`), `openmotion-video/SKILL.md missing link to workflows/${workflow}.md`);
+    if (workflow !== 'production') {
+      assert.ok(production.content.includes(`${workflow}.md`), `production.md missing fallback link to ${workflow}.md`);
+    }
+  }
 });
 
 test('no long sentence is copied between Skill files', async () => {
@@ -328,16 +345,19 @@ test('narration and editable captions strategy stays in sound.md and routes link
   assert.match(inspection.content, /opendesign[\s\S]*job\.result[\s\S]*versionId[\s\S]*version\.result/);
 });
 
-test('OPEND-5424 generation timing, cross-shot consistency and mixed-media boundaries stay single-sourced in materials.md', async () => {
-  const materials = await getWorkflow('materials');
-  assert.match(materials.content, /### Generation timing ladder/);
-  assert.match(materials.content, /## Cross-shot consistency/);
-  assert.match(materials.content, /## Mixed-media recreation boundaries/);
-  assert.match(materials.content, /image-to-video \(I2V\)/);
-  assert.match(materials.content, /Lock one visual anchor first/);
-  assert.match(materials.content, /continuation cut/);
-  assert.match(materials.content, /angle\/scene change/);
-  assert.match(materials.content, /action-ready before I2V/);
+test('OPEND-5424 generation timing, cross-shot consistency and mixed-media boundaries stay single-sourced', async () => {
+  const mediaContracts = await getWorkflow('materials', 'media');
+  const videoMaterials = await getWorkflow('materials', 'production');
+  assert.equal(mediaContracts.documentId, 'skills/openmotion-media/references/materials.md');
+  assert.equal(videoMaterials.documentId, 'skills/openmotion-video/references/shared/materials.md');
+  assert.match(mediaContracts.content, /### Generation timing ladder/);
+  assert.match(mediaContracts.content, /## Cross-shot consistency/);
+  assert.match(mediaContracts.content, /image-to-video \(I2V\)/);
+  assert.match(mediaContracts.content, /Lock one visual anchor first/);
+  assert.match(mediaContracts.content, /continuation cut/);
+  assert.match(mediaContracts.content, /angle\/scene change/);
+  assert.match(mediaContracts.content, /action-ready before I2V/);
+  assert.match(videoMaterials.content, /## Mixed-media recreation boundaries/);
 
   for (const [workflow, section, anchors] of [
     ['director', 'start', ['#generation-timing-ladder', '#cross-shot-consistency']],
@@ -386,14 +406,14 @@ test('surgical editing, readable source formatting and template adaptation stay 
 
   const templateStart = await getWorkflow('start', 'template');
   assert.ok(templateStart.content.includes('edit.md#大文件原地修改与保存前结构核对'));
-  assert.ok(templateStart.content.includes('references/adaptation.md'));
+  assert.ok(templateStart.content.includes('references/template-to-video/adaptation.md'));
   assert.ok(templateStart.content.includes('fonts.md#use-the-normal-project-write-boundary'));
   assert.ok(templateStart.references.some(ref => ref.workflow === 'template' && ref.section === 'adaptation'));
   assert.ok(templateStart.references.some(ref => ref.workflow === 'production' && ref.section === 'edit'));
   assert.ok(templateStart.references.some(ref => ref.workflow === 'production' && ref.section === 'fonts'));
 
   const adaptation = await getWorkflow('adaptation', 'template');
-  assert.equal(adaptation.documentId, 'skills/openmotion-template-to-video/references/adaptation.md');
+  assert.equal(adaptation.documentId, 'skills/openmotion-video/references/template-to-video/adaptation.md');
   assert.ok(adaptation.references.some(ref => ref.workflow === 'production' && ref.section === 'edit'));
   assert.ok(adaptation.references.some(ref => ref.workflow === 'production' && ref.section === 'materials'));
   assert.ok(adaptation.references.some(ref => ref.workflow === 'production' && ref.section === 'sound'));
@@ -447,4 +467,19 @@ test('openmotion-game prioritizes multimodal discovery, 3-view->3D slot, and man
 
   const rubric = await getWorkflow('review', 'game');
   assert.match(rubric.content, /looping BGM/);
+});
+
+test('thin routers obey size budget, isolate model scaffolding, and video helpers self-locate', async () => {
+  for (const thin of ['openmotion/SKILL.md', 'openmotion-video/SKILL.md']) {
+    const body = await readFile(new URL(thin, skillRoot), 'utf8');
+    assert.ok(body.length <= 8000, `${thin} exceeds thin-router size budget`);
+  }
+  const videoRouter = await readFile(new URL('openmotion-video/SKILL.md', skillRoot), 'utf8');
+  assert.match(videoRouter, /<!-- model-scaffolding:[^>]+-->[\s\S]*<!-- \/model-scaffolding -->/);
+  const scriptsDir = new URL('openmotion-video/scripts/', skillRoot);
+  for (const name of await readdir(scriptsDir)) {
+    if (!/\.(?:[cm]?js|ts|py)$/.test(name)) continue;
+    const text = await readFile(new URL(name, scriptsDir), 'utf8');
+    assert.doesNotMatch(text, /skills\/openmotion-(?:director|production|recreate|template-to-video|video-to-template)\b/, name);
+  }
 });

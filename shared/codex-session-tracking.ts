@@ -512,7 +512,7 @@ function sanitizeStructuredValue(value: unknown, env: NodeJS.ProcessEnv, paths: 
   return String(value);
 }
 
-function extractSkillsFromText(text: string): string[] {
+export function extractSkillsFromText(text: string): string[] {
   const found: string[] = [];
   const add = (candidate: string | undefined) => {
     const normalized = candidate?.toLowerCase();
@@ -520,6 +520,10 @@ function extractSkillsFromText(text: string): string[] {
   };
   for (const match of text.matchAll(/(?:^|[\\/\s"'`])(openmotion(?:-[a-z0-9-]+)?)(?:[\\/][^\s"'`]*SKILL\.md)/gi)) {
     add(match[1]);
+  }
+  for (const match of text.matchAll(/(?:^|[\\/\s"'`])openmotion-video[\\/]workflows[\\/](director|production|recreate|template-to-video|video-to-template)\.md/gi)) {
+    add('openmotion-video');
+    add(`openmotion-${match[1]}`);
   }
   for (const match of text.matchAll(/openmotion:\/\/workflow\/([a-z0-9-]+)\b/gi)) {
     const workflow = match[1]?.toLowerCase();

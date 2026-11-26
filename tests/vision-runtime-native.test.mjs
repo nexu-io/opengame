@@ -18,7 +18,7 @@ test('native cold, concurrent, offline and copied-Skill vision paths work withou
   const application = path.join(directory, 'app #1');
   await mkdir(path.join(application, 'scripts'), { recursive: true });
   for (const name of ['vision-runtime.mjs', 'npm-runtime.mjs', 'runtime-assets.mjs', 'runtime-lock.json']) await cp(path.join(root, 'scripts', name), path.join(application, 'scripts', name));
-  await cp(path.join(root, 'skills/openmotion-recreate'), path.join(application, 'skills/openmotion-recreate'), { recursive: true });
+  await cp(path.join(root, 'skills/openmotion-video'), path.join(application, 'skills/openmotion-video'), { recursive: true });
   await mkdir(path.join(application, 'tests'));
   await cp(path.join(root, 'tests/recreate-registration.py'), path.join(application, 'tests/recreate-registration.py'));
   const assets = path.join(application, 'runtime/vision-assets');
@@ -38,7 +38,7 @@ test('native cold, concurrent, offline and copied-Skill vision paths work withou
   const env = { ...visionEnvironment(), PYTHONHOME: path.join(directory, 'invalid'), PYTHONPATH: path.join(directory, 'poison'), VIRTUAL_ENV: path.join(directory, 'absent'), PYTHON: 'missing-python', UV_PYTHON: 'missing-python' };
   await mkdir(env.PYTHONPATH);
   await writeFile(path.join(env.PYTHONPATH, 'cv2.py'), 'raise RuntimeError("Host Python path was used")');
-  const entry = path.join(application, 'skills/openmotion-recreate/scripts/vision-tools.mjs');
+  const entry = path.join(application, 'skills/openmotion-video/scripts/vision-tools.mjs');
   const run = (...args) => runFile(process.execPath, [entry, ...args], { cwd: directory, env });
   const identity = JSON.parse(await run('python', '-c', 'import sys,numpy,cv2,json; print(json.dumps(dict(executable=sys.executable,numpy=numpy.__file__,opencv=cv2.__file__)))'));
   for (const filename of Object.values(identity)) assert(filename.startsWith(first.directory + path.sep));
@@ -55,7 +55,7 @@ test('native cold, concurrent, offline and copied-Skill vision paths work withou
   await run('register', reference, '--anchor', '0', '--times', '.2,.4', '--out', registration);
   assert(JSON.parse(await readFile(registration)).samples.every(sample => sample.status === 'measured'));
   for (const layout of ['flat', 'bundle']) {
-    const destination = path.join(directory, layout, 'skills/openmotion-recreate');
+    const destination = path.join(directory, layout, 'skills/openmotion-video');
     await cp(path.dirname(path.dirname(entry)), destination, { recursive: true });
     await writeFile(path.join(layout === 'flat' ? destination : path.dirname(path.dirname(destination)), layout === 'flat' ? 'openmotion-install.json' : 'scope.json'), JSON.stringify({ runtimeRoot: application }));
     const copied = JSON.parse(await runFile(process.execPath, [path.join(destination, 'scripts/vision-tools.mjs'), 'prepare'], { cwd: os.tmpdir(), env }));
@@ -73,7 +73,7 @@ test('native cold, concurrent, offline and copied-Skill vision paths work withou
   await runFile(process.execPath, [path.join(application, 'scripts/configure-plugin.mjs')]);
   const hostCache = path.join(directory, 'complete-plugin-cache');
   await cp(path.join(application, 'plugin'), hostCache, { recursive: true });
-  const complete = JSON.parse(await runFile(process.execPath, [path.join(hostCache, 'skills/openmotion-recreate/scripts/vision-tools.mjs'), 'prepare'], { env }));
+  const complete = JSON.parse(await runFile(process.execPath, [path.join(hostCache, 'skills/openmotion-video/scripts/vision-tools.mjs'), 'prepare'], { env }));
   assert.equal(complete.python, first.python);
   // Incomplete installations are retried, with verified downloads reused offline.
   await writeFile(path.join(first.directory, 'ready.json'), '{interrupted');

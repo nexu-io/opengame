@@ -57,7 +57,7 @@ test('MCP connection configs launch the native tools in the exact workspace and 
     const guide = await (await request('/connect/guide?host=codex')).text();
     assert.match(guide, /openmotion_edit_project/); assert.match(guide, /Hyperframes/);
     assert.match(guide, /resources\/read/); assert.match(guide, /openmotion_export_request/);
-    assert.match(guide, /openmotion-template-to-video/); assert.match(guide, /openmotion-video-to-template/);
+    assert.match(guide, /openmotion-video/); assert.match(guide, /template-to-video/); assert.match(guide, /video-to-template/);
     assert.match(guide, /production is not a prerequisite/);
     assert.doesNotMatch(guide, /总入口是|template and recreate are.*placeholders/);
     assert.doesNotMatch(guide, /openmotion_update_shot|540×960|保持预览在前台/);

@@ -8,7 +8,7 @@ import { releaseProfile } from '../shared/mcp-registry.ts';
 import { checkDesign } from './design-check.ts';
 import { checkI18n } from './check-i18n.ts';
 import { checkRouting } from './check-routing.ts';
-import { getWorkflow, markdownAnchors, workflowLinkAnchors, workflowRegistry, phase1WorkflowNames } from '../shared/workflow.ts';
+import { getWorkflow, markdownAnchors, workflowLinkAnchors, workflowRegistry, phase1WorkflowNames, packagedSkills } from '../shared/workflow.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
@@ -61,8 +61,56 @@ export async function check() {
     assert.equal(document.match(/^name: (.+)$/m)?.[1], entry.name);
   }
   // Agents choose routes from these texts, so a stale "placeholder" note hides a ready Skill.
-  const readySkills = Object.values(workflowRegistry).filter(definition => definition.status === 'ready')
-    .map(definition => Object.values(definition.sections)[0]?.match(/^skills\/([^/]+)\//)?.[1]).filter(Boolean) as string[];
+  const readySkills = [...new Set(Object.values(workflowRegistry).filter(definition => definition.status === 'ready')
+    .map(definition => Object.values(definition.sections)[0]?.match(/^skills\/([^/]+)\//)?.[1]).filter(Boolean))] as string[];
+  const topSkills = (await readdir(path.join(root, 'skills'), { withFileTypes: true }))
+    .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
+    .map(entry => entry.name)
+    .sort();
+  assert.deepEqual(topSkills, ['openmotion', ...packagedSkills].sort(),
+    'Top-level skills/ must contain only the public entry openmotion plus packagedSkills');
+
+  // Thin routers must remain concise so future changes do not inline full playbooks into entry prompts.
+  for (const thinEntry of ['skills/openmotion/SKILL.md', 'skills/openmotion-video/SKILL.md']) {
+    const content = await readFile(path.join(root, thinEntry), 'utf8');
+    assert.ok(content.length <= 8000, `${thinEntry} exceeds thin-router budget (${content.length} > 8000 chars)`);
+  }
+
+  // Enforce strict L1 Skill DAG: openmotion-media has zero cross-Skill links, and creative domains never cross-link each other.
+  const creativeDomains = new Set(['openmotion-video', 'openmotion-game', 'openmotion-design']);
+  const stripCode = (text: string) => text.replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?^ {0,3}\1[^\n]*$/gm, ' ').replace(/`[^`\n]*`/g, ' ');
+  for (const skill of topSkills) {
+    const skillDir = path.join(root, 'skills', skill);
+    const mdFiles = (await readdir(skillDir, { recursive: true }))
+      .filter(file => typeof file === 'string' && file.endsWith('.md'))
+      .map(file => file.split('\\').join('/'));
+    for (const rel of mdFiles) {
+      const text = await readFile(path.join(skillDir, rel), 'utf8');
+      const docRel = path.posix.join(skill, rel);
+      for (const [, target] of stripCode(text).matchAll(/\]\(<?([^)\s>#]+)/g)) {
+        if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(target) || target.startsWith('/')) continue;
+        const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(docRel), target));
+        if (resolved.startsWith('..')) continue; // Outside skills/ (e.g. docs/)
+        const targetSkill = resolved.split('/')[0];
+        if (targetSkill === skill) continue;
+        if (skill === 'openmotion-media') {
+          assert.fail(`DAG violation: openmotion-media must stay self-contained without cross-Skill link (${docRel} -> ${resolved})`);
+        }
+        if (creativeDomains.has(skill) && creativeDomains.has(targetSkill)) {
+          assert.fail(`DAG violation: creative domain ${skill} must not cross-link ${targetSkill} (${docRel} -> ${resolved})`);
+        }
+      }
+    }
+  }
+
+  // Bundled Skill helper scripts must self-locate rather than hardcode legacy Skill folders.
+  const legacySkillPathPattern = /skills\/openmotion-(?:director|production|recreate|template-to-video|video-to-template)\b/;
+  for (const scriptFile of await readdir(path.join(root, 'skills/openmotion-video/scripts'))) {
+    if (!/\.(?:[cm]?js|ts|py)$/.test(scriptFile)) continue;
+    const scriptText = await readFile(path.join(root, 'skills/openmotion-video/scripts', scriptFile), 'utf8');
+    assert.doesNotMatch(scriptText, legacySkillPathPattern, `skills/openmotion-video/scripts/${scriptFile} hardcodes a retired Skill directory`);
+  }
+
   for (const [workflow, definition] of Object.entries(workflowRegistry)) {
     if (releaseProfile === 'phase1' && !phase1WorkflowNames.includes(workflow)) continue;
     for (const section of Object.keys(definition.sections)) {

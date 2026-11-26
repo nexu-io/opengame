@@ -81,9 +81,9 @@ All Agent installation entries share the [installation-success reply rules](inst
 
 浏览、筛选、查看模板详情和播放预览均不创建工程。用户选择可编辑模板的“打开并编辑”后，Studio 才创建独立副本；Agent 后续继续该工程，不再重复创建。仅有参考视频的条目仍需用户明确要求复刻。
 
-用户明确要求 Agent 使用某个模板时，进入 [openmotion-template-to-video](../skills/openmotion-template-to-video/SKILL.md)，沿用准确模板 ID、原生时长和默认内容。未选模板只回复“体验”时先问具体模板；拒绝或暂不体验则停止。不固定推荐模板，不重复追问可选素材，也不静默替换失败模板。
+用户明确要求 Agent 使用某个模板时，进入 [openmotion-video 模板工作流](../skills/openmotion-video/workflows/template-to-video.md)，沿用准确模板 ID、原生时长和默认内容。未选模板只回复“体验”时先问具体模板；拒绝或暂不体验则停止。不固定推荐模板，不重复追问可选素材，也不静默替换失败模板。
 
-创建后保留原有工作；同一次体验已创建则续用。按[首次体验交付规则](../skills/openmotion-template-to-video/references/first-use.md#first-run-experience-defaults)打开并检查真实可编辑工程，用户要求视频文件时才导出。
+创建后保留原有工作；同一次体验已创建则续用。按[首次体验交付规则](../skills/openmotion-video/references/template-to-video/first-use.md#first-run-experience-defaults)打开并检查真实可编辑工程，用户要求视频文件时才导出。
 
 ### 开始创作
 
@@ -141,7 +141,7 @@ To run the Studio, MCP and export in a container instead, follow the [Docker dep
 
 ## Agent 工具
 
-仓库 Agent 从 [AGENTS.md](../AGENTS.md) 进入，Claude Code 同时读取 [CLAUDE.md](../CLAUDE.md)。按本轮意图直达专业入口：原创/大幅重编进入 [openmotion-director v1.4.5](../skills/openmotion-director/SKILL.md)，已有模板出片或适配进入 [openmotion-template-to-video](../skills/openmotion-template-to-video/SKILL.md)，参考视频复刻进入 [openmotion-recreate](../skills/openmotion-recreate/SKILL.md)（先读用户资料、最多问一次，用现有九个 Tool 在可编辑工程中重建，导出片对照原片测量后，交付在编辑器中打开的工程；规则与测量脚本随该 Skill 分发）。明确要求视频转可复用模板或 ZIP 时，单独进入 [openmotion-video-to-template](../skills/openmotion-video-to-template/SKILL.md)。[openmotion-production](../skills/openmotion-production/SKILL.md) 承接既定决定下的工程修改、预览、技术检查、排错与导出；重新设计局部动作或声音仍可直达 director。已有内容的修改统一复用 [edit 流程](../skills/openmotion-production/references/edit.md)，核对保持项及后续延续；首次补读的结果须先返回模型，再执行依赖操作。
+仓库 Agent 从 [AGENTS.md](../AGENTS.md) 进入，Claude Code 同时读取 [CLAUDE.md](../CLAUDE.md)。视频创作统一从 [openmotion-video](../skills/openmotion-video/SKILL.md) 按本轮意图路由至对应工作流：原创/大幅重编进入 [director](../skills/openmotion-video/workflows/director.md)，已有模板出片或适配进入 [template-to-video](../skills/openmotion-video/workflows/template-to-video.md)，参考视频复刻进入 [recreate](../skills/openmotion-video/workflows/recreate.md)（先读用户资料、最多问一次，用现有 Tool 在可编辑工程中重建，导出片对照原片测量后，交付在编辑器中打开的工程；规则与测量脚本随该 Skill 分发）。明确要求视频转可复用模板或 ZIP 时，单独进入 [video-to-template](../skills/openmotion-video/workflows/video-to-template.md)。[production](../skills/openmotion-video/workflows/production.md) 承接既定决定下的工程修改、预览、技术检查、排错与导出；重新设计局部动作或声音仍可直达 director。已有内容的修改统一复用 [edit 流程](../skills/openmotion-video/references/shared/edit.md)，核对保持项及后续延续；首次补读的结果须先返回模型，再执行依赖操作。
 
 仅有 MCP 时通过 resources/list 与 resources/read 读取 `openmotion://workflow/production/start`；已选专业入口直接读对应路线，无需重新选路。固定引擎指南为 `openmotion://engine/SKILL.md`。详见 [Skill 路由](skills.md)。一期包含 openmotion-production、openmotion-director、openmotion-template-to-video、openmotion-recreate、openmotion-video-to-template 五个入口及参考。MCP workflow 短 ID 依次为 production/director/template/recreate/video-to-template。
 
@@ -206,7 +206,7 @@ node --experimental-strip-types scripts/verify-export.ts /absolute/path/final.mp
 
 视频转模板入口用于交付可复用模板。重建尽量匹配参考画面、构图、运动和节奏，保留可编辑的素材与源码。Agent 自行决定常规创作取舍，不询问创作偏好，并将取舍写入模板内唯一的说明文件 `TEMPLATE.md`。需要付费生成且计划批次尚未获授权时，在提交请求前集中确认一次。常用修改在 Studio Variables 面板提供变量。
 
-制作时对照原片。打包后解压到另一目录重渲染，检查文件、字体和素材是否齐全，以及帧率、帧数、时长和可见画面是否与预览一致。检查方法见 [模板制作验证](../skills/openmotion-video-to-template/references/verify.md)。交付包括预览、模板、原片对照、可改内容和剩余差异，技术检查写入 `TEMPLATE.md`。
+制作时对照原片。打包后解压到另一目录重渲染，检查文件、字体和素材是否齐全，以及帧率、帧数、时长和可见画面是否与预览一致。检查方法见 [模板制作验证](../skills/openmotion-video/references/video-to-template/verify.md)。交付包括预览、模板、原片对照、可改内容和剩余差异，技术检查写入 `TEMPLATE.md`。
 
 用已有模板出片或修改时选择 `openmotion-template-to-video`。原样打开模板用编辑器预览。按原样交付本地 ZIP 或文件夹的 MP4 时，可使用包内与工程匹配的预览。缺少用户才能提供的品牌、产品、价格、图片等信息，或需求有明显歧义时集中提问。普通参考视频复刻由 `openmotion-recreate` 交付。
 
@@ -248,7 +248,7 @@ The plugin name, install script, data directory and Studio ports are the team ba
 
 ## Preview after continued edits
 
-Each saved content edit or restore requests the latest preview in the calling chat. The default preserves your current chat: show the right panel here, or queue it while you are elsewhere and open it when you return. Only an explicit show-now request permits switching back for that turn. Background requests skip presentation. A queued acknowledgment, saved source or hidden screenshot does not prove you saw the latest result; the Agent checks live content and visibility separately. See the [shared handoff](../skills/openmotion-production/references/native.md#continuing-edits) for host capabilities and receipt limits.
+Each saved content edit or restore requests the latest preview in the calling chat. The default preserves your current chat: show the right panel here, or queue it while you are elsewhere and open it when you return. Only an explicit show-now request permits switching back for that turn. Background requests skip presentation. A queued acknowledgment, saved source or hidden screenshot does not prove you saw the latest result; the Agent checks live content and visibility separately. See the [shared handoff](../skills/openmotion-video/references/shared/native.md#continuing-edits) for host capabilities and receipt limits.
 
 ## Share editable projects offline
 

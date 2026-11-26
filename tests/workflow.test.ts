@@ -46,8 +46,8 @@ test('MCP-only client discovers and reads the packaged workflow without starting
     assert.match(responses.get(1).instructions, /resources\/read/);
     assert.ok(!responses.get(2).tools.some((tool: any) => tool.name === 'openmotion_get_workflow'));
     assert.ok(responses.get(20).resources.some((resource: { uri: string }) => resource.uri === 'openmotion://workflow/production/materials'));
-    assert.equal(responses.get(3).structuredContent.documentId, 'skills/openmotion-production/SKILL.md');
-    assert.equal(responses.get(21).structuredContent.documentId, 'skills/openmotion-production/references/materials.md');
+    assert.equal(responses.get(3).structuredContent.documentId, 'skills/openmotion-video/workflows/production.md');
+    assert.equal(responses.get(21).structuredContent.documentId, 'skills/openmotion-video/references/shared/materials.md');
     assert.equal(responses.get(21).structuredContent.contentHash, (await getWorkflow('materials')).contentHash);
     for (const [index, section] of sections.entries()) {
       const result = responses.get(index + 4).structuredContent;
@@ -99,11 +99,13 @@ test('every workflow document and linked reference is reachable over MCP with ca
         assert.equal(target.documentId, reference.documentId);
       }
     }
-    assert.equal(returned.get('skills/openmotion-template-to-video/SKILL.md').status, 'ready');
-    assert.equal(returned.get('skills/openmotion-template-to-video/SKILL.md').workflow, 'template');
-    assert.equal(returned.get('skills/openmotion-recreate/SKILL.md').status, 'ready');
-    assert.equal(returned.get('skills/openmotion-video-to-template/SKILL.md').status, 'ready');
-    assert.equal(returned.get('skills/openmotion-video-to-template/SKILL.md').workflow, 'video-to-template');
+    assert.equal(returned.get('skills/openmotion-video/SKILL.md').status, 'ready');
+    assert.equal(returned.get('skills/openmotion-video/SKILL.md').workflow, 'video');
+    assert.equal(returned.get('skills/openmotion-video/workflows/template-to-video.md').status, 'ready');
+    assert.equal(returned.get('skills/openmotion-video/workflows/template-to-video.md').workflow, 'template');
+    assert.equal(returned.get('skills/openmotion-video/workflows/recreate.md').status, 'ready');
+    assert.equal(returned.get('skills/openmotion-video/workflows/video-to-template.md').status, 'ready');
+    assert.equal(returned.get('skills/openmotion-video/workflows/video-to-template.md').workflow, 'video-to-template');
     for (const route of workflows) {
       if (route === 'game') {
         const refs = returned.get(workflowRegistry.game.sections.start).references;
@@ -111,10 +113,23 @@ test('every workflow document and linked reference is reachable over MCP with ca
         assert.ok(refs.some((reference: { documentId: string }) => reference.documentId === 'skills/openmotion-game/references/game-stylization.md'));
         continue;
       }
+      if (route === 'video') {
+        const refs = returned.get(workflowRegistry.video.sections.start).references;
+        for (const wf of ['director', 'production', 'recreate', 'template-to-video', 'video-to-template']) {
+          assert.ok(refs.some((reference: { documentId: string }) => reference.documentId === `skills/openmotion-video/workflows/${wf}.md`), `video router must link to ${wf}`);
+        }
+        assert.ok(refs.some((reference: { documentId: string }) => reference.documentId === 'skills/openmotion-media/references/materials.md'));
+        continue;
+      }
+      if (route === 'media' || route === 'design') {
+        const refs = returned.get(workflowRegistry[route as keyof typeof workflowRegistry].sections.start).references;
+        assert.ok(refs.some((reference: { documentId: string }) => reference.documentId === 'skills/openmotion-media/references/materials.md'), `${route} must expose the shared media contracts`);
+        continue;
+      }
       assert.ok(returned.get(workflowRegistry[route as keyof typeof workflowRegistry].sections.start).references.some((reference: { documentId: string }) =>
-        reference.documentId === 'skills/openmotion-production/references/edit.md'), `${route} must expose the shared edit workflow`);
+        reference.documentId === 'skills/openmotion-video/references/shared/edit.md'), `${route} must expose the shared edit workflow`);
       assert.ok(returned.get(workflowRegistry[route as keyof typeof workflowRegistry].sections.start).references.some((reference: { documentId: string }) =>
-        reference.documentId === 'skills/openmotion-production/references/materials.md'), `${route} must expose the shared material policy`);
+        reference.documentId === 'skills/openmotion-video/references/shared/materials.md'), `${route} must expose the video material policy`);
     }
     assert.deepEqual(await store.get(), before);
     assert.deepEqual(await readdir(directory, { recursive: true }), filesBefore);
@@ -147,19 +162,25 @@ test('MCP template delivery exposes a paused zero-second handoff with user playb
 });
 
 test('Markdown references resolve across workflows, deduplicate canonical paths, and reject missing internal instructions', () => {
-  const documentId = 'skills/openmotion-director/SKILL.md';
+  const documentId = 'skills/openmotion-video/workflows/director.md';
   const refs = workflowReferences([
-    '[sound](references/sound-narrative.md#anchors)',
-    '[sound again](./references/sound-narrative.md?version=1)',
-    '[shared context](<../openmotion-production/references/context.md> "Common context")',
-    '[actions][script]', '[script]: references/action-script.md',
+    '[sound](../references/director/sound-narrative.md#anchors)',
+    '[sound again](./../references/director/sound-narrative.md?version=1)',
+    '[shared context](<../references/shared/context.md> "Common context")',
+    '[actions][script]', '[script]: ../references/director/action-script.md',
     '[external](https://example.com/other.md)', '[protocol-relative](//example.com/other.md)', '[anchor](#local)',
     '`[example](not-a-document.md)`', '```markdown', '[example](also-not-a-document.md)', '```',
   ].join('\n'), documentId);
   assert.deepEqual(refs, [
-    { workflow: 'director', section: 'sound', documentId: 'skills/openmotion-director/references/sound-narrative.md' },
-    { workflow: 'production', section: 'context', documentId: 'skills/openmotion-production/references/context.md' },
-    { workflow: 'director', section: 'actions', documentId: 'skills/openmotion-director/references/action-script.md' },
+    { workflow: 'director', section: 'sound', documentId: 'skills/openmotion-video/references/director/sound-narrative.md' },
+    { workflow: 'production', section: 'context', documentId: 'skills/openmotion-video/references/shared/context.md' },
+    { workflow: 'director', section: 'actions', documentId: 'skills/openmotion-video/references/director/action-script.md' },
+  ]);
+  // Legacy documentId and relative legacy paths still resolve via workflowDocumentAliases.
+  const legacyRefs = workflowReferences('[sound](references/sound-narrative.md) [context](../openmotion-production/references/context.md)', 'skills/openmotion-director/SKILL.md');
+  assert.deepEqual(legacyRefs, [
+    { workflow: 'director', section: 'sound', documentId: 'skills/openmotion-video/references/director/sound-narrative.md' },
+    { workflow: 'production', section: 'context', documentId: 'skills/openmotion-video/references/shared/context.md' },
   ]);
   for (const target of ['missing.md', '../../../outside.md', '/absolute.md', '..%2F..%2Foutside.md']) {
     assert.throws(() => workflowReferences(`[missing](${target})`, documentId), /Unregistered workflow Markdown link/);
@@ -178,14 +199,14 @@ test('Markdown heading anchors follow rendered slugs and every packaged #fragmen
   assert.deepEqual([...anchors], ['check-and-deliver', '1-export-the-inspected-version', '旁白选角与语气', 'measure-cli-probe', 'notes', 'notes-1', 'closed-heading',
     'emphasis-and-tags', 'a_b-snake_case', '_private', 'init-hook', 'a', 'a-1', 'a-2', 'after-the-fence']);
 
-  const documentId = 'skills/openmotion-director/SKILL.md';
+  const documentId = 'skills/openmotion-video/workflows/director.md';
   const links = workflowLinkAnchors([
-    '[sound](references/sound-narrative.md#审听与比较)', '[encoded](references/sound-narrative.md#%E5%AE%A1%E5%90%AC%E4%B8%8E%E6%AF%94%E8%BE%83)',
-    '[self](#local)', '[whole](references/action-script.md)', '`[code](references/action-script.md#ignored)`', '[external](https://example.com/a.md#b)',
+    '[sound](../references/director/sound-narrative.md#审听与比较)', '[encoded](../references/director/sound-narrative.md#%E5%AE%A1%E5%90%AC%E4%B8%8E%E6%AF%94%E8%BE%83)',
+    '[self](#local)', '[whole](../references/director/action-script.md)', '`[code](../references/director/action-script.md#ignored)`', '[external](https://example.com/a.md#b)',
   ].join('\n'), documentId);
   assert.deepEqual(links.map(({ documentId, anchor }) => ({ documentId, anchor })), [
-    { documentId: 'skills/openmotion-director/references/sound-narrative.md', anchor: '审听与比较' },
-    { documentId: 'skills/openmotion-director/references/sound-narrative.md', anchor: '审听与比较' },
+    { documentId: 'skills/openmotion-video/references/director/sound-narrative.md', anchor: '审听与比较' },
+    { documentId: 'skills/openmotion-video/references/director/sound-narrative.md', anchor: '审听与比较' },
     { documentId, anchor: 'local' },
   ]);
 

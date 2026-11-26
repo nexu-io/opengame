@@ -9,20 +9,20 @@ export const workflowRegistry = {
   production: {
     status: 'ready',
     sections: {
-      start: 'skills/openmotion-production/SKILL.md',
-      intake: 'skills/openmotion-production/references/intake.md',
-      templates: 'skills/openmotion-production/references/templates.md',
-      production: 'skills/openmotion-production/references/production.md',
-      verification: 'skills/openmotion-production/references/verification.md',
-      context: 'skills/openmotion-production/references/context.md',
-      native: 'skills/openmotion-production/references/native.md',
-      edit: 'skills/openmotion-production/references/edit.md',
-      portable: 'skills/openmotion-production/references/portable-project.md',
-      materials: 'skills/openmotion-production/references/materials.md',
+      start: 'skills/openmotion-video/workflows/production.md',
+      intake: 'skills/openmotion-video/references/shared/intake.md',
+      templates: 'skills/openmotion-video/references/shared/templates.md',
+      production: 'skills/openmotion-video/references/shared/production.md',
+      verification: 'skills/openmotion-video/references/shared/verification.md',
+      context: 'skills/openmotion-video/references/shared/context.md',
+      native: 'skills/openmotion-video/references/shared/native.md',
+      edit: 'skills/openmotion-video/references/shared/edit.md',
+      portable: 'skills/openmotion-video/references/shared/portable-project.md',
+      materials: 'skills/openmotion-video/references/shared/materials.md',
       transcripts: 'docs/transcripts.md',
-      decisions: 'skills/openmotion-production/references/decisions.md',
-      review: 'skills/openmotion-production/references/review.md',
-      sound: 'skills/openmotion-production/references/sound.md',
+      decisions: 'skills/openmotion-video/references/shared/decisions.md',
+      review: 'skills/openmotion-video/references/shared/review.md',
+      sound: 'skills/openmotion-video/references/shared/sound.md',
       // Provider guides live in openmotion-media; these production sections keep older resource URIs working.
       account: 'skills/openmotion-media/references/providers/account.md',
       compatible: 'skills/openmotion-media/references/providers/compatible.md',
@@ -30,51 +30,67 @@ export const workflowRegistry = {
       opendesign: 'skills/openmotion-media/references/providers/opendesign.md',
       atlascloud: 'skills/openmotion-media/references/providers/atlascloud.md',
       wavespeed: 'skills/openmotion-media/references/providers/wavespeed.md',
-      typography: 'skills/openmotion-production/references/typography.md',
-      fonts: 'skills/openmotion-production/references/fonts.md',
-      reference: 'skills/openmotion-production/references/reference-video.md',
+      typography: 'skills/openmotion-video/references/shared/typography.md',
+      fonts: 'skills/openmotion-video/references/shared/fonts.md',
+      reference: 'skills/openmotion-video/references/shared/reference-video.md',
+    },
+  },
+  video: {
+    status: 'ready',
+    sections: {
+      start: 'skills/openmotion-video/SKILL.md',
     },
   },
   director: {
     status: 'ready',
     sections: {
-      start: 'skills/openmotion-director/SKILL.md',
-      actions: 'skills/openmotion-director/references/action-script.md',
-      craft: 'skills/openmotion-director/references/motion-craft.md',
-      phrases: 'skills/openmotion-director/references/motion-phrases.md',
-      decisions: 'skills/openmotion-production/references/decisions.md',
-      sound: 'skills/openmotion-director/references/sound-narrative.md',
-      review: 'skills/openmotion-production/references/review.md',
-      examples: 'skills/openmotion-director/references/examples.md',
+      start: 'skills/openmotion-video/workflows/director.md',
+      actions: 'skills/openmotion-video/references/director/action-script.md',
+      craft: 'skills/openmotion-video/references/director/motion-craft.md',
+      phrases: 'skills/openmotion-video/references/director/motion-phrases.md',
+      decisions: 'skills/openmotion-video/references/shared/decisions.md',
+      sound: 'skills/openmotion-video/references/director/sound-narrative.md',
+      review: 'skills/openmotion-video/references/shared/review.md',
+      examples: 'skills/openmotion-video/references/director/examples.md',
     },
   },
-  template: { status: 'ready', sections: { start: 'skills/openmotion-template-to-video/SKILL.md', unchanged: 'skills/openmotion-template-to-video/references/unchanged-export.md', firstuse: 'skills/openmotion-template-to-video/references/first-use.md', recipes: 'skills/openmotion-template-to-video/references/recipes.md', adaptation: 'skills/openmotion-template-to-video/references/adaptation.md' } },
+  template: {
+    status: 'ready',
+    sections: {
+      start: 'skills/openmotion-video/workflows/template-to-video.md',
+      unchanged: 'skills/openmotion-video/references/template-to-video/unchanged-export.md',
+      firstuse: 'skills/openmotion-video/references/template-to-video/first-use.md',
+      recipes: 'skills/openmotion-video/references/template-to-video/recipes.md',
+      adaptation: 'skills/openmotion-video/references/template-to-video/adaptation.md',
+    },
+  },
   recreate: {
     status: 'ready',
     sections: {
-      start: 'skills/openmotion-recreate/SKILL.md',
-      rebuild: 'skills/openmotion-recreate/references/rebuild.md',
-      reconstruction: 'skills/openmotion-recreate/references/reconstruction.md',
-      rendering: 'skills/openmotion-recreate/references/rendering.md',
-      rendercode: 'skills/openmotion-recreate/assets/reconstruction.js',
-      verification: 'skills/openmotion-recreate/references/verify.md',
+      start: 'skills/openmotion-video/workflows/recreate.md',
+      rebuild: 'skills/openmotion-video/references/recreate/rebuild.md',
+      reconstruction: 'skills/openmotion-video/references/recreate/reconstruction.md',
+      rendering: 'skills/openmotion-video/references/recreate/rendering.md',
+      rendercode: 'skills/openmotion-video/assets/reconstruction.js',
+      verification: 'skills/openmotion-video/references/recreate/verify.md',
     },
   },
   'video-to-template': {
     status: 'ready',
     sections: {
-      start: 'skills/openmotion-video-to-template/SKILL.md',
-      measure: 'skills/openmotion-video-to-template/references/measure.md',
-      rebuild: 'skills/openmotion-video-to-template/references/rebuild.md',
-      project: 'skills/openmotion-production/references/portable-project.md',
-      verification: 'skills/openmotion-video-to-template/references/verify.md',
-      sources: 'skills/openmotion-video-to-template/references/rule-sources.md',
+      start: 'skills/openmotion-video/workflows/video-to-template.md',
+      measure: 'skills/openmotion-video/references/video-to-template/measure.md',
+      rebuild: 'skills/openmotion-video/references/video-to-template/rebuild.md',
+      project: 'skills/openmotion-video/references/shared/portable-project.md',
+      verification: 'skills/openmotion-video/references/video-to-template/verify.md',
+      sources: 'skills/openmotion-video/references/video-to-template/rule-sources.md',
     },
   },
   media: {
     status: 'ready',
     sections: {
       start: 'skills/openmotion-media/SKILL.md',
+      materials: 'skills/openmotion-media/references/materials.md',
       planning: 'skills/openmotion-media/references/planning.md',
       setup: 'skills/openmotion-media/references/setup.md',
       jobs: 'skills/openmotion-media/references/jobs.md',
@@ -88,7 +104,30 @@ export const workflowRegistry = {
       codex: 'skills/openmotion-media/references/providers/codex.md',
     },
   },
-  game: { status: 'ready', sections: { start: 'skills/openmotion-game/SKILL.md', provenance: 'skills/openmotion-game/PROVENANCE.md', brief: 'skills/openmotion-game/references/game-brief.md', gates: 'skills/openmotion-game/references/game-gates.md', controls: 'skills/openmotion-game/references/game-3c-modules.md', craft: 'skills/openmotion-game/references/game-feel-craft.md', lookup: 'skills/openmotion-game/references/game-lookup.md', genres: 'skills/openmotion-game/references/game-genres.md', playable: 'skills/openmotion-game/references/game-playable-ad.md', flow: 'skills/openmotion-game/references/game-flow.md', design: 'skills/openmotion-game/references/game-design-system.md', style: 'skills/openmotion-game/references/game-stylization.md', sprites: 'skills/openmotion-game/references/game-2d-animation.md', animation: 'skills/openmotion-game/references/game-3d-animation.md', procedural: 'skills/openmotion-game/references/game-procedural-animation.md', audio: 'skills/openmotion-game/references/game-audio.md', textures: 'skills/openmotion-game/references/game-textures.md', review: 'skills/openmotion-game/references/review-rubric.md' , wechat: 'skills/openmotion-game/references/wechat-minigame-port.md' } },
+  game: {
+    status: 'ready',
+    sections: {
+      start: 'skills/openmotion-game/SKILL.md',
+      provenance: 'skills/openmotion-game/PROVENANCE.md',
+      brief: 'skills/openmotion-game/references/game-brief.md',
+      gates: 'skills/openmotion-game/references/game-gates.md',
+      controls: 'skills/openmotion-game/references/game-3c-modules.md',
+      craft: 'skills/openmotion-game/references/game-feel-craft.md',
+      lookup: 'skills/openmotion-game/references/game-lookup.md',
+      genres: 'skills/openmotion-game/references/game-genres.md',
+      playable: 'skills/openmotion-game/references/game-playable-ad.md',
+      flow: 'skills/openmotion-game/references/game-flow.md',
+      design: 'skills/openmotion-game/references/game-design-system.md',
+      style: 'skills/openmotion-game/references/game-stylization.md',
+      sprites: 'skills/openmotion-game/references/game-2d-animation.md',
+      animation: 'skills/openmotion-game/references/game-3d-animation.md',
+      procedural: 'skills/openmotion-game/references/game-procedural-animation.md',
+      audio: 'skills/openmotion-game/references/game-audio.md',
+      textures: 'skills/openmotion-game/references/game-textures.md',
+      review: 'skills/openmotion-game/references/review-rubric.md',
+      wechat: 'skills/openmotion-game/references/wechat-minigame-port.md',
+    },
+  },
   design: {
     status: 'ready',
     sections: {
@@ -105,8 +144,8 @@ export const workflowRegistry = {
 export const workflowFiles = workflowRegistry.production.sections;
 export const workflowNames = Object.keys(workflowRegistry);
 export const workflowSections = [...new Set(Object.values(workflowRegistry).flatMap(workflow => Object.keys(workflow.sections)))];
-export const phase1WorkflowNames = ['production', 'director', 'template', 'recreate', 'video-to-template', 'media', 'design', 'game'];
-export const phase1Skills = ['openmotion-production', 'openmotion-director', 'openmotion-template-to-video', 'openmotion-recreate', 'openmotion-video-to-template'];
+export const phase1WorkflowNames = ['video', 'production', 'director', 'template', 'recreate', 'video-to-template', 'media', 'design', 'game'];
+export const phase1Skills = ['openmotion-video'];
 export const supportingSkills = ['openmotion-media', 'openmotion-design', 'openmotion-game'];
 export const packagedSkills = [...phase1Skills, ...supportingSkills];
 export function workflowResources() {
@@ -148,11 +187,48 @@ for (const [workflow, definition] of Object.entries(workflowRegistry)) for (cons
   if (!current || owner && skillDirectory(documentId) !== skillDirectory(workflowRegistry[current.workflow as keyof typeof workflowRegistry].sections.start)) documents.set(documentId, { workflow, section, documentId });
 }
 
-// Old installed Markdown paths resolve to the maintained production body. Keep the
-// requested director route on direct reads, but canonical production identity in references.
+// Legacy installed Markdown paths resolve to the maintained openmotion-video bodies.
+// Keep requested routes on direct MCP reads, and canonical identity in resolved references.
 export const workflowDocumentAliases = {
-  'skills/openmotion-director/references/production-decisions.md': 'skills/openmotion-production/references/decisions.md',
-  'skills/openmotion-director/references/motion-review.md': 'skills/openmotion-production/references/review.md',
+  'skills/openmotion-director/SKILL.md': 'skills/openmotion-video/workflows/director.md',
+  'skills/openmotion-production/SKILL.md': 'skills/openmotion-video/workflows/production.md',
+  'skills/openmotion-recreate/SKILL.md': 'skills/openmotion-video/workflows/recreate.md',
+  'skills/openmotion-template-to-video/SKILL.md': 'skills/openmotion-video/workflows/template-to-video.md',
+  'skills/openmotion-video-to-template/SKILL.md': 'skills/openmotion-video/workflows/video-to-template.md',
+  'skills/openmotion-director/references/production-decisions.md': 'skills/openmotion-video/references/shared/decisions.md',
+  'skills/openmotion-director/references/motion-review.md': 'skills/openmotion-video/references/shared/review.md',
+  'skills/openmotion-director/references/action-script.md': 'skills/openmotion-video/references/director/action-script.md',
+  'skills/openmotion-director/references/examples.md': 'skills/openmotion-video/references/director/examples.md',
+  'skills/openmotion-director/references/motion-craft.md': 'skills/openmotion-video/references/director/motion-craft.md',
+  'skills/openmotion-director/references/motion-phrases.md': 'skills/openmotion-video/references/director/motion-phrases.md',
+  'skills/openmotion-director/references/sound-narrative.md': 'skills/openmotion-video/references/director/sound-narrative.md',
+  'skills/openmotion-recreate/references/rebuild.md': 'skills/openmotion-video/references/recreate/rebuild.md',
+  'skills/openmotion-recreate/references/reconstruction.md': 'skills/openmotion-video/references/recreate/reconstruction.md',
+  'skills/openmotion-recreate/references/rendering.md': 'skills/openmotion-video/references/recreate/rendering.md',
+  'skills/openmotion-recreate/references/verify.md': 'skills/openmotion-video/references/recreate/verify.md',
+  'skills/openmotion-template-to-video/references/adaptation.md': 'skills/openmotion-video/references/template-to-video/adaptation.md',
+  'skills/openmotion-template-to-video/references/first-use.md': 'skills/openmotion-video/references/template-to-video/first-use.md',
+  'skills/openmotion-template-to-video/references/recipes.md': 'skills/openmotion-video/references/template-to-video/recipes.md',
+  'skills/openmotion-template-to-video/references/unchanged-export.md': 'skills/openmotion-video/references/template-to-video/unchanged-export.md',
+  'skills/openmotion-video-to-template/references/measure.md': 'skills/openmotion-video/references/video-to-template/measure.md',
+  'skills/openmotion-video-to-template/references/rebuild.md': 'skills/openmotion-video/references/video-to-template/rebuild.md',
+  'skills/openmotion-video-to-template/references/rule-sources.md': 'skills/openmotion-video/references/video-to-template/rule-sources.md',
+  'skills/openmotion-video-to-template/references/verify.md': 'skills/openmotion-video/references/video-to-template/verify.md',
+  'skills/openmotion-production/references/context.md': 'skills/openmotion-video/references/shared/context.md',
+  'skills/openmotion-production/references/decisions.md': 'skills/openmotion-video/references/shared/decisions.md',
+  'skills/openmotion-production/references/edit.md': 'skills/openmotion-video/references/shared/edit.md',
+  'skills/openmotion-production/references/fonts.md': 'skills/openmotion-video/references/shared/fonts.md',
+  'skills/openmotion-production/references/intake.md': 'skills/openmotion-video/references/shared/intake.md',
+  'skills/openmotion-production/references/materials.md': 'skills/openmotion-video/references/shared/materials.md',
+  'skills/openmotion-production/references/native.md': 'skills/openmotion-video/references/shared/native.md',
+  'skills/openmotion-production/references/portable-project.md': 'skills/openmotion-video/references/shared/portable-project.md',
+  'skills/openmotion-production/references/production.md': 'skills/openmotion-video/references/shared/production.md',
+  'skills/openmotion-production/references/reference-video.md': 'skills/openmotion-video/references/shared/reference-video.md',
+  'skills/openmotion-production/references/review.md': 'skills/openmotion-video/references/shared/review.md',
+  'skills/openmotion-production/references/sound.md': 'skills/openmotion-video/references/shared/sound.md',
+  'skills/openmotion-production/references/templates.md': 'skills/openmotion-video/references/shared/templates.md',
+  'skills/openmotion-production/references/typography.md': 'skills/openmotion-video/references/shared/typography.md',
+  'skills/openmotion-production/references/verification.md': 'skills/openmotion-video/references/shared/verification.md',
 } as const;
 for (const [legacy, canonical] of Object.entries(workflowDocumentAliases)) {
   const target = documents.get(canonical);
@@ -257,6 +333,6 @@ export async function getWorkflow(section: unknown = 'start', workflow: unknown 
     contentHash: createHash('sha256').update(content).digest('hex'),
     content, path: fileURLToPath(url), sections: Object.keys(files), workflows: workflowNames,
     references: workflowReferences(content, documentId),
-    readNext: 'Use production/context for required dependencies; changes to existing content also use production/edit. Reuse complete bodies still available. Read missing instructions and target sources in a read-only call that finishes and returns to the model before a later call performs dependent template application, imports, writes or export. Sequential read/write operations inside one outer tool call do not satisfy this boundary. Check actual returned output for truncation; split long reads as needed. Record documentId/contentHash only after complete return. Reload only missing, truncated or changed content, not merely for a new turn. Do not restart routing or repeat completed operations. Guidance is not execution or verification evidence.',
+    readNext: 'Read the matching workflow document first; use production/context for scoped dependency lookup and production/edit when changing existing content. Reuse complete bodies still available. Read missing instructions and target sources in a read-only call that finishes and returns to the model before a later call performs dependent template application, imports, writes or export. Sequential read/write operations inside one outer tool call do not satisfy this boundary. Check actual returned output for truncation; split long reads as needed. Reload only missing, truncated or changed content, not merely for a new turn. Do not restart routing or repeat completed operations. Guidance is not execution or verification evidence.',
   };
 }

@@ -253,16 +253,16 @@ test('test npm artifacts contain their application, locked manifest and no bundl
     assert.deepEqual((await readdir(path.join(application, 'skills'))).sort(), [...packagedSkills].sort());
     assert.equal(release.skills.length, packagedSkills.length);
     assert(release.skills.every((name: string) => name.startsWith('openmotion-')));
-    assert.match(await readFile(path.join(application, 'skills/openmotion-production/agents/openai.yaml'), 'utf8'), /OpenMotion Production/);
+    assert.match(await readFile(path.join(application, 'skills/openmotion-video/agents/openai.yaml'), 'utf8'), /OpenMotion Video/);
     assert.match(await readFile(path.join(application, 'skills/openmotion-media/agents/openai.yaml'), 'utf8'), /OpenMotion Media/);
-    for (const document of ['skills/openmotion-director/SKILL.md', 'skills/openmotion-media/SKILL.md', 'skills/openmotion-production/references/context.md', 'skills/openmotion-production/references/native.md', 'skills/openmotion-production/references/typography.md', 'skills/openmotion-production/references/fonts.md', 'skills/openmotion-production/fonts/catalog.json', 'scripts/prepare-font.ts', 'scripts/font-specimen.ts', 'skills/openmotion-production/references/verification.md', 'skills/openmotion-recreate/SKILL.md', 'phase1.ts', 'shared/phase1-tools.ts', 'shared/mcp-profiles.json']) {
+    for (const document of ['skills/openmotion-video/SKILL.md', 'skills/openmotion-video/workflows/director.md', 'skills/openmotion-media/SKILL.md', 'skills/openmotion-media/references/materials.md', 'skills/openmotion-video/references/shared/context.md', 'skills/openmotion-video/references/shared/native.md', 'skills/openmotion-video/references/shared/typography.md', 'skills/openmotion-video/references/shared/fonts.md', 'skills/openmotion-video/fonts/catalog.json', 'scripts/prepare-font.ts', 'scripts/font-specimen.ts', 'skills/openmotion-video/references/shared/verification.md', 'skills/openmotion-video/workflows/recreate.md', 'phase1.ts', 'shared/phase1-tools.ts', 'shared/mcp-profiles.json']) {
       assert.equal(await readFile(path.join(application, document), 'utf8'), await readFile(document, 'utf8'));
     }
     assert.equal(await sha256(path.join(application, 'package-lock.json')), release.locks.npm);
     assert.equal(await sha256(path.join(application, 'scripts/runtime-lock.json')), release.locks.native);
     const entries = await runFile('tar', ['-tf', built.application]);
     assert(!/\/(node_modules|runtime)\//.test(entries));
-    assert(entries.includes('skills/openmotion-production/SKILL.md'));
+    assert(entries.includes('skills/openmotion-video/SKILL.md'));
     for (const file of ['shared/provider-registry.ts', 'gateway/connections.ts', 'gateway/media-use.ts', 'gateway/opendesign.ts', 'skills/openmotion-media/references/providers/fal.md', 'skills/openmotion-media/references/providers/opendesign.md', 'skills/openmotion-media/references/providers/atlascloud.md', 'skills/openmotion-media/references/providers/wavespeed.md']) assert(entries.includes(file), 'BYOK runtime and guidance must ship: ' + file);
     assert(!entries.includes('skills/openmotion-debug-media/'), 'Removed debugging Skill must not ship');
     const entryNames = entries.trim().split('\n').map(file => file.replace(/^\.\//, ''));
@@ -277,12 +277,12 @@ test('test npm artifacts contain their application, locked manifest and no bundl
     const nonRuntimePackageEntries = entryNames.filter(file => !file.startsWith('packages/multimodal-models/src/') && !/^templates\/games\/[^/]+\/src\//.test(file)).join('\n');
     assert(!/(^|\/)(tests|src)\//.test(nonRuntimePackageEntries), 'Development sources and fixtures must not ship');
     for (const script of ['measure_frame.mjs', 'register_motion.py', 'measure_motion.py', 'observe_marks.py', 'vision-tools.mjs']) {
-      const filename = 'skills/openmotion-recreate/scripts/' + script;
+      const filename = 'skills/openmotion-video/scripts/' + script;
       assert(entries.includes(filename), 'Missing recreation helper: ' + script);
       assert.equal(await readFile(path.join(application, filename), 'utf8'), await readFile(filename, 'utf8'));
     }
-    for (const file of ['rebuild.md', 'reconstruction.md', 'rendering.md', 'verify.md']) assert(entries.includes('skills/openmotion-recreate/references/' + file), 'Missing recreation reference: ' + file);
-    assert(entries.includes('skills/openmotion-recreate/assets/reconstruction.js'));
+    for (const file of ['rebuild.md', 'reconstruction.md', 'rendering.md', 'verify.md']) assert(entries.includes('skills/openmotion-video/references/recreate/' + file), 'Missing recreation reference: ' + file);
+    assert(entries.includes('skills/openmotion-video/assets/reconstruction.js'));
     assert(entries.includes('studio/build/index.html'));
     assert.doesNotMatch(entries, /studio\/build\/editor-assets\/three-js-.*\.webp/);
     assert.doesNotMatch(entries, /studio\/build\/.*\.(?:mp4|webm|gif)$/m);

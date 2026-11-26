@@ -6,7 +6,7 @@ Within a film, the calling entry decides how generated media serves the motion d
 
 ## Define the asset and modality
 
-Derive subject, recognizable identity features, action, framing, lighting, style, duration budget and negative space for editable native typography from the active brief, reference segment or user prompt. Reuse approved project assets before generating new ones. Choose between still image, video and audio using the shared [generation timing ladder](../../openmotion-production/references/materials.md#generation-timing-ladder); when one recurring subject spans several shots, follow the shared [cross-shot consistency](../../openmotion-production/references/materials.md#cross-shot-consistency) sequence (anchor still, action-ready shot first frames or continuation frames, and shared style cues) and include any needed derived first-frame stills in the upfront consent plan.
+Derive subject, recognizable identity features, action, framing, lighting, style, duration budget and negative space for editable native typography from the active brief, reference segment or user prompt. Reuse approved project assets before generating new ones. Choose between still image, video and audio using the shared [generation timing ladder](materials.md#generation-timing-ladder); when one recurring subject spans several shots, follow the shared [cross-shot consistency](materials.md#cross-shot-consistency) sequence (anchor still, action-ready shot first frames or continuation frames, and shared style cues) and include any needed derived first-frame stills in the upfront consent plan.
 
 Match each modality to its concrete authoring inputs:
 

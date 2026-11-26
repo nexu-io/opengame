@@ -143,8 +143,8 @@ test('reference recommendations keep exact catalog identities without builtin cr
     assert.equal(card.durationSeconds, Number(record.entry.original.durationSeconds));
   }
   assert.match(result.selectionGuide, /openmotion_get_template/);
-  assert.match(result.selectionGuide, /If hasHtmlProject is true, follow openmotion-template-to-video/);
-  assert.match(result.selectionGuide, /openmotion-recreate only for reference-only sources/);
+  assert.match(result.selectionGuide, /If hasHtmlProject is true, follow openmotion-video's template-to-video workflow/);
+  assert.match(result.selectionGuide, /recreate workflow .* only for reference-only sources/);
   const bootstrap = JSON.parse(presentation.content.text.match(/window\.__OPENMOTION_TEMPLATE_CARDS__=(.*?);<\/script>/s)![1]) as TemplateCardsBootstrap;
   assert(readRecommendation(result, bootstrap));
   for (const card of result.cards) for (const language of ['zh', 'en', 'ja', 'ko', 'fr', 'es', 'pt'] as const) {

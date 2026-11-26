@@ -51,7 +51,7 @@ test('every distribution preserves public workflow dependencies and licenses whi
     assert(files.has('docs/template-repository.md'), 'Repository guidance must ship');
     assert(![...files].some(file => (file.startsWith('library/templates/catalog/') && !onboardingSourceFiles.includes(file)) || /scripts\/(?:template-library|check-template-library)\.ts$/.test(file)), 'The source catalog and contribution tools must not inflate application packages');
     for (const file of ['docs/assets.md', 'docs/generation-options.md', 'gateway/asset-library.ts', 'gateway/account-media.ts', 'gateway/asset-chat.ts', 'gateway/asset-read.ts', 'shared/asset-tools.ts', 'shared/generation-options.ts']) assert(files.has(file), 'Missing asset runtime or guide: ' + file);
-    for (const file of ['scripts/prepare-font.ts', 'scripts/font-specimen.ts', 'shared/font-catalog.ts', 'shared/import-font.ts', 'skills/openmotion-production/fonts/catalog.json']) assert(files.has(file), 'Missing font dependency: ' + file);
+    for (const file of ['scripts/prepare-font.ts', 'scripts/font-specimen.ts', 'shared/font-catalog.ts', 'shared/import-font.ts', 'skills/openmotion-video/fonts/catalog.json']) assert(files.has(file), 'Missing font dependency: ' + file);
     for (const file of ['game-projects.ts', 'shared/game-contract.ts', 'shared/game-tools.ts', 'skills/openmotion-game/SKILL.md', 'skills/openmotion-game/LICENSE-HIGGSFIELD']) assert(files.has(file), 'Missing Game Studio dependency: ' + file);
     for (const file of ['scripts/game-glb-inspect.mjs', 'templates/game-kits/coop-3d/index.html', 'templates/game-kits/coop-3d/client.js', 'templates/game-kits/coop-3d/logic.js', 'templates/game-kits/coop-3d/style.css', 'templates/game-kits/vendor/three.module.min.js', 'templates/game-kits/vendor/GLTFLoader.js', 'templates/game-kits/vendor/SkeletonUtils.js', 'templates/game-kits/vendor/BufferGeometryUtils.js', 'templates/game-kits/characters/Mage.glb', 'templates/game-kits/characters/Knight.glb', 'templates/game-kits/characters/LICENSE-KayKit.txt']) assert(files.has(file), 'Missing offline game kit dependency: ' + file);
     const gameTemplates = await readdir(new URL('../templates/games/', import.meta.url), { recursive: true, withFileTypes: true }).catch(error => { if (error.code === 'ENOENT') return []; throw error; });
@@ -69,11 +69,11 @@ test('every distribution preserves public workflow dependencies and licenses whi
     for (const file of ['review-comments.ts', 'shared/review-comments.ts']) assert(files.has(file), 'Missing review comment runtime: ' + file);
     assert(files.has('tracking/device.ts'), 'The device identity runtime dependency must ship');
     for (const script of ['register_motion.py', 'measure_motion.py']) {
-      assert(files.has('skills/openmotion-recreate/scripts/' + script), 'Missing recreation helper: ' + script);
+      assert(files.has('skills/openmotion-video/scripts/' + script), 'Missing recreation helper: ' + script);
     }
     for (const file of ['shared/provider-registry.ts', 'shared/provider-presets.json', 'shared/provider-registry-LICENSE.txt', 'shared/provider-registry-NOTICE.md', 'docs/provider-settings.md', 'gateway/account.ts', 'gateway/connections.ts', 'gateway/compatible.ts']) assert(files.has(file), 'Missing provider settings runtime or license: ' + file);
     assert(![...files].some(file => file.includes('@powerformer/vela-cli')), 'The optional account connector must not be redistributed');
-    for (const file of ['studio/build/index.html', 'studio/LICENSE', 'template-library/LICENSE', 'template-library/NOTICE.md', 'packages/design-system/fonts/Albert-Sans-OFL.txt', 'scripts/distribution.ts', 'scripts/diagnostics.mjs', 'scripts/zip.mjs', 'project-archive.ts', 'shared/project-archive.ts', 'shared/project-zip.ts', 'gateway/project-archive-http.ts', 'docs/project-archives.md', 'scripts/diagnostic-redaction.mjs', 'shared/build-info.json', 'shared/editor-launch.pl', 'shared/workspace-studio.ts', 'shared/owned-studio.mjs', 'shared/workflow-entry.js', 'skills/openmotion-recreate/scripts/measure_frame.mjs']) assert(files.has(file), 'Missing runtime or license: ' + file);
+    for (const file of ['studio/build/index.html', 'studio/LICENSE', 'template-library/LICENSE', 'template-library/NOTICE.md', 'packages/design-system/fonts/Albert-Sans-OFL.txt', 'scripts/distribution.ts', 'scripts/diagnostics.mjs', 'scripts/zip.mjs', 'project-archive.ts', 'shared/project-archive.ts', 'shared/project-zip.ts', 'gateway/project-archive-http.ts', 'docs/project-archives.md', 'scripts/diagnostic-redaction.mjs', 'shared/build-info.json', 'shared/editor-launch.pl', 'shared/workspace-studio.ts', 'shared/owned-studio.mjs', 'shared/workflow-entry.js', 'skills/openmotion-video/scripts/measure_frame.mjs']) assert(files.has(file), 'Missing runtime or license: ' + file);
     assert([...files].some(file => /^studio\/build\/editor-assets\/soundtrack-[\w-]+\.m4a$/.test(file)), 'The bundled Music scene soundtrack must ship');
     assert([...files].some(file => /^studio\/build\/editor-assets\/sfx-whoosh-[\w-]+\.m4a$/.test(file)), 'Sound Studio template previews must ship');
     assert(![...files].some(file => /^studio\/build\/editor-assets\/three-js-.*\.webp$/.test(file)), 'Skill posters are hosted and loaded on demand');
@@ -87,9 +87,10 @@ test('every distribution preserves public workflow dependencies and licenses whi
         for (const reference of document.references) assert(files.has(reference.documentId), 'Missing workflow reference: ' + reference.documentId);
       }
     }
-    assert(files.has('skills/openmotion-video-to-template/SKILL.md'));
-    for (const file of ['references/unchanged-export.md', 'scripts/delivery.mjs', 'scripts/playback.mjs']) {
-      assert(files.has('skills/openmotion-template-to-video/' + file), 'Missing unchanged-delivery dependency: ' + file);
+    assert(files.has('skills/openmotion-video/SKILL.md'));
+    assert(files.has('skills/openmotion-video/workflows/video-to-template.md'));
+    for (const file of ['references/template-to-video/unchanged-export.md', 'scripts/delivery.mjs', 'scripts/playback.mjs']) {
+      assert(files.has('skills/openmotion-video/' + file), 'Missing unchanged-delivery dependency: ' + file);
     }
   }
   await assert.rejects(distributionFiles('unknown'), /Unknown distribution/);
@@ -106,14 +107,14 @@ test('ZIP stores UTF-8 names and file sizes in local and central headers', () =>
 
 test('source and distribution expose only canonical Skill folders', async () => {
   const { readdir } = await import('node:fs/promises');
-  const core = ['openmotion', 'openmotion-design', 'openmotion-director', 'openmotion-game', 'openmotion-media', 'openmotion-production', 'openmotion-recreate', 'openmotion-template-to-video', 'openmotion-video-to-template'];
+  const core = ['openmotion', 'openmotion-design', 'openmotion-game', 'openmotion-media', 'openmotion-video'];
   const library = ['openmotion-ad-script', 'openmotion-adaptive-layout', 'openmotion-ai-assistant-tour', 'openmotion-archive-collage', 'openmotion-article-illustrations', 'openmotion-aurora-gradient', 'openmotion-before-after', 'openmotion-bilingual-captions', 'openmotion-bold-type-poster', 'openmotion-brandkit', 'openmotion-bubble-field', 'openmotion-caption-styling', 'openmotion-card-carousel', 'openmotion-cards-and-text', 'openmotion-chalk-blueprint', 'openmotion-cinematic-logo', 'openmotion-clay-explainer', 'openmotion-color-pop-poster', 'openmotion-content-cover', 'openmotion-coral-title-cards', 'openmotion-corner-frames', 'openmotion-dark-premium-poster', 'openmotion-design-remix', 'openmotion-design-styles', 'openmotion-digital-human-presenter', 'openmotion-doc-promo', 'openmotion-echo-stack-type', 'openmotion-edit-to-script', 'openmotion-editorial-explainer', 'openmotion-editorial-poster', 'openmotion-editorial-webinar', 'openmotion-electric-impact-type', 'openmotion-felt-stop-motion', 'openmotion-flat-beat', 'openmotion-flat-card-explainer', 'openmotion-flat-lay-product', 'openmotion-folder-pop', 'openmotion-footage-to-handpainted', 'openmotion-giant-flip-type', 'openmotion-glitch-logo-sting', 'openmotion-growth-teardown', 'openmotion-hand-drawn-explainer', 'openmotion-hidden-feature-demo', 'openmotion-highlighter-notes', 'openmotion-in-hand-product', 'openmotion-ink-ribbon', 'openmotion-isometric-card-flight', 'openmotion-juicy-splash-poster', 'openmotion-light-shadow-product', 'openmotion-liquid-blob', 'openmotion-liquid-glass-logo', 'openmotion-liquid-logo', 'openmotion-livestream-clips', 'openmotion-magnet-particles', 'openmotion-manifesto-pop', 'openmotion-monochrome-magazine', 'openmotion-motion-graphic-placement', 'openmotion-multi-clips-to-reels', 'openmotion-multicam-edit', 'openmotion-mystery-box-reveal', 'openmotion-neon-outline-type', 'openmotion-nova-intro', 'openmotion-one-bit-dither', 'openmotion-orange-unfiltered', 'openmotion-paper-collage-explainer', 'openmotion-paper-diorama', 'openmotion-paper-map-journey', 'openmotion-paper-stop-motion', 'openmotion-pastel-flat-2d', 'openmotion-pixel-art-explainer', 'openmotion-pop-style', 'openmotion-premium-halo', 'openmotion-presenter-story', 'openmotion-push-in-type', 'openmotion-quantum-particles', 'openmotion-red-pen-archive', 'openmotion-relight-reveal', 'openmotion-retro-flat-scene', 'openmotion-retro-print-poster', 'openmotion-ring-mask-reveal', 'openmotion-runway-rebel', 'openmotion-sale-carousel', 'openmotion-sale-countdown', 'openmotion-sale-promo', 'openmotion-shortlist-shorts', 'openmotion-shot-breakdown', 'openmotion-shutter-bands', 'openmotion-smooth-wipes', 'openmotion-spec-sheet', 'openmotion-splash-float-product', 'openmotion-split-slot-type', 'openmotion-step-by-step-tutorial', 'openmotion-sticker-bounce', 'openmotion-sticker-peel', 'openmotion-storyboard-to-motion', 'openmotion-storybook-myth', 'openmotion-surreal-3d-poster', 'openmotion-talking-head-recreation', 'openmotion-time-freeze', 'openmotion-translucent-glass', 'openmotion-velocity-lines', 'openmotion-video-dubbing', 'openmotion-website-launch', 'openmotion-whiteboard-doodle', 'openmotion-whiteboard-marker', 'openmotion-wireframe-style'];
   assert.deepEqual((await readdir(new URL('../skills/', import.meta.url))).filter(name => !name.startsWith('.')).sort(), core);
   assert.deepEqual((await readdir(new URL('../library/skills/', import.meta.url))).sort(), library);
   for (const profile of ['phase1', 'legacy']) {
     const files = await distributionFiles(profile);
     const roots = [...new Set(files.filter(file => /^(?:library\/)?skills\//.test(file)).map(file => file.split('/').at(file.startsWith('library/') ? 2 : 1)))];
-    assert(roots.length >= 8);
+    assert(roots.length >= 4);
     assert(roots.every(name => name?.startsWith('openmotion-')), roots.join(', '));
   }
 });
@@ -123,11 +124,11 @@ test('source and distribution expose only canonical Skill folders', async () => 
 test('unchanged export guidance and helpers survive lightweight distribution', async () => {
   for (const profile of ['phase1', 'legacy']) {
     const files = new Set(await distributionFiles(profile, file => /\.(?:md|mjs|ts|json|ya?ml)$/.test(file)));
-    for (const file of ['references/unchanged-export.md', 'scripts/delivery.mjs', 'scripts/playback.mjs']) {
-      assert(files.has('skills/openmotion-template-to-video/' + file), 'Missing delivery dependency: ' + file);
+    for (const file of ['references/template-to-video/unchanged-export.md', 'scripts/delivery.mjs', 'scripts/playback.mjs']) {
+      assert(files.has('skills/openmotion-video/' + file), 'Missing delivery dependency: ' + file);
     }
     const route = await getWorkflow('unchanged', 'template');
-    assert.equal(route.documentId, 'skills/openmotion-template-to-video/references/unchanged-export.md');
+    assert.equal(route.documentId, 'skills/openmotion-video/references/template-to-video/unchanged-export.md');
     assert(files.has(route.documentId));
     for (const reference of route.references) assert(files.has(reference.documentId));
   }
@@ -136,7 +137,7 @@ test('unchanged export guidance and helpers survive lightweight distribution', a
 test('asset naming contracts and runtime dependencies survive lightweight distribution', async () => {
   for (const profile of ['phase1', 'legacy']) {
     const files = new Set(await distributionFiles(profile, file => /\.(?:md|mjs|ts|json|ya?ml)$/.test(file)));
-    for (const file of ['project-asset-names.ts', 'shared/asset-names.ts', 'shared/asset-name-ui.json', 'skills/openmotion-production/references/materials.md']) assert.ok(files.has(file), file);
+    for (const file of ['project-asset-names.ts', 'shared/asset-names.ts', 'shared/asset-name-ui.json', 'skills/openmotion-media/references/materials.md', 'skills/openmotion-video/references/shared/materials.md']) assert.ok(files.has(file), file);
   }
 });
 

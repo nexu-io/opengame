@@ -12,7 +12,7 @@ export type CatalogFont = {
   license: { spdx: string; url: string; sha256: string; size: number }; files: FontFile[];
 };
 export async function loadFontCatalog(): Promise<{ version: string; fonts: CatalogFont[] }> {
-  const source = await readFile(new URL('../skills/openmotion-production/fonts/catalog.json', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../skills/openmotion-video/fonts/catalog.json', import.meta.url), 'utf8');
   const catalog = JSON.parse(source);
   return { version: createHash('sha256').update(source).digest('hex'), fonts: catalog.fonts };
 }

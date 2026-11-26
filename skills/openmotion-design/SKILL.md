@@ -23,7 +23,7 @@ Author and iterate HTML design deliverables through the four Design Studio MCP t
 | `live-artifact` | `data.json`-driven dashboard with escaped rendering | [scenarios](references/scenarios.md#live-artifact) |
 | `webgl` | Real-time WebGL2 canvas with DPR cap and resize/visibility lifecycle | [scenarios](references/scenarios.md#webgl) |
 
-For editable motion films and timeline graphics (`motion-design`, `hyperframes`), use the OpenMotion video production skills instead. For standalone image, video or audio assets, use `openmotion-media`.
+For editable motion films and timeline graphics (`motion-design`, `hyperframes`), use `openmotion-video` instead. For standalone image, video or audio assets, use `openmotion-media`.
 
 ## Core workflow
 
@@ -39,5 +39,4 @@ For editable motion films and timeline graphics (`motion-design`, `hyperframes`)
 - [Iterating from user annotations](references/iterate.md)
 - [Export and Open Design round-trip import](references/export.md)
 - [Using design systems and craft guides](references/systems.md)
-- [Shared material policy](../openmotion-production/references/materials.md) (when generating image or media assets for a design)
-- [Shared edit workflow](../openmotion-production/references/edit.md) (for Motion Studio video edits outside Design Studio)
+- [Shared media contracts](../openmotion-media/references/materials.md) (when generating or naming image/media assets for a design; see also [openmotion-media](../openmotion-media/SKILL.md))
