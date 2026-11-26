@@ -1591,12 +1591,19 @@ server.listen(port, '127.0.0.1', () => {
   async staticFile(id: string, relative: string) {
     if (relative.toLowerCase() === 'game.json' || relative.toLowerCase()==='trailer/job.json' || isPublishRecord(relative)) throw new GameError('Private game metadata', 404);
     const card = await this.locateCard(id);
+    const cachedTemplateDir = card.source === 'template' ? this.hosted.cachedDirectory(card.dir) : undefined;
     const root = relative.startsWith('trailer/') ? await this.trailerStorage(id)
-      : card.source === 'template' && relative === 'index.html' ? await this.hosted.directory(id, card.dir) : card.dir;
+      : card.source === 'template' && relative === 'index.html' ? await this.hosted.directory(id, card.dir)
+      : cachedTemplateDir ?? card.dir;
     let file: string;
     try { file = await safeFile(root, relative); }
     catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || card.source !== 'template' || root !== card.dir) throw error;
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || card.source !== 'template' || relative === 'index.html') throw error;
+      if (root !== card.dir) {
+        const cacheExists = await access(root).then(() => true, () => false);
+        if (cacheExists) throw error;
+        this.hosted.invalidateCachedDirectory(card.dir);
+      }
       file = await safeFile(await this.hosted.directory(id, card.dir), relative);
     }
     let data = await readFile(file);
@@ -1759,6 +1766,7 @@ export async function gameHttp(req: IncomingMessage, res: ServerResponse, url: U
         file = await service.staticFile(id,rest.length?rest.join('/'):'index.html');
       } catch (error) {
         if (!studioEntry) throw error;
+        console.error(`[opengame] Failed to load game ${id}:`, error instanceof Error ? error.message : error);
         res.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; sandbox allow-scripts" });
         res.end(`<script>parent.postMessage({type:'opengame:startup',state:'failed'}, '*')</script>`);
         return true;
