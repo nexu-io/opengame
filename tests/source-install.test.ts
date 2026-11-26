@@ -28,7 +28,7 @@ test('public Motion sources contain no company endpoints, workstation paths or e
   }
 });
 
-for (const ref of [undefined, 'migration-review']) test(`source installation clones openmotion ${ref || 'main by default'} and invokes its installer`, { skip: process.platform === 'win32' }, async () => {
+for (const ref of [undefined, 'migration-review']) test(`source installation clones opengame ${ref || 'main by default'} and invokes its installer`, { skip: process.platform === 'win32' }, async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'motion source install '));
   try {
     const bin = path.join(directory, 'bin'), log = path.join(directory, 'git.jsonl');
@@ -53,7 +53,7 @@ if (args.includes('clone')) {
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /nested-motion-installer/);
     const calls = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
-    assert.deepEqual(calls[0], ['-c', 'filter.lfs.process=', '-c', 'filter.lfs.smudge=', '-c', 'filter.lfs.required=false', 'clone', '--depth', '1', '--single-branch', '--branch', ref || 'main', '--', 'https://github.com/nexu-io/openmotion.git', destination]);
-    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0], ['-c', 'filter.lfs.process=', '-c', 'filter.lfs.smudge=', '-c', 'filter.lfs.required=false', 'clone', '--depth', '1', '--single-branch', '--branch', ref || 'main', '--', 'https://github.com/nexu-io/opengame.git', destination]);
+    assert.deepEqual(calls.slice(1), [['lfs', 'version'], ['-C', destination, 'lfs', 'install', '--local', '--skip-smudge']]);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

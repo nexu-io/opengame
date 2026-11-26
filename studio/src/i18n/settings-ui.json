@@ -384,7 +384,11 @@
     "Remaining": "剩余",
     "Plan credits": "套餐额度",
     "{plan} plan": "{plan} 套餐",
-    "Plan quota": "套餐额度"
+    "Plan quota": "套餐额度",
+    "Auto-generate multimodal assets": "自动生成多模态素材",
+    "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "创作任务中默认自动调用多模态模型生成图片、视频和音频；关闭后每次生成前需手动确认。",
+    "Settings saved": "设置已保存",
+    "Could not save setting.": "无法保存设置。"
   },
   "ja": {
     "Go back": "戻る",
@@ -540,7 +544,11 @@
     "{plan} plan": "{plan} プラン",
     "Plan quota": "プラン枠",
     "Sign in with OpenDesign": "OpenDesign にサインイン",
-    "Open settings": "設定を開く"
+    "Open settings": "設定を開く",
+    "Auto-generate multimodal assets": "マルチモーダル素材を自動生成",
+    "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "タスク内で AI 画像・動画・音声を自動生成します。オフにすると毎回生成前に確認します。",
+    "Settings saved": "設定を保存しました",
+    "Could not save setting.": "設定を保存できませんでした。"
   },
   "ko": {
     "Go back": "뒤로",
@@ -591,7 +599,11 @@
     "{plan} plan": "{plan} 플랜",
     "Plan quota": "플랜 사용량",
     "Sign in with OpenDesign": "OpenDesign 로그인",
-    "Open settings": "설정 열기"
+    "Open settings": "설정 열기",
+    "Auto-generate multimodal assets": "멀티모달 에셋 자동 생성",
+    "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "작업 중 AI 이미지, 동영상, 오디오를 자동으로 생성합니다. 끄면 생성할 때마다 확인을 요청합니다.",
+    "Settings saved": "설정이 저장되었습니다",
+    "Could not save setting.": "설정을 저장할 수 없습니다."
   },
   "de": {
     "Go back": "Zurück",
@@ -642,7 +654,11 @@
     "{plan} plan": "{plan}-Plan",
     "Plan quota": "Plankontingent",
     "Sign in with OpenDesign": "Bei OpenDesign anmelden",
-    "Open settings": "Einstellungen öffnen"
+    "Open settings": "Einstellungen öffnen",
+    "Auto-generate multimodal assets": "Multimodale Assets automatisch generieren",
+    "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "KI-Bilder, -Videos und -Audio in Aufgaben automatisch generieren. Deaktivieren, um vor jeder Generierung zu bestätigen.",
+    "Settings saved": "Einstellungen gespeichert",
+    "Could not save setting.": "Einstellung konnte nicht gespeichert werden."
   },
   "fr": {
     "Go back": "Retour",
@@ -693,7 +709,11 @@
     "{plan} plan": "Forfait {plan}",
     "Plan quota": "Quota du forfait",
     "Sign in with OpenDesign": "Se connecter à OpenDesign",
-    "Open settings": "Ouvrir les paramètres"
+    "Open settings": "Ouvrir les paramètres",
+    "Auto-generate multimodal assets": "Générer automatiquement les médias multimodaux",
+    "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "Génère automatiquement les images, vidéos et pistes audio IA pendant les tâches. Désactivez pour confirmer avant chaque génération.",
+    "Settings saved": "Paramètres enregistrés",
+    "Could not save setting.": "Impossible d’enregistrer le paramètre."
   },
   "ru": {
     "Go back": "Назад",
@@ -744,7 +764,11 @@
     "{plan} plan": "Тариф {plan}",
     "Plan quota": "Лимит тарифа",
     "Sign in with OpenDesign": "Войти в OpenDesign",
-    "Open settings": "Открыть настройки"
+    "Open settings": "Открыть настройки",
+    "Auto-generate multimodal assets": "Автогенерация мультимодальных материалов",
+    "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "Автоматически генерировать ИИ-изображения, видео и аудио в задачах. Отключите, чтобы подтверждать каждую генерацию.",
+    "Settings saved": "Настройки сохранены",
+    "Could not save setting.": "Не удалось сохранить настройку."
   },
   "es": {
     "Go back": "Volver",
@@ -795,7 +819,11 @@
     "{plan} plan": "Plan {plan}",
     "Plan quota": "Cuota del plan",
     "Sign in with OpenDesign": "Iniciar sesión en OpenDesign",
-    "Open settings": "Abrir ajustes"
+    "Open settings": "Abrir ajustes",
+    "Auto-generate multimodal assets": "Generar recursos multimodales automáticamente",
+    "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "Genera automáticamente imágenes, vídeo y audio con IA en las tareas. Desactívalo para confirmar antes de cada generación.",
+    "Settings saved": "Configuración guardada",
+    "Could not save setting.": "No se pudo guardar el ajuste."
   },
   "pt-BR": {
     "Go back": "Voltar",
@@ -846,7 +874,11 @@
     "{plan} plan": "Plano {plan}",
     "Plan quota": "Cota do plano",
     "Sign in with OpenDesign": "Entrar no OpenDesign",
-    "Open settings": "Abrir configurações"
+    "Open settings": "Abrir configurações",
+    "Auto-generate multimodal assets": "Gerar recursos multimodais automaticamente",
+    "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "Gera automaticamente imagens, vídeos e áudios de IA nas tarefas. Desative para confirmar antes de cada geração.",
+    "Settings saved": "Configurações salvas",
+    "Could not save setting.": "Não foi possível salvar a configuração."
   },
   "it": {
     "Go back": "Indietro",
@@ -897,7 +929,11 @@
     "{plan} plan": "Piano {plan}",
     "Plan quota": "Quota del piano",
     "Sign in with OpenDesign": "Accedi a OpenDesign",
-    "Open settings": "Apri impostazioni"
+    "Open settings": "Apri impostazioni",
+    "Auto-generate multimodal assets": "Genera automaticamente risorse multimodali",
+    "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "Genera automaticamente immagini, video e audio IA nelle attività. Disattiva per confermare prima di ogni generazione.",
+    "Settings saved": "Impostazioni salvate",
+    "Could not save setting.": "Impossibile salvare l’impostazione."
   },
   "tr": {
     "Go back": "Geri",
@@ -948,6 +984,10 @@
     "{plan} plan": "{plan} planı",
     "Plan quota": "Plan kotası",
     "Sign in with OpenDesign": "OpenDesign ile giriş yap",
-    "Open settings": "Ayarları aç"
+    "Open settings": "Ayarları aç",
+    "Auto-generate multimodal assets": "Çok modlu varlıkları otomatik oluştur",
+    "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "Görevlerde yapay zeka görsellerini, videolarını ve seslerini otomatik oluşturur. Her oluşturma öncesi onaylamak için kapatın.",
+    "Settings saved": "Ayarlar kaydedildi",
+    "Could not save setting.": "Ayar kaydedilemedi."
   }
 }

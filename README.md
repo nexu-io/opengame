@@ -47,7 +47,8 @@ OpenGame is **the first open-source Super Game Agent** — turning **DeepSeek (D
 Paste this instruction into **DeepSeek TUI / Harness**, **Claude Code**, **Codex**, **WorkBuddy**, **Cursor**, **Gemini CLI**, or any of the [22 supported local agents](#agent-wall):
 
 ```text
-Read https://github.com/nexu-io/opengame/blob/main/docs/opengame-setup.md and follow the instructions to install and connect OpenGame in the current agent, open Game Studio at /studios/game, and help me remix or build a playable game with the openmotion-game skill.
+Follow https://github.com/nexu-io/opengame/blob/main/docs/opengame-setup.md to connect OpenGame to this agent. For a new install, use a shallow clone (--depth 1) and skip LFS downloads. Open the Game Studio template gallery so I can choose a game. Fetch that game's assets when I play or remix it.
+If you find a reproducible OpenGame bug, you're welcome to open a PR against nexu-io/opengame with the fix, steps to reproduce, and how you verified it.
 ```
 
 ### 2. Install the Game Skill with Skills CLI
@@ -62,11 +63,12 @@ npx skills add nexu-io/opengame --skill openmotion-game
 
 ### 3. Run OpenGame Studio locally from source
 
-Requires **Git**, **npm**, and **Node.js 22.18+** (CI pins Node.js 26.11.1).
+Requires **Git**, **Git LFS**, **npm**, and **Node.js 22.18+** (CI pins Node.js 26.11.1). Browse the catalog immediately after startup. Playing or remixing a template downloads its assets on first use. Tidebreaker works offline.
 
 ```sh
 git -c filter.lfs.process= -c filter.lfs.smudge= -c filter.lfs.required=false clone --depth 1 --single-branch --branch main https://github.com/nexu-io/opengame.git
 cd opengame
+git lfs install --local --skip-smudge
 npm ci
 npm run build:studio
 npm start

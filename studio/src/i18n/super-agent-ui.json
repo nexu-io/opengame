@@ -1132,7 +1132,10 @@
     "Low output quality": "质量不够好",
     "Broken or errored": "出错/跑不起来",
     "Too slow or off-track": "太慢/绕弯",
-    "Submit": "提交"
+    "Submit": "提交",
+    "Top up credits": "去充值",
+    "Your OpenDesign balance is too low to generate media. Top up your credits and I'll continue automatically.": "你的 OpenDesign 余额不足，无法继续生成素材。充值后我会为你自动继续。",
+    "Balance topped up — please continue.": "余额已充值，请继续。"
   },
   "ja": {
     "Play again": "もう一度遊ぶ",
@@ -2267,7 +2270,10 @@
     "Low output quality": "品質が低い",
     "Broken or errored": "エラー・動作しない",
     "Too slow or off-track": "遅い・遠回り",
-    "Submit": "送信"
+    "Submit": "送信",
+    "Top up credits": "クレジットをチャージ",
+    "Your OpenDesign balance is too low to generate media. Top up your credits and I'll continue automatically.": "OpenDesign の残高不足のためメディアを生成できません。チャージすると自動で再開します。",
+    "Balance topped up — please continue.": "残高をチャージしました。続けてください。"
   },
   "ko": {
     "Play again": "다시 플레이",
@@ -3402,7 +3408,10 @@
     "Low output quality": "결과 품질이 낮음",
     "Broken or errored": "오류/실행 안 됨",
     "Too slow or off-track": "느리거나 빗나감",
-    "Submit": "제출"
+    "Submit": "제출",
+    "Top up credits": "크레딧 충전",
+    "Your OpenDesign balance is too low to generate media. Top up your credits and I'll continue automatically.": "OpenDesign 잔액이 부족해 미디어를 생성할 수 없습니다. 충전하면 자동으로 계속 진행합니다.",
+    "Balance topped up — please continue.": "잔액을 충전했어요. 계속해 주세요."
   },
   "de": {
     "Play again": "Erneut spielen",
@@ -4540,7 +4549,10 @@
     "Low output quality": "Geringe Qualität",
     "Broken or errored": "Fehler oder Absturz",
     "Too slow or off-track": "Zu langsam / am Ziel vorbei",
-    "Submit": "Senden"
+    "Submit": "Senden",
+    "Top up credits": "Guthaben aufladen",
+    "Your OpenDesign balance is too low to generate media. Top up your credits and I'll continue automatically.": "Dein OpenDesign-Guthaben reicht für die Medienerzeugung nicht aus. Lade Guthaben auf, dann mache ich automatisch weiter.",
+    "Balance topped up — please continue.": "Guthaben aufgeladen — bitte fortfahren."
   },
   "fr": {
     "Play again": "Rejouer",
@@ -5678,7 +5690,10 @@
     "Low output quality": "Qualité insuffisante",
     "Broken or errored": "Erreur ou bloqué",
     "Too slow or off-track": "Trop lent ou hors sujet",
-    "Submit": "Envoyer"
+    "Submit": "Envoyer",
+    "Top up credits": "Recharger des crédits",
+    "Your OpenDesign balance is too low to generate media. Top up your credits and I'll continue automatically.": "Votre solde OpenDesign est insuffisant pour générer des médias. Rechargez vos crédits et je reprendrai automatiquement.",
+    "Balance topped up — please continue.": "Solde rechargé — veuillez continuer."
   },
   "ru": {
     "Play again": "Сыграть ещё",
@@ -6818,7 +6833,10 @@
     "Low output quality": "Низкое качество",
     "Broken or errored": "Ошибка или не работает",
     "Too slow or off-track": "Слишком медленно или мимо",
-    "Submit": "Отправить"
+    "Submit": "Отправить",
+    "Top up credits": "Пополнить баланс",
+    "Your OpenDesign balance is too low to generate media. Top up your credits and I'll continue automatically.": "На балансе OpenDesign недостаточно средств для генерации медиа. Пополните баланс, и я автоматически продолжу.",
+    "Balance topped up — please continue.": "Баланс пополнен — продолжайте."
   },
   "es": {
     "Play again": "Volver a jugar",
@@ -7956,7 +7974,10 @@
     "Low output quality": "Baja calidad",
     "Broken or errored": "Error o no funciona",
     "Too slow or off-track": "Muy lento o desviado",
-    "Submit": "Enviar"
+    "Submit": "Enviar",
+    "Top up credits": "Recargar créditos",
+    "Your OpenDesign balance is too low to generate media. Top up your credits and I'll continue automatically.": "Tu saldo de OpenDesign es insuficiente para generar medios. Recarga tus créditos y continuaré automáticamente.",
+    "Balance topped up — please continue.": "Saldo recargado — continúa, por favor."
   },
   "pt-BR": {
     "Play again": "Jogar novamente",
@@ -9094,7 +9115,10 @@
     "Low output quality": "Qualidade baixa",
     "Broken or errored": "Com erro ou quebrado",
     "Too slow or off-track": "Lento ou fora do foco",
-    "Submit": "Enviar"
+    "Submit": "Enviar",
+    "Top up credits": "Recarregar créditos",
+    "Your OpenDesign balance is too low to generate media. Top up your credits and I'll continue automatically.": "Seu saldo OpenDesign é insuficiente para gerar mídia. Recarregue seus créditos e eu continuarei automaticamente.",
+    "Balance topped up — please continue.": "Saldo recarregado — continue, por favor."
   },
   "it": {
     "Play again": "Gioca ancora",
@@ -10232,7 +10256,10 @@
     "Low output quality": "Qualità bassa",
     "Broken or errored": "Errore o non funziona",
     "Too slow or off-track": "Troppo lento o fuori tema",
-    "Submit": "Invia"
+    "Submit": "Invia",
+    "Top up credits": "Ricarica crediti",
+    "Your OpenDesign balance is too low to generate media. Top up your credits and I'll continue automatically.": "Il tuo saldo OpenDesign è troppo basso per generare media. Ricarica i crediti e continuerò automaticamente.",
+    "Balance topped up — please continue.": "Saldo ricaricato — continua."
   },
   "tr": {
     "Play again": "Tekrar oyna",
@@ -11367,6 +11394,9 @@
     "Low output quality": "Düşük kalite",
     "Broken or errored": "Hata verdi veya çalışmıyor",
     "Too slow or off-track": "Çok yavaş veya konu dışı",
-    "Submit": "Gönder"
+    "Submit": "Gönder",
+    "Top up credits": "Kredi yükle",
+    "Your OpenDesign balance is too low to generate media. Top up your credits and I'll continue automatically.": "Medya oluşturmak için OpenDesign bakiyeniz yetersiz. Kredi yüklediğinizde otomatik olarak devam edeceğim.",
+    "Balance topped up — please continue.": "Bakiye yüklendi — lütfen devam edin."
   }
 }

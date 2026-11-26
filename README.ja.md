@@ -47,7 +47,8 @@ OpenGame は**世界初のオープンソース・フルスタック Super Game 
 以下のプロンプトを **DeepSeek TUI / Harness**、**Claude Code**、**Codex**、**WorkBuddy**、**Cursor**、**Gemini CLI**、または [対応する 22 種類のローカル Agent](#agent-wall) にそのまま貼り付けてください：
 
 ```text
-https://github.com/nexu-io/opengame/blob/main/docs/opengame-setup.md を読み、手順に従って現在の Agent に OpenGame をインストール・接続し、/studios/game で Game Studio を開いたうえで、openmotion-game Skill を使ってプレイ可能なゲームのリミックスまたは新規制作を行ってください。
+https://github.com/nexu-io/opengame/blob/main/docs/opengame-setup.md に従って、この Agent に OpenGame を接続してください。初回は浅いクローン（--depth 1）を使い、LFS 素材のダウンロードをスキップしてください。Game Studio のテンプレート一覧を開き、私がゲームを選んでプレイまたはリミックスするときに、そのゲームの素材を取得してください。
+OpenGame で再現できる不具合を見つけたら、再現手順と修正後の確認結果を添えて nexu-io/opengame に修正 PR を送ってください。
 ```
 
 ### 2. Skills CLI でゲーム開発 Skill をインストール
@@ -62,11 +63,12 @@ npx skills add nexu-io/opengame --skill openmotion-game
 
 ### 3. ソースからローカルで OpenGame Studio を起動
 
-必要環境：**Git**、**npm**、**Node.js 22.18+**（CI では Node.js 26.11.1 に固定）。
+必要環境：**Git**、**Git LFS**、**npm**、**Node.js 22.18+**（CI では Node.js 26.11.1 に固定）。起動後すぐにカタログを閲覧でき、初めてプレイまたは Remix する際に選んだテンプレートの素材を取得します。Tidebreaker はオフラインで遊べます。
 
 ```sh
 git -c filter.lfs.process= -c filter.lfs.smudge= -c filter.lfs.required=false clone --depth 1 --single-branch --branch main https://github.com/nexu-io/opengame.git
 cd opengame
+git lfs install --local --skip-smudge
 npm ci
 npm run build:studio
 npm start

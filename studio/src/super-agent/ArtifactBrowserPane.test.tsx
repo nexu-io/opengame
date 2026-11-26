@@ -229,4 +229,21 @@ describe('ArtifactBrowserPane external game iframe reveal', () => {
     });
     expect(container.querySelector('.om-sa-frame-skeleton[data-game-loading]')).toBeNull();
   });
+
+  it('keeps the branded loader until the local game scene is ready and allows retry after failure', async () => {
+    await renderViewer([LOCAL_GAME]);
+    const iframe = container.querySelector<HTMLIFrameElement>('iframe[title="Ball Match"]')!;
+    const signal = (state: string) => window.dispatchEvent(new MessageEvent('message', {
+      source: iframe.contentWindow, data: { type: 'opengame:startup', state },
+    }));
+    act(() => { signal('loading'); iframe.dispatchEvent(new Event('load')); });
+    expect(container.querySelector('[data-game-loading]')).not.toBeNull();
+    act(() => { signal('failed'); });
+    const retry = container.querySelector<HTMLButtonElement>('[data-game-failed] button');
+    expect(retry?.textContent).toBe('Retry');
+    act(() => { retry!.click(); });
+    expect(container.querySelector('[data-game-failed]')).toBeNull();
+    act(() => { signal('loading'); iframe.dispatchEvent(new Event('load')); signal('ready'); });
+    expect(container.querySelector('[data-game-loading]')).toBeNull();
+  });
 });
