@@ -449,7 +449,8 @@ test('Option B + H4: AssetLibrary imports/reads local .glb, buildPublishBundle o
       assert.ok(bundle.sizeBreakdown.savedBytes > 0);
       const rewrittenMain = bundle.files.find(f => f.file === 'src/main.js')!.data.toString('utf8');
       assert.doesNotMatch(rewrittenMain, /\/motion-api\/assets\//);
-      assert.match(rewrittenMain, /\.\/_shared-assets\/.*\.glb/);
+      assert.match(rewrittenMain, /"\.\/_shared-assets\/[^"]*\.glb"/);
+      assert.doesNotMatch(rewrittenMain, /\.\.\/_shared-assets\//);
 
       // 5. exportZip produces an archive with launchers, no design/assets-raw, and a runnable serve.mjs.
       const exported = await service.exportZip(game.id);
