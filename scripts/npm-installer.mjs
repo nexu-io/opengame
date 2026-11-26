@@ -277,7 +277,9 @@ async function installedConnection(options) {
 
 export async function callInstalled(options, name, args = {}) {
   const { state, connection } = await installedConnection(options);
-  return installedTool(state, connection, name, args, undefined, { host: options?.host });
+  const installedHosts = Object.keys(state.hosts ?? {});
+  const resolvedHost = options?.host ?? (installedHosts.length === 1 ? installedHosts[0] : undefined);
+  return installedTool(state, connection, name, args, undefined, { host: resolvedHost });
 }
 
 export async function diagnose(options) {

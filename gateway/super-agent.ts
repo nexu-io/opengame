@@ -15,6 +15,7 @@ import { webAddress } from '../shared/browser.ts';
 import { designRoutes, isDesignScenario } from '../shared/design-project.ts';
 import { localAgents, type AgentDefinition } from '../shared/local-agents.ts';
 import type { OmTracking } from '../shared/tracking.ts';
+import { recordSuperAgentTurnTrace } from '../shared/super-agent-session-tracking.ts';
 import { modelId, slug } from '../tracking/core.ts';
 import { superAgentError } from '../tracking/tool-fields.ts';
 
@@ -5057,6 +5058,7 @@ export class SuperAgentConversations {
     this.syncProjectDir(active.chat);
     let turnToolCallCount = 0;
     let turnChangedFileCount = 0;
+    let capturedTurnMessages: SuperAgentMessage[] = [];
     if (!active.deleted && active.turnUserMessageId) {
       const postRoots = collectTaskProjectRoots(this.store.directory, active.chat, {
         gameIds: active.touchedGameIds,
@@ -5069,6 +5071,7 @@ export class SuperAgentConversations {
       const turnMessages = turnStartIdx >= 0
         ? active.chat.messages.slice(turnStartIdx + 1)
         : active.chat.messages;
+      capturedTurnMessages = turnMessages;
       turnToolCallCount = turnMessages.filter(m => m.role === 'tool').length;
       const toolFiles = collectToolChangedFiles(turnMessages);
       const merged = mergeTurnChangedFiles(snapshotFiles, toolFiles);
@@ -5105,8 +5108,9 @@ export class SuperAgentConversations {
     const safeInt = (n: unknown) => typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.min(86_400_000, Math.round(n)) : undefined;
     const inputTokens = safeInt(turnUsage?.inputTokens);
     const outputTokens = safeInt(turnUsage?.outputTokens);
+    const runtimeKind = superAgentRuntimeKind(active.runtimeId ?? active.chat.runtimeId);
     this.options.tracking?.track('super_agent_turn_result', {
-      runtime_kind: superAgentRuntimeKind(active.runtimeId ?? active.chat.runtimeId),
+      runtime_kind: runtimeKind,
       engine: safeEngine,
       ...(safeModelId ? { model_id: safeModelId } : {}),
       permission_mode: active.chat.permissionMode === 'auto' ? 'auto' : 'on-request',
@@ -5121,6 +5125,29 @@ export class SuperAgentConversations {
       ...(outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
       ...(turnOutcome !== 'completed' ? { error_code: superAgentError(error, turnOutcome === 'cancelled') } : {}),
     }, undefined, 'worker');
+    if (!active.deleted && active.turnUserMessageId) {
+      const touchedProjectIds = [
+        ...(active.touchedMotionIds ?? []),
+        ...(active.touchedDesignIds ?? []),
+      ];
+      void recordSuperAgentTurnTrace(this.store.directory, {
+        chat: active.chat,
+        turnUserMessageId: active.turnUserMessageId,
+        turnMessages: capturedTurnMessages,
+        runtimeKind,
+        safeEngine,
+        safeIntent,
+        effectiveModel: active.effectiveModel,
+        outcome: turnOutcome,
+        startedAt: active.turnStartedAt,
+        finishedAt,
+        durationMs: active.chat.lastTurnDurationMs ?? 0,
+        usage: turnUsage,
+        error,
+        touchedProjectIds,
+        touchedGameIds: [...(active.touchedGameIds ?? [])],
+      }).catch(() => {});
+    }
     if (!error && !active.chat.titleCustomized) {
       const firstUserText =
         active.chat.messages.find(m => m.role === 'user' && !isGenericSuperAgentTitle(generateSuperAgentTitle({ prompt: m.text })))?.text

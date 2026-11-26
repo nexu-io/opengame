@@ -1190,6 +1190,8 @@ function buildAiGenerationEvent(params: {
       $ai_output_choices: [outputChoice],
       ...(distinctTools.length ? { $ai_tools: distinctTools } : {}),
 
+      trace_surface: 'external_mcp',
+      trace_source: 'codex_sqlite',
       session_trace_key: sessionTraceKey,
       turn_index: turn.turn_index,
       turn_status: turn.turn_status,

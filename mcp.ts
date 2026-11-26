@@ -20,6 +20,7 @@ import { resolveProviderSetupEntry } from './shared/workspace-url.ts';
 import type { Selection } from './editor-runtime.ts';
 import { createAppTracking, closeTracking, type OmTracking } from './shared/tracking.ts';
 import { extractCodexThreadMeta, flushCodexSessionTracking, isCompletedExportToolResult, recordCodexThreadActivity, syncActiveCodexThreads } from './shared/codex-session-tracking.ts';
+import { extractHostSessionMeta, flushHostSessionTracking, recordHostSessionActivity, syncActiveHostSessions } from './shared/host-session-tracking.ts';
 import { uuid } from './tracking/core.ts';
 import { mcpToolNames } from './tracking/events.ts';
 import { gameResultStatusIsLifecycle, gameToolFields, toolFailureFields, toolInputFields, toolResultFields } from './tracking/tool-fields.ts';
@@ -75,7 +76,7 @@ export async function rpc(message: any, store = new WorkspaceStore(), registry =
     connectionHosts.set(connection ?? store, identifyHost(message.params?.clientInfo, process.env));
   }
   const declared = message?.params?._meta?.['io.modelcontextprotocol/clientInfo'];
-  const host = declared ? identifyHost(declared) : connectionHosts.get(connection ?? store) ?? unknownHost;
+  const host = declared ? identifyHost(declared, process.env) : connectionHosts.get(connection ?? store) ?? unknownHost;
   let contexts = connectionContexts.get(connection ?? store);
   if (!contexts) { contexts = new Map(); connectionContexts.set(connection ?? store, contexts); }
   const hostKey = JSON.stringify(host);
@@ -85,20 +86,29 @@ export async function rpc(message: any, store = new WorkspaceStore(), registry =
   }
   const trackingContext = contexts.get(hostKey)!;
   const name = legacyToolName(message?.params?.name);
+  const isInternalProbe = message?.params?._meta?.['openmotion/internalProbe'] === true;
+  if (isInternalProbe) {
+    return invokeRpc(message, store, registry, connection, host, trackingContext, clientState, options);
+  }
   const codexMeta = message?.jsonrpc === '2.0' && message.id !== undefined
     && (message.method === 'tools/call' || message.method === 'resources/read')
     ? extractCodexThreadMeta(message.params, host) : null;
+  const hostSessionMeta = !codexMeta && message?.jsonrpc === '2.0' && message.id !== undefined
+    && (message.method === 'tools/call' || message.method === 'resources/read')
+    ? extractHostSessionMeta(message.params, host, process.env) : null;
   if (message?.jsonrpc !== '2.0' || message.id === undefined || message.method !== 'tools/call'
     || registry.profile !== 'phase1' || !(mcpToolNames as readonly unknown[]).includes(name)) {
     const response = await invokeRpc(message, store, registry, connection, host, trackingContext, clientState, options);
-    if (codexMeta && !(response as any)?.error) {
+    if ((codexMeta || hostSessionMeta) && !(response as any)?.error) {
       const resultValue = (response as any)?.result;
       const content = resultValue?.structuredContent;
-      void recordCodexThreadActivity(store.directory, codexMeta, {
+      const activityOpts = {
         projectId: content?.projectId ?? message.params?.arguments?.projectId,
         resourceUri: message.method === 'resources/read' ? message.params?.uri : undefined,
         exportCompleted: message.method === 'tools/call' && isCompletedExportToolResult(name, message.params?.arguments, content, resultValue?.isError),
-      }).catch(() => {});
+      };
+      if (codexMeta) void recordCodexThreadActivity(store.directory, codexMeta, activityOpts).catch(() => {});
+      if (hostSessionMeta) void recordHostSessionActivity(store.directory, hostSessionMeta, activityOpts).catch(() => {});
     }
     return response;
   }
@@ -119,11 +129,13 @@ export async function rpc(message: any, store = new WorkspaceStore(), registry =
   const response = await invokeRpc(message, store, registry, connection, host, trackingContext, clientState, options);
   const value = (response as any)?.result;
   const content = value?.structuredContent;
-  if (codexMeta) {
-    void recordCodexThreadActivity(store.directory, codexMeta, {
+  if (codexMeta || hostSessionMeta) {
+    const activityOpts = {
       projectId: content?.projectId ?? args?.projectId,
       exportCompleted: isCompletedExportToolResult(name, args, content, value?.isError),
-    }).catch(() => {});
+    };
+    if (codexMeta) void recordCodexThreadActivity(store.directory, codexMeta, activityOpts).catch(() => {});
+    if (hostSessionMeta) void recordHostSessionActivity(store.directory, hostSessionMeta, activityOpts).catch(() => {});
   }
   if (name === 'motion_open_preview' && value && !value.isError && message.params?.arguments?.target === 'providers') {
     tracking.track('provider_setup_opened', {
@@ -352,6 +364,7 @@ if (isMain(import.meta.url)) {
   const store = new WorkspaceStore();
   if ((await trackingFor(store)).enabled()) process.stderr.write('OpenMotion collects redacted usage information to improve product and generation quality. Disable in Studio Privacy & data settings or set OPENMOTION_TELEMETRY=0.\n');
   void syncActiveCodexThreads(store.directory).catch(() => {});
+  void syncActiveHostSessions(store.directory).catch(() => {});
   const connection = sharedEditorEnabled ? { selection: {} } : undefined;
   const clientState = createMcpClientState();
   const modernTransport: Transport = {
@@ -382,5 +395,9 @@ if (isMain(import.meta.url)) {
     if (response) process.stdout.write(JSON.stringify(response) + '\n');
   }
   await modern?.close();
-  await Promise.allSettled([closeTracking(await trackingByStore.get(store)), flushCodexSessionTracking(store.directory)]);
+  await Promise.allSettled([
+    closeTracking(await trackingByStore.get(store)),
+    flushCodexSessionTracking(store.directory),
+    flushHostSessionTracking(store.directory),
+  ]);
 }

@@ -104,6 +104,9 @@ export async function hostPlan(options, home, launcher, previous, bundleId) {
   }
   if (host === 'workbuddy') {
     const configFile = path.join(await canonical(process.env.WORKBUDDY_CONFIG_DIR || path.join(os.homedir(), '.workbuddy')), 'mcp.json');
+    // WorkBuddy desktop sends the MCP server key (`openmotion`) as `clientInfo.name`; set an explicit
+    // launch-environment tag so native WorkBuddy MCP traffic attributes cleanly to `workbuddy`.
+    const workbuddyTransport = { ...transport, env: { OPENMOTION_HOST_AGENT: 'workbuddy' } };
     const check = config => {
       assert(config === null || (typeof config === 'object' && !Array.isArray(config)), 'Invalid WorkBuddy configuration');
       assert(config?.mcpServers === undefined || (config.mcpServers && typeof config.mcpServers === 'object' && !Array.isArray(config.mcpServers)), 'Invalid WorkBuddy mcpServers');
@@ -115,7 +118,7 @@ export async function hostPlan(options, home, launcher, previous, bundleId) {
     return { host, ...metadata, metadata, connection: configured?.mcpServers?.openmotion && { transport: configured.mcpServers.openmotion }, register: async () => {
       await withLock(configFile + '.openmotion.lock', async () => {
         const config = await readJSON(configFile) || {}; check(config);
-        await writeJSON(configFile, { ...config, mcpServers: { ...config.mcpServers, openmotion: transport } });
+        await writeJSON(configFile, { ...config, mcpServers: { ...config.mcpServers, openmotion: workbuddyTransport } });
       });
     } };
   }

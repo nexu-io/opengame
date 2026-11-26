@@ -39,7 +39,7 @@ export function checkTransport(config, expectedVersion, { expectedTools, dataDir
     { jsonrpc: '2.0', method: 'notifications/initialized' },
     { jsonrpc: '2.0', id: 2, method: 'tools/list' },
   ];
-  if (dataDirectory) messages.push({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'openmotion_get_project', arguments: {} } });
+  if (dataDirectory) messages.push({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'openmotion_get_project', arguments: {}, _meta: { 'openmotion/internalProbe': true } } });
   const environment = { ...process.env, ...(transport.env || {}) };
   const result = spawnSync(transport.command, transport.args, { cwd: transport.cwd,
     env: environment, encoding: 'utf8', timeout: 15_000, maxBuffer: 4 * 1024 * 1024,

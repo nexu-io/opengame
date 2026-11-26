@@ -62,6 +62,8 @@ import { recoverProjectTransactions } from './phase1-versions.ts';
 import { verifyExport } from './scripts/verify-export.ts';
 import { createAppTracking, closeTracking, saveTrackingPreference, trackingPreference, trackingLockReason, type OmTracking } from './shared/tracking.ts';
 import { flushCodexSessionTracking, syncActiveCodexThreads } from './shared/codex-session-tracking.ts';
+import { flushHostSessionTracking, syncActiveHostSessions } from './shared/host-session-tracking.ts';
+import { flushSuperAgentSessionTracking } from './shared/super-agent-session-tracking.ts';
 import { studioEvents } from './tracking/events.ts';
 import { configureNativeEnvironment, nativeRuntimeStatus, startNativePreparation, requireNativeRuntime } from './scripts/npm-runtime.mjs';
 import { applySourceUpdate, checkSourceUpdate } from './shared/source-update.ts';
@@ -93,6 +95,7 @@ async function emitQueueTelemetry(store: WorkspaceStore, tracking?: OmTracking) 
   if (Date.now() - lastCodexSessionSync >= 60_000) {
     lastCodexSessionSync = Date.now();
     void syncActiveCodexThreads(store.directory).catch(() => {});
+    void syncActiveHostSessions(store.directory).catch(() => {});
   }
   if (!tracking) return;
   if (Date.now() - lastQueueTelemetry < 60_000) return;
@@ -1852,7 +1855,12 @@ export async function startServer(store = sharedStore, port = Number(process.env
       server.closeAllConnections();
       server.close();
       await context.studio?.close();
-      await Promise.allSettled([closeTracking(context.tracking), flushCodexSessionTracking(store.directory)]);
+      await Promise.allSettled([
+        closeTracking(context.tracking),
+        flushCodexSessionTracking(store.directory),
+        flushHostSessionTracking(store.directory),
+        flushSuperAgentSessionTracking(store.directory),
+      ]);
     },
   };
 }

@@ -39,6 +39,9 @@ test('direct access lists schemas and verifies the saved workspace before each r
   await installedTool(state, connection, 'openmotion_edit_project', args);
   const messages = await calls(), requested = messages.filter(message => message.method === 'tools/call');
   assert.deepEqual(requested.map(message => message.params.name), ['openmotion_get_project', 'openmotion_get_project', 'openmotion_edit_project']);
+  assert.equal(requested[0].params._meta?.['openmotion/internalProbe'], true);
+  assert.equal(requested[1].params._meta?.['openmotion/internalProbe'], true);
+  assert.equal(requested[2].params._meta?.['openmotion/internalProbe'], undefined);
   assert.deepEqual(requested[2].params.arguments, args);
 });
 

@@ -268,7 +268,7 @@ jobs:
         if: steps.scope.outputs.full == 'true' && matrix.suite == 'runtime'
         run: |
           node --test tests/design-system.test.ts
-          node --experimental-strip-types --test tests/template-attribution.test.ts tests/tracking.test.ts tests/tracking-device.test.ts tests/studio-tracking.test.ts tests/mcp-tracking-host.test.ts tests/codex-session-tracking.test.ts tests/strategy-tracking-enrichment.test.ts
+          node --experimental-strip-types --test tests/template-attribution.test.ts tests/tracking.test.ts tests/tracking-device.test.ts tests/studio-tracking.test.ts tests/mcp-tracking-host.test.ts tests/codex-session-tracking.test.ts tests/host-session-tracking.test.ts tests/strategy-tracking-enrichment.test.ts
       - name: OpenGame runtime regression
         if: steps.scope.outputs.full == 'true' && matrix.suite == 'runtime'
         run: |

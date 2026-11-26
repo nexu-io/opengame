@@ -46,11 +46,18 @@ export async function installedTool(state, connection, name, args = {}, timeout 
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
     const { tools } = await rpc('tools/list', {});
     assert(Array.isArray(tools) && tools.length === expected.length && expected.every(name => tools.some(tool => tool.name === name)), 'Installed MCP tool contract mismatch');
-    const read = await rpc('tools/call', { name: 'openmotion_get_project', arguments: {} });
+    const isExplicitGetProject = name === 'openmotion_get_project' && Object.keys(args).length === 0;
+    const read = await rpc('tools/call', {
+      name: 'openmotion_get_project',
+      arguments: {},
+      // Only treat the preflight workspace check as an internal probe when it precedes another requested
+      // tool or a `tools` listing; an explicit `call openmotion_get_project` remains a normal tracked call.
+      ...(isExplicitGetProject ? {} : { _meta: { 'openmotion/internalProbe': true } }),
+    });
     assert(!read.isError && typeof read.structuredContent?.dataDirectory === 'string'
       && sameWorkspaceDirectory(read.structuredContent.dataDirectory, state.dataDirectory), 'Installed MCP data directory mismatch; no requested operation was applied');
     if (name === undefined) return { serverInfo: hello.serverInfo, dataDirectory: state.dataDirectory, tools: tools.filter(tool => allowed(tool.name)) };
-    return name === 'openmotion_get_project' && Object.keys(args).length === 0 ? read : await rpc('tools/call', { name, arguments: args });
+    return isExplicitGetProject ? read : await rpc('tools/call', { name, arguments: args });
   } catch (error) {
     throw new Error(redact(error.message, environment));
   } finally {

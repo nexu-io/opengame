@@ -179,3 +179,51 @@ test('real stdio openmotion-cli bridge attributes host_agent from OPENMOTION_HOS
     assert.equal(events[0].properties.mcp_client_version, '1');
   } finally { await new Promise<void>(resolve => collector.close(() => resolve())); }
 }, false));
+
+test('real stdio MCP suppresses telemetry for internalProbe preflights and attributes WorkBuddy openmotion placeholder via env', () => fixture(async store => {
+  const events: any[] = [];
+  const collector = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    events.push(...JSON.parse(Buffer.concat(chunks).toString()).batch);
+    res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"status":1}');
+  });
+  await new Promise<void>(resolve => collector.listen(0, '127.0.0.1', resolve));
+  const address = collector.address(); assert(address && typeof address !== 'string');
+  try {
+    const child = spawn(process.execPath, ['--experimental-strip-types', 'mcp.ts'], { cwd: pluginRoot,
+      env: { ...process.env, MOTION_DATA_DIR: store.directory, OPENMOTION_HOST_AGENT: 'workbuddy',
+        OPENMOTION_TELEMETRY: '1', DO_NOT_TRACK: '0',
+        OPENMOTION_TRACKING_ENV: 'test', OPENMOTION_TRACKING_TEST_RUN_ID: crypto.randomUUID(),
+        OPENMOTION_POSTHOG_HOST: `http://127.0.0.1:${address.port}`, OPENMOTION_POSTHOG_KEY: 'phc_test' },
+      stdio: ['pipe', 'pipe', 'pipe'] });
+    let error = '', output = '';
+    child.stdout.on('data', data => { output += data; });
+    child.stderr.on('data', data => { error += data; });
+    const completed = new Promise<void>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', code => code === 0 ? resolve() : reject(new Error(`MCP exited ${code}: ${error}`)));
+    });
+    const timer = setTimeout(() => child.kill('SIGKILL'), 10_000);
+    try {
+      child.stdin.end([
+        { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'openmotion', version: '1.0.0' } } },
+        // Internal preflight probe must still execute normally, yet emit zero business telemetry events.
+        { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'openmotion_get_project', arguments: { PRIVATE_KEY: true }, _meta: { 'openmotion/internalProbe': true } } },
+        // Real business call must emit exactly one finished event attributed to WorkBuddy.
+        { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'openmotion_get_project', arguments: { PRIVATE_KEY: true } } },
+      ].map(message => JSON.stringify(message) + '\n').join(''));
+      await completed;
+      const replies = output.trim().split('\n').map(line => JSON.parse(line));
+      assert.equal(replies.length, 3);
+      assert.equal(replies[1].result.isError, true);
+      assert.equal(replies[2].result.isError, true);
+    } finally { clearTimeout(timer); if (child.exitCode === null) child.kill(); }
+    assert.equal(events.length, 1);
+    assert.equal(events[0].event, 'mcp_tool_finished');
+    assert.equal(events[0].properties.host_agent, 'workbuddy');
+    assert.equal(events[0].properties.host_agent_source, 'launch_environment');
+    assert.equal(events[0].properties.mcp_client_name, 'openmotion');
+    assert.equal(events[0].properties.mcp_client_version, '1.0.0');
+  } finally { await new Promise<void>(resolve => collector.close(() => resolve())); }
+}, false));
