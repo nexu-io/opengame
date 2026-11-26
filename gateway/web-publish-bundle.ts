@@ -52,6 +52,8 @@ const EXCLUDED_NAMES = new Set([
 ]);
 
 const REWRITABLE_TEXT_FILE = /\.(?:html?|css|m?js|cjs|json|svg|webmanifest)$/i;
+const DOCUMENT_RELATIVE_URL_FILE = /\.(?:m?js|cjs|json)$/i;
+const JS_MODULE_FILE = /\.(?:m?js|cjs)$/i;
 const ASSET_MEDIA_REF = /(?:https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?)?\/(?:motion-api|api)\/assets\/([A-Za-z0-9_-]+)\/versions\/([A-Za-z0-9_-]+)\/(?:file|media)(?:\?[^"'`\s)\\]*)?/g;
 const GAME_PLAY_REF = /(?:https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?)?\/(?:motion-api|api)\/games\/([^/]+)\/play\/([^"'`\s)\\?#]+(?:\?[^"'`\s)\\#]*)?(?:#[^"'`\s)\\]*)?)/g;
 const DESIGN_RAW_REF = /(?:https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?)?\/(?:motion-api|api)\/design\/raw\/([^/]+)\/([^"'`\s)\\?#]+(?:\?[^"'`\s)\\#]*)?(?:#[^"'`\s)\\]*)?)/g;
@@ -285,6 +287,9 @@ export async function buildPublishBundle(input: {
       continue;
     }
     let text = file.data.toString('utf8');
+    // Runtime URL strings in JS/JSON (fetch, GLTFLoader, TextureLoader, Audio, img.src)
+    // resolve against document.baseURI (entryPath), whereas HTML/CSS/SVG/webmanifest resolve against file.path.
+    const runtimeBasePath = DOCUMENT_RELATIVE_URL_FILE.test(file.path) ? input.entryPath : file.path;
 
     const assetMatches = [...text.matchAll(ASSET_MEDIA_REF)];
     if (assetMatches.length > 0) {
@@ -294,7 +299,7 @@ export async function buildPublishBundle(input: {
         if (replacements.has(full)) continue;
         const bundledPath = await resolveBundledAssetPath(match[1], match[2]);
         if (bundledPath) {
-          replacements.set(full, relativePosixPath(file.path, bundledPath));
+          replacements.set(full, relativePosixPath(runtimeBasePath, bundledPath));
         }
       }
       if (replacements.size > 0) {
@@ -311,7 +316,10 @@ export async function buildPublishBundle(input: {
         }
         const cleanTarget = relSuffix.replace(/[?#].*$/, '');
         const suffix = relSuffix.slice(cleanTarget.length);
-        return `${relativePosixPath(file.path, cleanTarget)}${suffix}`;
+        const basePath = JS_MODULE_FILE.test(file.path) && JS_MODULE_FILE.test(cleanTarget)
+          ? file.path
+          : runtimeBasePath;
+        return `${relativePosixPath(basePath, cleanTarget)}${suffix}`;
       });
     } else if (input.kind === 'design') {
       text = text.replace(DESIGN_RAW_REF, (matched, rawDesignId: string, relSuffix: string) => {
@@ -322,7 +330,10 @@ export async function buildPublishBundle(input: {
         }
         const cleanTarget = relSuffix.replace(/[?#].*$/, '');
         const suffix = relSuffix.slice(cleanTarget.length);
-        return `${relativePosixPath(file.path, cleanTarget)}${suffix}`;
+        const basePath = JS_MODULE_FILE.test(file.path) && JS_MODULE_FILE.test(cleanTarget)
+          ? file.path
+          : runtimeBasePath;
+        return `${relativePosixPath(basePath, cleanTarget)}${suffix}`;
       });
     }
 

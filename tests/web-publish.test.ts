@@ -478,6 +478,18 @@ test('buildPublishBundle and WebPublishService rewrite local assets/routes into 
         path: 'logic.js',
         content: `export const SPRITE = "${mediaUrl}"; export const score = 10;\n`,
       },
+      {
+        path: 'src/media.js',
+        content: `export const NESTED_SPRITE = "${mediaUrl}";\nexport const PLAY_DATA = "/motion-api/games/${created.id}/play/assets/runtime.png";\nexport const SIBLING_MOD = "/motion-api/games/${created.id}/play/logic.js";\n`,
+      },
+      {
+        path: 'config/assets.json',
+        content: JSON.stringify({ sprite: mediaUrl, runtime: `/motion-api/games/${created.id}/play/assets/runtime.png` }),
+      },
+      {
+        path: 'styles/main.css',
+        content: `.hero { background-image: url("${mediaUrl}"); }\n`,
+      },
     ]);
 
     const located = await games.locate(created.id);
@@ -511,11 +523,25 @@ test('buildPublishBundle and WebPublishService rewrite local assets/routes into 
 
     const htmlFile = bundle.files.find(f => f.file === 'index.html');
     const logicFile = bundle.files.find(f => f.file === 'logic.js');
-    assert.ok(htmlFile && logicFile);
+    const nestedMediaFile = bundle.files.find(f => f.file === 'src/media.js');
+    const nestedJsonFile = bundle.files.find(f => f.file === 'config/assets.json');
+    const nestedCssFile = bundle.files.find(f => f.file === 'styles/main.css');
+    assert.ok(htmlFile && logicFile && nestedMediaFile && nestedJsonFile && nestedCssFile);
     assert.match(htmlFile.data.toString('utf8'), new RegExp(`\\./_shared-assets/${asset.id}-${assetVersionId}\\.png`));
     assert.match(htmlFile.data.toString('utf8'), /src="\.\/logic\.js"/);
     assert.ok(!htmlFile.data.toString('utf8').includes('/motion-api/'));
     assert.match(logicFile.data.toString('utf8'), new RegExp(`"\\./_shared-assets/${asset.id}-${assetVersionId}\\.png"`));
+    // Subdirectory JS/JSON resolve runtime fetch/loader URLs relative to document entryPath (index.html), not the module path.
+    const nestedMediaText = nestedMediaFile.data.toString('utf8');
+    assert.match(nestedMediaText, new RegExp(`"\\./_shared-assets/${asset.id}-${assetVersionId}\\.png"`));
+    assert.match(nestedMediaText, /"\.\/assets\/runtime\.png"/);
+    assert.match(nestedMediaText, /"\.\.\/logic\.js"/);
+    assert.ok(!nestedMediaText.includes('../_shared-assets/'));
+    const nestedJson = JSON.parse(nestedJsonFile.data.toString('utf8')) as { sprite: string; runtime: string };
+    assert.equal(nestedJson.sprite, `./_shared-assets/${asset.id}-${assetVersionId}.png`);
+    assert.equal(nestedJson.runtime, './assets/runtime.png');
+    // CSS url(...) still resolves relative to styles/main.css itself.
+    assert.match(nestedCssFile.data.toString('utf8'), new RegExp(`\\.\\./_shared-assets/${asset.id}-${assetVersionId}\\.png`));
     assert.ok(!bundle.files.some(f => f.file.toLowerCase() === 'game.json'), 'game.json must not be staged');
     assert.ok(!bundle.files.some(f => f.file.toLowerCase().startsWith('trailer/')), 'trailer/ must not be staged');
 
