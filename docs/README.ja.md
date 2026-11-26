@@ -56,7 +56,7 @@ OpenGame で再現できる不具合を見つけたら、再現手順と修正�
 [Skills CLI](https://github.com/vercel-labs/skills) を使って、OpenGame メインエントリー Skill（`opengame`：ローカル接続を案内し、`openmotion-game` および 3C 操作感・2D/3D アニメーション・プレイアブル広告仕様・品質ゲートを網羅した 18 冊のエンジニアリングハンドブックへルーティング）を導入できます：
 
 ```sh
-npx skills add nexu-io/opengame --skill opengame
+npx skills add https://github.com/nexu-io/opengame/tree/skills --skill opengame
 ```
 
 > Skills CLI はワークフロー指針を Agent に導入します（必要に応じて `--skill openmotion-game` 単体も導入可能）。12 個の `openmotion_game_*` ツール呼び出しや Game Studio 連携を行うには、以下のローカル起動と MCP 設定もあわせて完了してください。

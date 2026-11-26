@@ -1,0 +1,83 @@
+name: Sync lightweight skills branch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'LICENSE'
+      - 'skills/opengame/**'
+      - 'skills/openmotion-game/**'
+      - 'skills/openmotion-media/**'
+      - '.github/workflows/sync-skills-branch.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-skills-branch
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'nexu-io/opengame' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out skill sources from main
+        uses: actions/checkout@v6.0.2
+        with:
+          lfs: false
+          persist-credentials: false
+          sparse-checkout: |
+            LICENSE
+            skills/opengame
+            skills/openmotion-game
+            skills/openmotion-media
+      - name: Check out lightweight skills branch
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: skills
+          path: skills-branch
+          lfs: false
+      - name: Sync OpenGame skills into lightweight branch
+        run: |
+          set -euo pipefail
+          rm -rf skills-branch/skills
+          mkdir -p skills-branch/skills
+          cp LICENSE skills-branch/LICENSE
+          cp -R skills/opengame skills-branch/skills/opengame
+          cp -R skills/openmotion-game skills-branch/skills/openmotion-game
+          cp -R skills/openmotion-media skills-branch/skills/openmotion-media
+          cat > skills-branch/README.md <<'EOF'
+          # OpenGame Skills (`skills` branch)
+
+          Lightweight distribution branch synced automatically from `main` for fast Skills CLI installation without cloning the full game template catalog.
+
+          ## Install the main OpenGame Skill
+
+          ```sh
+          npx skills add https://github.com/nexu-io/opengame/tree/skills --skill opengame
+          ```
+
+          ## Included Skills
+
+          - `opengame` — Main local-first OpenGame entry Skill (checks MCP, guides local Studio + stdio MCP setup via [`docs/opengame-setup.md`](https://github.com/nexu-io/opengame/blob/main/docs/opengame-setup.md), and routes to game/media workflows)
+          - `openmotion-game` — Specialist game-engineering Skill with 18 reference handbooks
+          - `openmotion-media` — BYOK & OpenDesign multimodal media generation Skill
+
+          For the full OpenGame Studio source repository, see the [`main` branch](https://github.com/nexu-io/opengame/tree/main).
+          EOF
+      - name: Publish updated skills branch
+        working-directory: skills-branch
+        run: |
+          set -euo pipefail
+          git add -A
+          if git diff --cached --quiet; then
+            echo "skills branch is already up to date"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "chore(skills): sync skills branch from main (${GITHUB_SHA::9})"
+          git push origin HEAD:refs/heads/skills

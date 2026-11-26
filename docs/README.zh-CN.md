@@ -56,7 +56,7 @@ OpenGame 是**首个开源全栈 Super Game Agent**——把 **DeepSeek（DSH）
 使用 [Skills CLI](https://github.com/vercel-labs/skills) 安装 OpenGame 主入口 Skill（`opengame`，自动引导本地接入并路由到 `openmotion-game` 及 18 份涵盖 3C 手感、2D/3D 动画、试玩广告规范与质量门禁的工程手册）：
 
 ```sh
-npx skills add nexu-io/opengame --skill opengame
+npx skills add https://github.com/nexu-io/opengame/tree/skills --skill opengame
 ```
 
 > Skills CLI 只安装工作流指引（也可按需单独安装 `--skill openmotion-game`）；请结合下方本地运行与 MCP 配置，让 Agent 能够直接调用 12 个 `openmotion_game_*` 工具并打开 Game Studio。

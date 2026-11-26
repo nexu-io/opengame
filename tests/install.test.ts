@@ -86,7 +86,7 @@ test('OpenGame main entry Skill and setup guides install opengame once before lo
   assert.match(entrySkill, /openmotion:\/\/workflow\/media\/start/);
   assert.match(entrySkill, /local stdio MCP/i);
   const setupGuide = await readFile(new URL('../docs/opengame-setup.md', import.meta.url), 'utf8');
-  assert.match(setupGuide, /npx --yes skills@1\.9\.0 add nexu-io\/opengame --skill opengame --global --agent AGENT --copy --yes/);
+  assert.match(setupGuide, /npx --yes skills@1\.9\.0 add https:\/\/github\.com\/nexu-io\/opengame\/tree\/skills --skill opengame --global --agent AGENT --copy --yes/);
   assert.match(setupGuide, /OPENMOTION_SKIP_PUBLIC_SKILL=1/);
   assert.match(setupGuide, /already installed/i);
   assert.match(setupGuide, /does not block/i);
@@ -95,9 +95,15 @@ test('OpenGame main entry Skill and setup guides install opengame once before lo
   assert.match(rootForwarder, /`opengame` Skill/);
   for (const readme of ['../README.md', '../README.zh-CN.md', '../README.ja.md', '../docs/README.zh-CN.md', '../docs/README.ja.md']) {
     const body = await readFile(new URL(readme, import.meta.url), 'utf8');
-    assert.match(body, /npx skills add nexu-io\/opengame --skill opengame/, readme);
+    assert.match(body, /npx skills add https:\/\/github\.com\/nexu-io\/opengame\/tree\/skills --skill opengame/, readme);
     assert.match(body, /skills\/opengame\/SKILL\.md/, readme);
     assert.match(body, /Git LFS/, readme);
     assert.match(body, /git lfs install --local --skip-smudge/, readme);
   }
+  const syncWorkflow = await readFile(new URL('../.github/workflows/sync-skills-branch.yml', import.meta.url), 'utf8');
+  assert.match(syncWorkflow, /github\.repository == 'nexu-io\/opengame'/);
+  assert.match(syncWorkflow, /skills\/opengame/);
+  assert.match(syncWorkflow, /skills\/openmotion-game/);
+  assert.match(syncWorkflow, /skills\/openmotion-media/);
+  assert.match(syncWorkflow, /refs\/heads\/skills/);
 });

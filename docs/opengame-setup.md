@@ -11,10 +11,10 @@ This guide installs the `nexu-io/opengame` checkout and connects its game tools 
 
 ## Install the main OpenGame Skill
 
-Install the main `opengame` Skill once through the official Skills CLI as the first setup step before cloning or configuring MCP:
+Install the main `opengame` Skill once through the official Skills CLI as the first setup step before cloning or configuring MCP (using the lightweight `skills` branch so Skills CLI skips cloning the full game template catalog while still attributing installs to `nexu-io/opengame`):
 
 ```sh
-npx --yes skills@1.9.0 add nexu-io/opengame --skill opengame --global --agent AGENT --copy --yes
+npx --yes skills@1.9.0 add https://github.com/nexu-io/opengame/tree/skills --skill opengame --global --agent AGENT --copy --yes
 ```
 
 Use `codex` for Codex and `claude-code` for Claude Code. For DeepSeek Harness (DSH) or any host without a dedicated Skills CLI target, use `universal`. Select only the intended host; for custom or isolated profiles, omit `--global` and run inside that profile or project directory instead of the daily global profile.

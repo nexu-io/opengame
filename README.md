@@ -56,7 +56,7 @@ If you find a reproducible OpenGame bug, you're welcome to open a PR against nex
 Install the main `opengame` entry Skill (which guides local setup and routes into `openmotion-game` + 18 game craft, 3C, animation, playable-ad, and QA reference handbooks) with the [Skills CLI](https://github.com/vercel-labs/skills):
 
 ```sh
-npx skills add nexu-io/opengame --skill opengame
+npx skills add https://github.com/nexu-io/opengame/tree/skills --skill opengame
 ```
 
 > Installing the Skill copies the OpenGame entry instructions into your agent (you can also install `--skill openmotion-game` directly). Complete the local Studio & MCP setup below so your agent can call the 12 `openmotion_game_*` tools and open Game Studio.
