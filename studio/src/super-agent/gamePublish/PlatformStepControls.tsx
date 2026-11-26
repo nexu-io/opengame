@@ -3,17 +3,18 @@ import { useI18n } from '../../i18n/I18n';
 import { RemixIcon } from '../../icons/RemixIcons';
 import { gamePublishDevTool } from './devTools';
 import { downloadPackage, formatBytes, type GamePackageCheck } from './gamePackage';
-import { copyGamePublishLink, gamePublishActions, stepBlocked, type GamePublishSession } from './gamePublishStore';
+import { gamePublishActions, stepBlocked, type GamePublishSession } from './gamePublishStore';
 import { playableNetwork } from './playableNetworks';
 import { CompactLink, OpenDesignProgress } from './WechatProgress';
 import { gamePublishPlatform } from './platforms';
+import { useOpenDesignPublishSignIn } from './useOpenDesignPublishSignIn';
 import './gamePublish.css';
 
 type Notify = (message: string, tone?: 'info' | 'error') => void;
 
 /**
- * Platforms other than WeChat, right-hand panel: only where things stand. The Agent guides each step in the
- * conversation; the page puts that step's controls under its message (PlatformInlineControls).
+ * Platforms other than WeChat, right-hand panel: live step progress overview.
+ * Interactive controls for the current step are rendered inline in the publish thread (PlatformInlineControls).
  */
 export function PlatformProgress({ session }: { session: GamePublishSession }) {
   const { t } = useI18n();
@@ -31,7 +32,6 @@ export function PlatformProgress({ session }: { session: GamePublishSession }) {
           ? t('All {total} steps done', { total })
           : waitingForTool && tool ? t('Needed · {tool}', { tool: t(tool.name) })
             : t('Step {current} of {total} · {name}', { current: session.stepIndex + 1, total, name: t(current.title) })}</strong>
-        {!finished && <span className="om-gp-muted"> · {t('The Agent guides you in the conversation')}</span>}
       </p>
       <OpenDesignProgress session={session} />
       <ol className="om-gp-overview-list">
@@ -52,9 +52,9 @@ export function PlatformProgress({ session }: { session: GamePublishSession }) {
 }
 
 /**
- * In the conversation, under the Agent's message: the controls of the current step (developer tool, choices,
- * store links, package download, OpenDesign link, platform pages) and the button that finishes it. Pressing it
- * tells the Agent in the conversation, so the Agent moves on to the next step. Rendered by the page.
+ * Inline controls for the current publish step (developer tool check, choices, store links,
+ * one-click package download, OpenDesign link sign-in, platform links, and step completion CTA).
+ * Advances the local publish store directly without queueing extra Agent turns.
  */
 export function PlatformInlineControls({ session, onNotify }: { session: GamePublishSession; onNotify?: Notify }) {
   const { t } = useI18n();
@@ -64,6 +64,10 @@ export function PlatformInlineControls({ session, onNotify }: { session: GamePub
   if (tool) {
     return (
       <div className="om-gp-inline">
+        <div className="om-gp-inline-step-head">
+          <strong>{t('Needed · {tool}', { tool: t(tool.name) })}</strong>
+          <p className="om-gp-muted">{t(tool.why)}</p>
+        </div>
         <div className="om-gp-inline-row">
           <a className="om-gp-secondary" href={tool.downloadHref} target="_blank" rel="noopener noreferrer"><RemixIcon name="download-2-line" size={14} /> {t('Download {tool}', { tool: t(tool.name) })}</a>
           <Button variant="plain" type="button" className="om-gp-primary" onClick={() => gamePublishActions.confirmDevTool(session.artifactId)}>{t('I installed it, continue')}</Button>
@@ -74,8 +78,19 @@ export function PlatformInlineControls({ session, onNotify }: { session: GamePub
   }
   const step = platform.steps[session.stepIndex];
   if (!step) return null;
+  const total = platform.steps.length;
+  const isPackageStep = step.kind === 'package';
+  const reusablePackage = !isPackageStep && session.package?.state === 'ready' ? session.package.result : undefined;
   return (
     <div className="om-gp-inline">
+      <div className="om-gp-inline-step-head">
+        <strong>{t('Step {current} of {total} · {name}', { current: session.stepIndex + 1, total, name: t(step.title) })}</strong>
+        {step.todo.length > 1 && (
+          <ol className="om-gp-inline-todo">
+            {step.todo.map(item => <li key={item}>{t(item)}</li>)}
+          </ol>
+        )}
+      </div>
       {step.fields?.map(field => (
         <label key={field.label} className="om-gp-field">
           <span className="om-gp-field-label">{t(field.label)}</span>
@@ -97,7 +112,7 @@ export function PlatformInlineControls({ session, onNotify }: { session: GamePub
           ))}
         </div>
       )}
-      {step.kind === 'package' && <PackageStep session={session} />}
+      {isPackageStep && <PackageStep session={session} stepRef={{ platformId: platform.id, stepIndex: session.stepIndex }} />}
       {step.kind === 'link' && <LinkStep session={session} onNotify={onNotify} />}
       {step.links && (
         <div className="om-gp-links">
@@ -107,11 +122,19 @@ export function PlatformInlineControls({ session, onNotify }: { session: GamePub
         </div>
       )}
       {session.stepProblem && <p className="om-gp-need">{t(session.stepProblem)}</p>}
-      <div className="om-gp-inline-row">
-        <Button variant="plain" type="button" className="om-gp-primary" disabled={stepBlocked(session, step)} onClick={() => gamePublishActions.completeStep(session.artifactId, { platformId: platform.id, stepIndex: session.stepIndex })}>
-          {t(step.cta)}
-        </Button>
-      </div>
+      {!isPackageStep && (
+        <div className="om-gp-inline-row">
+          <Button variant="plain" type="button" className="om-gp-primary" disabled={stepBlocked(session, step)} onClick={() => gamePublishActions.completeStep(session.artifactId, { platformId: platform.id, stepIndex: session.stepIndex })}>
+            {t(step.cta)}
+          </Button>
+          {reusablePackage && (
+            <Button variant="plain" type="button" className="om-gp-secondary" onClick={() => downloadPackage(reusablePackage)}>
+              <RemixIcon name="download-2-line" size={14} />
+              <span>{t('Download {file}', { file: reusablePackage.fileName })}</span>
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -128,8 +151,8 @@ function CheckRow({ check }: { check: GamePackageCheck }) {
   );
 }
 
-/** Real package: built from the game's files, checked, downloaded by the browser. */
-function PackageStep({ session }: { session: GamePublishSession }) {
+/** Real package: built from the game's files, checked, downloaded by the browser (and advances in one click). */
+function PackageStep({ session, stepRef }: { session: GamePublishSession; stepRef: { platformId: NonNullable<GamePublishSession['platformId']>; stepIndex: number } }) {
   const { t } = useI18n();
   const pkg = session.package;
   const network = pkg?.target === 'playable' ? playableNetwork(session.picked) : undefined;
@@ -160,7 +183,15 @@ function PackageStep({ session }: { session: GamePublishSession }) {
         {result.checks.map(check => <CheckRow key={`${check.label}:${check.value}`} check={check} />)}
       </div>
       <div className="om-gp-download">
-        <Button variant="plain" type="button" className="om-gp-secondary" onClick={() => downloadPackage(result)}>
+        <Button
+          variant="plain"
+          type="button"
+          className="om-gp-primary"
+          onClick={() => {
+            downloadPackage(result);
+            gamePublishActions.completeStep(session.artifactId, stepRef);
+          }}
+        >
           <RemixIcon name="download-2-line" size={14} />
           <span>{t('Download {file}', { file: result.fileName })}</span>
         </Button>
@@ -180,6 +211,7 @@ function PackageStep({ session }: { session: GamePublishSession }) {
 /** Step that needs the real OpenDesign link (Telegram). */
 function LinkStep({ session, onNotify }: { session: GamePublishSession; onNotify?: Notify }) {
   const { t } = useI18n();
+  const { account, signedIn, authorizing, signingIn, startSignIn } = useOpenDesignPublishSignIn(session.artifactId, onNotify);
   if (session.linkUrl) {
     return (
       <div className="om-gp-checks">
@@ -188,6 +220,24 @@ function LinkStep({ session, onNotify }: { session: GamePublishSession; onNotify
           <span className="om-gp-check-label">{t('Live on OpenDesign')}</span>
           <span className="om-gp-check-value"><CompactLink url={session.linkUrl} onNotify={onNotify} /></span>
         </div>
+      </div>
+    );
+  }
+  const needsSignIn = Boolean(session.linkError?.authRequired || (account && !signedIn));
+  if (needsSignIn) {
+    return (
+      <div className="om-gp-checks om-gp-link-signin">
+        <p className="om-gp-muted">{t('Telegram Mini Apps need a public web URL. Sign in to OpenDesign to publish one automatically.')}</p>
+        <Button
+          variant="plain"
+          type="button"
+          className="om-gp-primary"
+          disabled={signingIn || authorizing}
+          onClick={() => void startSignIn()}
+        >
+          <RemixIcon name={authorizing ? 'loader-4-line' : 'login-box-line'} size={14} className={authorizing ? 'om-gp-spin' : undefined} />
+          <span>{authorizing ? t('Waiting for sign-in…') : t('Sign in with OpenDesign')}</span>
+        </Button>
       </div>
     );
   }

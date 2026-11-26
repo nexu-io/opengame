@@ -7,6 +7,7 @@ import { templates } from '../template-library.ts';
 import { builtinRecommendationIds, onboardingSourceFiles, onboardingTemplateIds, recommendationTemplateIds } from './onboarding-templates.ts';
 
 export const templatePresentationName = 'openmotion_show_template_recommendations';
+export const templatePresentationUriPrefix = 'ui://openmotion/template-recommendations/';
 export const templatePresentationMime = 'text/html;profile=mcp-app';
 export const templatePresentationCapability = 'io.modelcontextprotocol/ui';
 export const templatePresentationLimit = 1.5 * 1024 * 1024;
@@ -174,7 +175,7 @@ export function loadTemplatePresentation(options: { directory?: string; applicat
     .replace('{{bootstrap}}', () => safeJson({ resourceVersion, templates: previews }))
     .replace('{{script}}', () => script.replace(/<\/script/gi, '<\\/script'));
   const contentHash = digest(JSON.stringify({ text, metadata }));
-  const uri = `ui://openmotion/template-recommendations/${contentHash}/index.html`;
+  const uri = `${templatePresentationUriPrefix}${contentHash}/index.html`;
   const content = { uri, mimeType: templatePresentationMime, text, _meta: metadata };
   requireValue(Buffer.byteLength(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { contents: [content] } })) <= templatePresentationLimit, 'resource exceeds 1.5 MiB');
   const tool: ToolDefinition = {

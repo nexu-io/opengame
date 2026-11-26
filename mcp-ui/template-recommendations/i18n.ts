@@ -16,19 +16,19 @@ export function resolveLanguage(value?: string): Language {
 }
 type Translation = {
   ui: { waiting: string; unavailable: string; loading: string; failed: string; blocked: string;
-    preview: string; clone: string; back: string; close: string; player: string; sending: string; notSent: string;
-    manual: string; draftLabel: string; copied: string; copyFailed: string; welcomeLabel: string; listLabel: string };
-  welcome: { heading: string; discovery: string; libraryHeading: string; libraryDiscovery: string; introduction: string; recommendations: string; draft: string; clipboardDraft: string };
+    preview: string; clone: string; copyPrompt: string; back: string; close: string; player: string; sending: string; notSent: string;
+    manual: string; draftLabel: string; copied: string; welcomeLabel: string; listLabel: string };
+  welcome: { heading: string; discovery: string; templateSearch: string; libraryHeading: string; libraryDiscovery: string; introduction: string; recommendations: string; draft: string; clipboardDraft: string };
   descriptions: Partial<Record<TemplateId, string>>;
 };
 export const translations: Record<Language, Translation> = {
   zh: {
-    ui: { copied: "已复制，请粘贴到对话框后补充要求。", copyFailed: "复制失败，请重试。", waiting: '正在准备模板预览…', unavailable: '模板预览暂不可用，请在聊天中选择模板。', loading: '正在加载预览…',
-      failed: '视频暂时无法播放，仍可选择此模板。', blocked: '点击放大预览后播放。', preview: '放大预览', clone: '复刻模板',
+    ui: { copied: "已复制，请粘贴到对话框后补充要求。", waiting: '正在准备模板预览…', unavailable: '模板预览暂不可用，请在聊天中选择模板。', loading: '正在加载预览…',
+      failed: '视频暂时无法播放，仍可选择此模板。', blocked: '点击放大预览后播放。', preview: '放大预览', clone: '复刻模板', copyPrompt: '复制复刻提示词',
       back: '返回模板列表', close: '关闭预览', player: '模板完整预览', sending: '正在填入…', notSent: '未能填入，请重试。',
-      manual: '当前客户端暂不支持填入输入框，请复制下方提示词。', draftLabel: '模板创作提示词',
+      manual: '请复制下方提示词，再粘贴到对话框。', draftLabel: '模板创作提示词',
       welcomeLabel: 'OpenMotion 欢迎', listLabel: 'OpenMotion 模板' },
-    welcome: { clipboardDraft: "点击下方卡片上的「复刻模板」即可复制提示词，粘贴到对话框，补充要求或附件后发送。", libraryHeading: '🎉 OpenMotion 安装好啦，右侧就是模板库！', heading: "🎉 OpenMotion 安装好啦，右侧就是探索页！",
+    welcome: { templateSearch: '在右上角打开「模板」，可以搜索或浏览模板库。', clipboardDraft: "点击下方卡片上的「复制复刻提示词」即可复制提示词，粘贴到对话框，补充要求或附件后发送。", libraryHeading: '🎉 OpenMotion 安装好啦，右侧就是模板库！', heading: "🎉 OpenMotion 安装好啦，右侧就是探索页！",
       introduction: '我是你的开源视频创作搭档，我有丰富的高水准视频模板，也支持从参考视频或一个灵感出发，和你一起创作精彩的视频。',
       libraryDiscovery: '模板库支持搜索，也可以随意浏览，找到喜欢的点击「复刻模板」就能开始你的创作！', discovery: "点右上角「模板」进入模板库，支持搜索，找到喜欢的点击「复刻模板」就能开始你的创作！",
       recommendations: '不想自己找？先看看我挑的这 3 个 👇',
@@ -36,12 +36,12 @@ export const translations: Record<Language, Translation> = {
     descriptions: { 'product-promo': '从图标开场到多人协作，查看多场景动画与字幕编排。', 'nyt-graph': '报刊风格的动态图表，查看数据、标注与图形的节奏。', 'decision-tree': '逐步展开的决策树，查看节点、连线与分支动画。' },
   },
   en: {
-    ui: { copied: "Copied. Paste into the chat and add your requirements.", copyFailed: "Copy failed. Please try again.", waiting: 'Preparing template previews…', unavailable: 'Template previews are unavailable. Choose a template in the chat.', loading: 'Loading preview…',
-      failed: 'This video cannot play. You can still choose the template.', blocked: 'Open the larger preview to play.', preview: 'Enlarge preview', clone: 'Recreate template',
+    ui: { copied: "Copied. Paste into the chat and add your requirements.", waiting: 'Preparing template previews…', unavailable: 'Template previews are unavailable. Choose a template in the chat.', loading: 'Loading preview…',
+      failed: 'This video cannot play. You can still choose the template.', blocked: 'Open the larger preview to play.', preview: 'Enlarge preview', clone: 'Recreate template', copyPrompt: 'Copy remix prompt',
       back: 'Back to templates', close: 'Close preview', player: 'Full template preview', sending: 'Adding to composer…', notSent: 'Not added. Please try again.',
-      manual: 'This client cannot fill the composer. Copy the prompt below.', draftLabel: 'Template creation prompt',
+      manual: 'Copy the prompt below and paste it into the chat.', draftLabel: 'Template creation prompt',
       welcomeLabel: 'OpenMotion welcome', listLabel: 'OpenMotion templates' },
-    welcome: { clipboardDraft: "Choose Recreate template to copy its prompt, paste it into the chat, add your requirements or attachments, then send.", libraryHeading: '🎉 OpenMotion is installed. Your template library is open on the right!', heading: "🎉 OpenMotion is installed. Explore is open on the right!",
+    welcome: { templateSearch: 'Open Templates at the top right to search or browse the library.', clipboardDraft: "Choose Copy remix prompt to copy its prompt, paste it into the chat, add your requirements or attachments, then send.", libraryHeading: '🎉 OpenMotion is installed. Your template library is open on the right!', heading: "🎉 OpenMotion is installed. Explore is open on the right!",
       introduction: 'I am your open-source video creation partner. I have a rich collection of high-quality video templates, and I can also help you create a video from a reference or an idea.',
       libraryDiscovery: 'Search or browse the template library. When you find one you like, choose Recreate template to start creating!', discovery: "Open Templates at the top right to search the library. When you find one you like, choose Recreate template to start creating!",
       recommendations: 'Want a starting point? Try one of these three 👇',
@@ -49,12 +49,12 @@ export const translations: Record<Language, Translation> = {
     descriptions: { 'product-promo': 'From an opening icon to team collaboration, explore multi-scene animation and caption sequencing.', 'nyt-graph': 'Newspaper-style animated charts, with carefully paced data, annotations and graphics.', 'decision-tree': 'Explore a decision tree that unfolds through animated nodes, connections and branches.' },
   },
   ja: {
-    ui: { copied: "コピーしました。チャットに貼り付けて要望を追加してください。", copyFailed: "コピーできませんでした。もう一度お試しください。", waiting: 'テンプレートのプレビューを準備中…', unavailable: 'プレビューを利用できません。チャットでテンプレートを選んでください。', loading: 'プレビューを読み込み中…',
-      failed: '動画を再生できませんが、このテンプレートは選択できます。', blocked: '拡大プレビューを開いて再生してください。', preview: 'プレビューを拡大', clone: 'テンプレートを再現',
+    ui: { copied: "コピーしました。チャットに貼り付けて要望を追加してください。", waiting: 'テンプレートのプレビューを準備中…', unavailable: 'プレビューを利用できません。チャットでテンプレートを選んでください。', loading: 'プレビューを読み込み中…',
+      failed: '動画を再生できませんが、このテンプレートは選択できます。', blocked: '拡大プレビューを開いて再生してください。', preview: 'プレビューを拡大', clone: 'テンプレートを再現', copyPrompt: '再現用プロンプトをコピー',
       back: 'テンプレート一覧に戻る', close: 'プレビューを閉じる', player: 'テンプレートの全編プレビュー', sending: '入力欄に追加中…', notSent: '追加できませんでした。もう一度お試しください。',
-      manual: 'このクライアントでは入力欄に追加できません。下のプロンプトをコピーしてください。', draftLabel: 'テンプレート制作プロンプト',
+      manual: '下のプロンプトをコピーしてチャットに貼り付けてください。', draftLabel: 'テンプレート制作プロンプト',
       welcomeLabel: 'OpenMotion へようこそ', listLabel: 'OpenMotion テンプレート' },
-    welcome: { clipboardDraft: "「テンプレートを再現」でプロンプトをコピーし、チャットに貼り付けて要望やファイルを追加してから送信してください。", libraryHeading: '🎉 OpenMotion のインストールが完了しました。右側にテンプレートライブラリがあります！', heading: "🎉 OpenMotion のインストールが完了しました。右側に探索ページが開いています！",
+    welcome: { templateSearch: '右上の「テンプレート」からライブラリを開いて検索や閲覧ができます。', clipboardDraft: "「再現用プロンプトをコピー」でプロンプトをコピーし、チャットに貼り付けて要望やファイルを追加してから送信してください。", libraryHeading: '🎉 OpenMotion のインストールが完了しました。右側にテンプレートライブラリがあります！', heading: "🎉 OpenMotion のインストールが完了しました。右側に探索ページが開いています！",
       introduction: '私は、オープンソースの動画制作パートナーです。高品質な動画テンプレートを豊富に用意しています。参考動画やアイデアからも、一緒に動画を制作できます。',
       libraryDiscovery: 'テンプレートライブラリは検索も自由な閲覧もできます。気に入ったものが見つかったら「テンプレートを再現」をクリックして制作を始めましょう！', discovery: "右上の「テンプレート」からライブラリを開いて検索できます。気に入ったものが見つかったら「テンプレートを再現」をクリックして制作を始めましょう！",
       recommendations: 'どれにするか迷ったら、まずはこの3つをどうぞ 👇',
@@ -62,12 +62,12 @@ export const translations: Record<Language, Translation> = {
     descriptions: { 'product-promo': 'アイコンでのオープニングからチームでの共同作業まで、多彩なシーンのアニメーションと字幕構成を紹介します。', 'nyt-graph': '新聞風のアニメーショングラフで、データ、注釈、図形のリズムを表現します。', 'decision-tree': 'ノードや接続線、分岐が順に展開する決定木のアニメーションです。' },
   },
   ko: {
-    ui: { copied: "복사했습니다. 대화창에 붙여넣고 요구 사항을 추가하세요.", copyFailed: "복사하지 못했습니다. 다시 시도해 주세요.", waiting: '템플릿 미리보기를 준비하는 중…', unavailable: '템플릿 미리보기를 사용할 수 없습니다. 채팅에서 템플릿을 선택해 주세요.', loading: '미리보기를 불러오는 중…',
-      failed: '영상을 재생할 수 없지만 이 템플릿을 선택할 수 있습니다.', blocked: '확대 미리보기를 열어 재생해 주세요.', preview: '미리보기 확대', clone: '템플릿 재현',
+    ui: { copied: "복사했습니다. 대화창에 붙여넣고 요구 사항을 추가하세요.", waiting: '템플릿 미리보기를 준비하는 중…', unavailable: '템플릿 미리보기를 사용할 수 없습니다. 채팅에서 템플릿을 선택해 주세요.', loading: '미리보기를 불러오는 중…',
+      failed: '영상을 재생할 수 없지만 이 템플릿을 선택할 수 있습니다.', blocked: '확대 미리보기를 열어 재생해 주세요.', preview: '미리보기 확대', clone: '템플릿 재현', copyPrompt: '재현 프롬프트 복사',
       back: '템플릿 목록으로 돌아가기', close: '미리보기 닫기', player: '템플릿 전체 미리보기', sending: '입력창에 추가하는 중…', notSent: '추가하지 못했습니다. 다시 시도해 주세요.',
-      manual: '이 클라이언트에서는 입력창에 추가할 수 없습니다. 아래 프롬프트를 복사해 주세요.', draftLabel: '템플릿 제작 프롬프트',
+      manual: '아래 프롬프트를 복사해서 채팅에 붙여넣으세요.', draftLabel: '템플릿 제작 프롬프트',
       welcomeLabel: 'OpenMotion에 오신 것을 환영합니다', listLabel: 'OpenMotion 템플릿' },
-    welcome: { clipboardDraft: "「템플릿 재현」으로 프롬프트를 복사한 뒤 대화창에 붙여넣고 요구 사항이나 파일을 추가해 전송하세요.", libraryHeading: '🎉 OpenMotion 설치가 완료되었습니다. 오른쪽에 템플릿 라이브러리가 있어요!', heading: "🎉 OpenMotion 설치가 완료되었습니다. 오른쪽에 탐색 페이지가 열려 있어요!",
+    welcome: { templateSearch: '오른쪽 위의 「템플릿」에서 라이브러리를 검색하거나 둘러보세요.', clipboardDraft: "「재현 프롬프트 복사」로 프롬프트를 복사한 뒤 대화창에 붙여넣고 요구 사항이나 파일을 추가해 전송하세요.", libraryHeading: '🎉 OpenMotion 설치가 완료되었습니다. 오른쪽에 템플릿 라이브러리가 있어요!', heading: "🎉 OpenMotion 설치가 완료되었습니다. 오른쪽에 탐색 페이지가 열려 있어요!",
       introduction: '저는 여러분의 오픈 소스 영상 제작 파트너입니다. 다양한 고품질 영상 템플릿을 갖추고 있으며, 참고 영상이나 아이디어를 바탕으로 함께 영상을 만들 수도 있어요.',
       libraryDiscovery: '템플릿 라이브러리에서 검색하거나 자유롭게 둘러보세요. 마음에 드는 템플릿의 「템플릿 재현」을 누르면 제작을 시작할 수 있어요!', discovery: "오른쪽 위의 「템플릿」을 열어 라이브러리를 검색하세요. 마음에 드는 템플릿의 「템플릿 재현」을 누르면 제작을 시작할 수 있어요!",
       recommendations: '고르기 어렵다면 제가 추천하는 이 3가지를 먼저 살펴보세요 👇',
@@ -75,12 +75,12 @@ export const translations: Record<Language, Translation> = {
     descriptions: { 'product-promo': '아이콘으로 시작해 팀 협업으로 이어지는 다양한 장면의 애니메이션과 자막 구성을 살펴보세요.', 'nyt-graph': '신문 스타일의 애니메이션 차트로 데이터, 주석, 그래픽의 리듬을 표현합니다.', 'decision-tree': '노드, 연결선, 분기가 차례로 펼쳐지는 의사결정 트리 애니메이션입니다.' },
   },
   fr: {
-    ui: { copied: "Copié. Collez dans le chat et ajoutez vos besoins.", copyFailed: "Échec de la copie. Réessayez.", waiting: 'Préparation des aperçus…', unavailable: 'Les aperçus sont indisponibles. Choisissez un modèle dans le chat.', loading: 'Chargement de l’aperçu…',
-      failed: 'Cette vidéo ne peut pas être lue. Vous pouvez tout de même choisir ce modèle.', blocked: 'Ouvrez l’aperçu agrandi pour lancer la lecture.', preview: 'Agrandir l’aperçu', clone: 'Recréer le modèle',
+    ui: { copied: "Copié. Collez dans le chat et ajoutez vos besoins.", waiting: 'Préparation des aperçus…', unavailable: 'Les aperçus sont indisponibles. Choisissez un modèle dans le chat.', loading: 'Chargement de l’aperçu…',
+      failed: 'Cette vidéo ne peut pas être lue. Vous pouvez tout de même choisir ce modèle.', blocked: 'Ouvrez l’aperçu agrandi pour lancer la lecture.', preview: 'Agrandir l’aperçu', clone: 'Recréer le modèle', copyPrompt: 'Copier la consigne',
       back: 'Retour aux modèles', close: 'Fermer l’aperçu', player: 'Aperçu complet du modèle', sending: 'Ajout dans la zone de saisie…', notSent: 'Échec de l’ajout. Réessayez.',
-      manual: 'Ce client ne peut pas remplir la zone de saisie. Copiez la consigne ci-dessous.', draftLabel: 'Consigne de création',
+      manual: 'Copiez la consigne ci-dessous et collez-la dans le chat.', draftLabel: 'Consigne de création',
       welcomeLabel: 'Bienvenue dans OpenMotion', listLabel: 'Modèles OpenMotion' },
-    welcome: { clipboardDraft: "Choisissez « Recréer le modèle » pour copier la consigne, collez-la dans le chat, ajoutez vos besoins ou fichiers, puis envoyez.", libraryHeading: '🎉 OpenMotion est installé. La bibliothèque de modèles est ouverte à droite !', heading: "🎉 OpenMotion est installé. La page Explorer est ouverte à droite !",
+    welcome: { templateSearch: 'Ouvrez « Modèles » en haut à droite pour rechercher ou parcourir la bibliothèque.', clipboardDraft: "Choisissez « Copier la consigne » pour copier la consigne, collez-la dans le chat, ajoutez vos besoins ou fichiers, puis envoyez.", libraryHeading: '🎉 OpenMotion est installé. La bibliothèque de modèles est ouverte à droite !', heading: "🎉 OpenMotion est installé. La page Explorer est ouverte à droite !",
       introduction: 'Je suis votre partenaire de création vidéo open source. Je propose de nombreux modèles vidéo de qualité et peux aussi créer avec vous à partir d’une vidéo de référence ou d’une idée.',
       libraryDiscovery: 'Recherchez un modèle ou parcourez librement la bibliothèque. Cliquez sur « Recréer le modèle » pour commencer votre création !', discovery: "Ouvrez « Modèles » en haut à droite pour rechercher dans la bibliothèque. Cliquez sur « Recréer le modèle » sur celui qui vous plaît pour commencer votre création !",
       recommendations: 'Besoin d’inspiration ? Découvrez ces 3 modèles que j’ai choisis 👇',
@@ -88,12 +88,12 @@ export const translations: Record<Language, Translation> = {
     descriptions: { 'product-promo': 'D’une icône d’ouverture à la collaboration en équipe, découvrez des scènes animées et leur enchaînement de sous-titres.', 'nyt-graph': 'Des graphiques animés au style journalistique, rythmant données, annotations et formes.', 'decision-tree': 'Découvrez un arbre de décision dont les nœuds, les liens et les branches se déploient progressivement.' },
   },
   es: {
-    ui: { copied: "Copiado. Pega en el chat y añade tus requisitos.", copyFailed: "No se pudo copiar. Inténtalo de nuevo.", waiting: 'Preparando vistas previas…', unavailable: 'Las vistas previas no están disponibles. Elige una plantilla en el chat.', loading: 'Cargando vista previa…',
-      failed: 'No se puede reproducir el vídeo, pero aún puedes elegir esta plantilla.', blocked: 'Abre la vista previa ampliada para reproducirlo.', preview: 'Ampliar vista previa', clone: 'Recrear plantilla',
+    ui: { copied: "Copiado. Pega en el chat y añade tus requisitos.", waiting: 'Preparando vistas previas…', unavailable: 'Las vistas previas no están disponibles. Elige una plantilla en el chat.', loading: 'Cargando vista previa…',
+      failed: 'No se puede reproducir el vídeo, pero aún puedes elegir esta plantilla.', blocked: 'Abre la vista previa ampliada para reproducirlo.', preview: 'Ampliar vista previa', clone: 'Recrear plantilla', copyPrompt: 'Copiar la instrucción',
       back: 'Volver a las plantillas', close: 'Cerrar vista previa', player: 'Vista previa completa de la plantilla', sending: 'Añadiendo al cuadro de texto…', notSent: 'No se pudo añadir. Inténtalo de nuevo.',
-      manual: 'Este cliente no puede rellenar el cuadro de texto. Copia la instrucción de abajo.', draftLabel: 'Instrucción de creación',
+      manual: 'Copia la instrucción de abajo y pégala en el chat.', draftLabel: 'Instrucción de creación',
       welcomeLabel: 'Te damos la bienvenida a OpenMotion', listLabel: 'Plantillas de OpenMotion' },
-    welcome: { clipboardDraft: "Elige « Recrear plantilla » para copiar la instrucción, pégala en el chat, añade tus requisitos o archivos y envíala.", libraryHeading: '🎉 OpenMotion ya está instalado. ¡La biblioteca de plantillas está abierta a la derecha!', heading: "🎉 OpenMotion ya está instalado. ¡Explorar está abierto a la derecha!",
+    welcome: { templateSearch: 'Abre « Plantillas » arriba a la derecha para buscar o explorar la biblioteca.', clipboardDraft: "Elige « Copiar la instrucción » para copiar la instrucción, pégala en el chat, añade tus requisitos o archivos y envíala.", libraryHeading: '🎉 OpenMotion ya está instalado. ¡La biblioteca de plantillas está abierta a la derecha!', heading: "🎉 OpenMotion ya está instalado. ¡Explorar está abierto a la derecha!",
       introduction: 'Soy tu compañero de creación de vídeos de código abierto. Tengo una amplia colección de plantillas de alta calidad y también puedo crear contigo a partir de un vídeo de referencia o una idea.',
       libraryDiscovery: 'Busca una plantilla o explora la biblioteca a tu ritmo. ¡Haz clic en « Recrear plantilla » para empezar tu creación!', discovery: "Abre « Plantillas » arriba a la derecha para buscar en la biblioteca. ¡Cuando encuentres una que te guste, elige « Recrear plantilla » para empezar a crear!",
       recommendations: '¿Necesitas inspiración? Mira estas 3 plantillas que he elegido 👇',
@@ -101,12 +101,12 @@ export const translations: Record<Language, Translation> = {
     descriptions: { 'product-promo': 'Desde un icono inicial hasta la colaboración en equipo, descubre escenas animadas y la secuencia de sus subtítulos.', 'nyt-graph': 'Gráficos animados de estilo periodístico que combinan datos, anotaciones y formas con ritmo.', 'decision-tree': 'Explora un árbol de decisión cuyos nodos, conexiones y ramas se despliegan paso a paso.' },
   },
   pt: {
-    ui: { copied: "Copiado. Cole no chat e adicione seus requisitos.", copyFailed: "Falha ao copiar. Tente novamente.", waiting: 'Preparando prévias dos modelos…', unavailable: 'As prévias estão indisponíveis. Escolha um modelo no chat.', loading: 'Carregando prévia…',
-      failed: 'Não é possível reproduzir este vídeo, mas você ainda pode escolher o modelo.', blocked: 'Abra a prévia ampliada para reproduzir.', preview: 'Ampliar prévia', clone: 'Recriar modelo',
+    ui: { copied: "Copiado. Cole no chat e adicione seus requisitos.", waiting: 'Preparando prévias dos modelos…', unavailable: 'As prévias estão indisponíveis. Escolha um modelo no chat.', loading: 'Carregando prévia…',
+      failed: 'Não é possível reproduzir este vídeo, mas você ainda pode escolher o modelo.', blocked: 'Abra a prévia ampliada para reproduzir.', preview: 'Ampliar prévia', clone: 'Recriar modelo', copyPrompt: 'Copiar instrução',
       back: 'Voltar aos modelos', close: 'Fechar prévia', player: 'Prévia completa do modelo', sending: 'Adicionando à caixa de texto…', notSent: 'Não foi possível adicionar. Tente novamente.',
-      manual: 'Este cliente não pode preencher a caixa de texto. Copie a instrução abaixo.', draftLabel: 'Instrução de criação',
+      manual: 'Copie a instrução abaixo e cole no chat.', draftLabel: 'Instrução de criação',
       welcomeLabel: 'Boas-vindas ao OpenMotion', listLabel: 'Modelos do OpenMotion' },
-    welcome: { clipboardDraft: "Escolha « Recriar modelo » para copiar a instrução, cole no chat, adicione seus requisitos ou arquivos e envie.", libraryHeading: '🎉 OpenMotion instalado. A biblioteca de modelos está aberta à direita!', heading: "🎉 OpenMotion instalado. A página Explorar está aberta à direita!",
+    welcome: { templateSearch: 'Abra « Modelos » no canto superior direito para pesquisar ou explorar a biblioteca.', clipboardDraft: "Escolha « Copiar instrução » para copiar a instrução, cole no chat, adicione seus requisitos ou arquivos e envie.", libraryHeading: '🎉 OpenMotion instalado. A biblioteca de modelos está aberta à direita!', heading: "🎉 OpenMotion instalado. A página Explorar está aberta à direita!",
       introduction: 'Sou seu parceiro de criação de vídeos de código aberto. Tenho uma ampla coleção de modelos de alta qualidade e também posso criar com você a partir de um vídeo de referência ou de uma ideia.',
       libraryDiscovery: 'Pesquise um modelo ou explore a biblioteca à vontade. Clique em « Recriar modelo » para começar sua criação!', discovery: "Abra « Modelos » no canto superior direito para pesquisar na biblioteca. Quando encontrar um de que goste, escolha « Recriar modelo » para começar a criar!",
       recommendations: 'Precisa de inspiração? Veja estes 3 modelos que escolhi 👇',

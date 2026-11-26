@@ -4,17 +4,16 @@
  * State lives in memory for the session; persisting it is a backend task.
  *
  * Only real work is reported as done: the OpenDesign link (webPublishClient) and packages built
- * in the browser. Steps in platform consoles move on when the user says they are done, and the
- * conversation records it in the user's words.
+ * in the browser. WeChat Mini Game is guided by the Agent via openmotion_game_wechat; all other
+ * platforms advance instantaneously through local inline step controls and record completion locally.
  */
 import { useSyncExternalStore } from 'react';
 import { buildPlatformZip, buildPlayable, gameSlug, loadGameHtml, type GamePackageResult, type GamePackageTarget } from './gamePackage';
 import { describeLinkError, publishGameLink, type GamePublishLinkTarget } from './gamePublishAdapter';
-import { gamePublishDevTool, type GamePublishDevToolId } from './devTools';
+import type { GamePublishDevToolId } from './devTools';
 import { gamePublishPlatform, storeLinkProblem, type GamePublishPlatform, type GamePublishPlatformId, type GamePublishStep } from './platforms';
 import { queueSuperAgentHandoff } from '../../motion/superAgentHandoff';
 import { wechatClient, type WechatPublishStatus } from './wechatClient';
-import { readLocale, translate } from '../../i18n/I18n';
 import wechatPortGuide from '../../../../skills/openmotion-game/references/wechat-minigame-port.md?raw';
 
 export type GamePublishView = 'list' | 'step' | 'result';
@@ -64,6 +63,8 @@ export interface GamePublishSession {
   linkPublishing: boolean;
   /** OpenDesign is selected by default: picking a platform also publishes the OpenDesign play link. */
   linkToo: boolean;
+  /** True when a platform was picked while account state was still loading, so link publish waits until resolved. */
+  linkDeferred?: boolean;
   linkError?: { message: string; authRequired: boolean };
   published: GamePublishPlatformId[];
   /** Developer tool the user must confirm before the platform steps. */
@@ -72,11 +73,13 @@ export interface GamePublishSession {
   wechat?: GamePublishWechatState;
 }
 
+export type GamePublishWorkKind = 'link' | 'package' | 'wechat-key';
+
 export type GamePublishThreadEntry =
   | { id: string; artifactId: string; kind: 'user'; key: string; name?: string }
-  | { id: string; artifactId: string; kind: 'agent'; title: string; name?: string; lines: Array<{ text: string; vars?: Record<string, string | number>; done: boolean }>; failed?: boolean }
+  | { id: string; artifactId: string; kind: 'agent'; work: GamePublishWorkKind; title: string; name?: string; lines: Array<{ text: string; vars?: Record<string, string | number>; done: boolean }>; failed?: boolean; packageResult?: GamePackageResult }
   | { id: string; artifactId: string; kind: 'result'; title: string; detail: string; vars?: Record<string, string>; action?: string; href?: string; link?: boolean }
-  | { id: string; artifactId: string; kind: 'link-failed'; message: string; authRequired: boolean; closed: boolean }
+  | { id: string; artifactId: string; kind: 'link-failed'; message: string; authRequired: boolean }
   ;
 
 const sessions = new Map<string, GamePublishSession>();
@@ -114,10 +117,29 @@ function patchEntries(session: GamePublishSession, patch: (entry: GamePublishThr
   emit();
 }
 
+function removeEntries(session: GamePublishSession, predicate: (entry: GamePublishThreadEntry) => boolean) {
+  const key = threadKey(session);
+  const current = threads.get(key);
+  if (!current?.length) return;
+  const next = current.filter(entry => !(entry.artifactId === session.artifactId && predicate(entry)));
+  if (next.length !== current.length) {
+    threads.set(key, next);
+    emit();
+  }
+}
+
+function isLinkFailureEntry(entry: GamePublishThreadEntry) {
+  return entry.kind === 'link-failed' || (entry.kind === 'agent' && entry.work === 'link' && Boolean(entry.failed));
+}
+
+function isPackageWorkEntry(entry: GamePublishThreadEntry) {
+  return entry.kind === 'agent' && entry.work === 'package';
+}
+
 /** A conversation block for real work; lines are added as each part actually finishes. */
-function startWork(artifactId: string, title: string, name?: string) {
+function startWork(artifactId: string, work: GamePublishWorkKind, title: string, name?: string) {
   const session = sessions.get(artifactId)!;
-  const id = pushEntry(session, { kind: 'agent', title, name, lines: [] });
+  const id = pushEntry(session, { kind: 'agent', work, title, name, lines: [] });
   const edit = (change: (entry: Extract<GamePublishThreadEntry, { kind: 'agent' }>) => Extract<GamePublishThreadEntry, { kind: 'agent' }>) => {
     const latest = sessions.get(artifactId);
     if (latest) patchEntries(latest, entry => (entry.id === id && entry.kind === 'agent' ? change(entry) : entry));
@@ -125,6 +147,7 @@ function startWork(artifactId: string, title: string, name?: string) {
   return {
     line(text: string, vars?: Record<string, string | number>) { edit(entry => ({ ...entry, lines: [...entry.lines, { text, vars, done: true }] })); },
     fail(text: string, vars?: Record<string, string | number>) { edit(entry => ({ ...entry, failed: true, lines: [...entry.lines, { text, vars, done: false }] })); },
+    attachPackage(result: GamePackageResult) { edit(entry => ({ ...entry, packageResult: result })); },
   };
 }
 
@@ -147,9 +170,6 @@ export interface GamePublishStepRef { platformId: GamePublishPlatformId; stepInd
 function matchesStep(session: GamePublishSession, ref: GamePublishStepRef) {
   return session.platformId === ref.platformId && session.stepIndex === ref.stepIndex && stepInProgress(session) && toolReady(session);
 }
-
-/** Text in the user's interface language, for messages the page sends into the conversation on their behalf. */
-function say(key: string, vars?: Record<string, string | number>) { return translate(readLocale(), key, vars); }
 
 const WAITING: GamePublishStatus = { tone: 'idle', key: 'Waiting for you' };
 
@@ -183,39 +203,7 @@ export function linkNote(session: GamePublishSession) {
   return `\n\nThe user kept OpenDesign selected. In your first message say only, in the user's language: ${line}. Never write the link or any URL to it, never say who published it or that you will not change it, and do not publish it yourself.`;
 }
 
-/**
- * What the Agent is told, out of sight, when the user picks a platform other than WeChat: its steps and how the
- * page shows them. The page owns the step state (the Agent has no tool for it): the user finishes a step with the
- * button under the Agent's message, which also tells the Agent.
- */
-function platformInstructions(session: GamePublishSession, platform: GamePublishPlatform) {
-  // Step names and button labels in the user's language, exactly as the panel and the page show them.
-  const total = platform.steps.length;
-  const steps = platform.steps.map((step, index) => [
-    `${index + 1}. ${say('Step {current} of {total} · {name}', { current: index + 1, total, name: say(step.title) })}. Why: ${say(step.why)}`,
-    step.todo.length ? `   To do: ${step.todo.map(item => say(item)).join(' → ')}` : '',
-    step.links?.length ? `   Pages: ${step.links.map(link => `${say(link.label)} ${link.href}`).join('; ')}` : '',
-    step.kind === 'package' ? `   The page builds this package from the game files and shows its checks and a "${say('Download {file}', { file: '…' })}" button under your message.` : '',
-    step.kind === 'link' ? '   The page publishes the OpenDesign play link and shows it, with Copy, under your message.' : '',
-    step.pick ? `   The user chooses one under your message: ${step.pick.join(', ')}.` : '',
-    step.fields ? `   The user fills in under your message: ${step.fields.map(field => say(field.label)).join(', ')}.` : '',
-    `   Button under your message that finishes the step: "${say(step.cta)}".`,
-  ].filter(Boolean).join('\n')).join('\n');
-  const tool = platform.devTool ? gamePublishDevTool(platform.devTool) : undefined;
-  const toolLine = tool ? `\nBefore step 1 the user needs ${say(tool.name)} (${say(tool.why)}). The page shows "${say('Download {tool}', { tool: say(tool.name) })}" and "${say('I installed it, continue')}" under your message. Explain why it is needed and wait.` : '';
-  return `Guide the user through publishing the game "${session.gameTitle}" (game id ${session.gameId}) to ${say(platform.name)}, in this conversation.
-
-Steps (the panel on the right shows the same list and which step is current; it has no instructions or buttons):
-${steps}${toolLine}
-
-How to guide:
-- One step per message. Start it with that step's heading exactly as written above (it matches the panel). Then say briefly where to go, what to click, what they will see and why. Name buttons exactly as quoted above; keep the platform's own button and menu names.
-- Under your message the page shows that step's controls and its button. When the user presses it you receive a message like "${say('Done: {title}', { title: '…' })}"; then continue with the next step. If the user only says a step is done in words, ask them to press the button under your message so the panel records it.
-- You cannot see the platform: never say the platform accepted, reviewed or published the game. After the last step, sum up what they did and what the platform does next.
-- You do not build packages or links yourself; the page does. Do not edit the game files for this.`;
-}
-
-/** Makes step `index` current, builds its package if it has one. The Agent explains it in the conversation. */
+/** Makes step `index` current, builds its package if it has one. */
 function enterStep(artifactId: string, platform: GamePublishPlatform, index: number) {
   update(artifactId, { stepIndex: index, view: 'step', stepProblem: undefined, status: WAITING });
   const step = platform.steps[index];
@@ -259,20 +247,44 @@ export const gamePublishActions = {
   },
   showList(artifactId: string) { update(artifactId, { view: 'list' }); },
   /** The OpenDesign choice at the top of the platform list (selected by default). */
-  setLinkToo(artifactId: string, on: boolean) { update(artifactId, { linkToo: on }); },
+  setLinkToo(artifactId: string, on: boolean) { update(artifactId, { linkToo: on, linkDeferred: false }); },
+  /** Resolves a deferred OpenDesign link decision once the account summary resolves or fails. */
+  resolveDeferredLink(artifactId: string, signedIn: boolean) {
+    const session = sessions.get(artifactId);
+    if (!session?.linkDeferred) return;
+    if (signedIn) {
+      update(artifactId, { linkDeferred: false });
+      const latest = sessions.get(artifactId)!;
+      if (latest.linkToo && !latest.linkUrl && !latest.linkPublishing && !latest.linkError) {
+        void gamePublishActions.publishLink(artifactId);
+      }
+      return;
+    }
+    update(artifactId, {
+      linkDeferred: false,
+      ...(session.platformId && session.platformId !== 'telegram' ? { linkToo: false, linkError: undefined } : {}),
+    });
+  },
+  /** Clears an OpenDesign link failure and continues with the chosen platform only. */
+  dismissLinkError(artifactId: string) {
+    const session = sessions.get(artifactId);
+    if (!session) return;
+    removeEntries(session, isLinkFailureEntry);
+    update(artifactId, { linkToo: false, linkDeferred: false, linkError: undefined });
+  },
   /** Publishes the game on OpenDesign Cloud, the same way the toolbar Share button does. */
   async publishLink(artifactId: string): Promise<void> {
     const session = sessions.get(artifactId);
     if (!session || session.linkPublishing) return;
-    patchEntries(session, entry => (entry.kind === 'link-failed' ? { ...entry, closed: true } : entry));
+    removeEntries(session, isLinkFailureEntry);
     if (!session.link) {
       const linkError = { message: 'This game cannot get a share link yet', authRequired: false };
-      update(artifactId, { linkError });
-      pushEntry(sessions.get(artifactId)!, { kind: 'link-failed', message: linkError.message, authRequired: false, closed: false });
+      update(artifactId, { linkError, linkDeferred: false });
+      pushEntry(sessions.get(artifactId)!, { kind: 'link-failed', message: linkError.message, authRequired: false });
       return;
     }
-    update(artifactId, { linkPublishing: true, linkError: undefined });
-    const work = startWork(artifactId, 'Publishing on OpenDesign');
+    update(artifactId, { linkPublishing: true, linkDeferred: false, linkError: undefined });
+    const work = startWork(artifactId, 'link', 'Publishing on OpenDesign');
     try {
       const { url } = await publishGameLink(session.link);
       work.line('The game link is published');
@@ -280,16 +292,26 @@ export const gamePublishActions = {
       pushEntry(sessions.get(artifactId)!, { kind: 'result', title: 'Live on OpenDesign', detail: url, link: true });
     } catch (error) {
       const linkError = describeLinkError(error);
-      work.fail('Publishing failed: {message}', { message: linkError.message });
+      if (linkError.authRequired) {
+        // Keep the thread clean: the link-failed card renders the localized sign-in action without raw English error logs.
+        const latest = sessions.get(artifactId);
+        if (latest) removeEntries(latest, entry => entry.kind === 'agent' && entry.work === 'link' && !entry.lines.length);
+      } else {
+        work.fail('Publishing failed: {message}', { message: linkError.message });
+      }
       update(artifactId, { linkPublishing: false, linkError });
-      pushEntry(sessions.get(artifactId)!, { kind: 'link-failed', message: linkError.message, authRequired: linkError.authRequired, closed: false });
+      pushEntry(sessions.get(artifactId)!, { kind: 'link-failed', message: linkError.message, authRequired: linkError.authRequired });
     }
   },
-  choose(artifactId: string, platformId: GamePublishPlatformId) {
+  choose(artifactId: string, platformId: GamePublishPlatformId, options?: { signedIn?: boolean; deferLink?: boolean }) {
     const session = sessions.get(artifactId);
     const platform = gamePublishPlatform(platformId);
     if (!session || !platform) return;
     platformRuns.set(artifactId, (platformRuns.get(artifactId) ?? 0) + 1);
+    const guestOnNonLinkPlatform = options?.signedIn === false && platformId !== 'telegram';
+    const guestOnTelegram = options?.signedIn === false && platformId === 'telegram';
+    // Clear stale link errors and previous package build logs so re-picking a platform never stacks duplicate cards.
+    removeEntries(session, entry => isLinkFailureEntry(entry) || isPackageWorkEntry(entry));
     update(artifactId, {
       platformId,
       stepIndex: 0,
@@ -300,22 +322,22 @@ export const gamePublishActions = {
       toolCheck: undefined,
       package: undefined,
       status: WAITING,
+      linkDeferred: Boolean(options?.deferLink),
+      ...(guestOnNonLinkPlatform ? { linkToo: false, linkError: undefined } : {}),
+      ...(guestOnTelegram ? { linkError: undefined } : {}),
     });
     const latest = sessions.get(artifactId)!;
-    // OpenDesign is selected by default, so picking a platform also publishes the OpenDesign play link.
-    if (latest.linkToo && !latest.linkUrl && !latest.linkPublishing) void gamePublishActions.publishLink(artifactId);
+    // OpenDesign is selected by default when signed in; guests on non-Telegram platforms proceed without a blocking auth error,
+    // guests on Telegram sign in directly inside Step 1 (LinkStep), and unknown account states defer until resolved.
+    if (latest.linkToo && !latest.linkUrl && !latest.linkPublishing && options?.signedIn !== false && !options?.deferLink) {
+      void gamePublishActions.publishLink(artifactId);
+    }
     if (platform.id === 'wechat') {
       gamePublishActions.startWechat(artifactId);
       return;
     }
-    // Every platform is guided by the Agent: the request goes into the conversation as a real message.
-    queueSuperAgentHandoff({
-      prompt: say('Publish “{title}” to {name}', { title: session.gameTitle, name: say(platform.name) }),
-      hiddenInstructions: platformInstructions(sessions.get(artifactId)!, platform) + linkNote(sessions.get(artifactId)!),
-      mode: 'game',
-      newChat: false,
-      autoSend: true,
-    });
+    // Non-WeChat platforms are driven instantaneously by local step controls and package builders,
+    // without queuing redundant Codex turns that stream out of order above the interactive cards.
     if (platform.devTool) {
       update(artifactId, { toolCheck: { toolId: platform.devTool, state: 'missing' } });
       return;
@@ -332,7 +354,6 @@ export const gamePublishActions = {
     const { toolId } = session.toolCheck;
     update(artifactId, { toolCheck: { toolId, state: 'ok' } });
     enterStep(artifactId, platform, 0);
-    tellAgent(say('I installed {tool}', { tool: say(gamePublishDevTool(toolId)?.name ?? toolId) }));
   },
   /** "Later": leave this platform and go back to the list. */
   skipDevTool(artifactId: string) {
@@ -356,7 +377,7 @@ export const gamePublishActions = {
     const run = platformRuns.get(artifactId);
     const isCurrent = () => platformRuns.get(artifactId) === run;
     update(artifactId, { package: { state: 'building', target }, status: { tone: 'running', key: 'Building the package' } });
-    const work = startWork(artifactId, 'Building the {name} package', target === 'playable' ? session.picked ?? platform.name : platform.name);
+    const work = startWork(artifactId, 'package', 'Building the {name} package', target === 'playable' ? session.picked ?? platform.name : platform.name);
     try {
       const loaded = await loadGameHtml(session.gameId);
       work.line(loaded.missing.length ? 'Read the game; {count} local file(s) could not be read' : 'Read the game and inlined {count} local file(s)', { count: loaded.missing.length || loaded.inlined });
@@ -373,6 +394,7 @@ export const gamePublishActions = {
         : buildPlatformZip(loaded, target, slug);
       if (!isCurrent()) return;
       work.line('Built {file}', { file: result.fileName });
+      work.attachPackage(result);
       const failed = result.checks.filter(check => check.tone === 'fail').length;
       if (failed) work.fail('{count} check(s) failed; see the panel', { count: failed });
       update(artifactId, { package: { state: 'ready', target, result }, status: failed ? { tone: 'error', key: '{count} check(s) failed', vars: { count: failed } } : WAITING });
@@ -435,7 +457,7 @@ export const gamePublishActions = {
       await wechatClient.saveKey(appid, privateKey);
       patchWechat(artifactId, { keySaving: false });
       // Only this line goes into the conversation; the key itself never does (and never reaches the Agent).
-      startWork(artifactId, 'Saved the upload key').line('Saved on this computer for {appid}; the conversation keeps no copy', { appid });
+      startWork(artifactId, 'wechat-key', 'Saved the upload key').line('Saved on this computer for {appid}; the conversation keeps no copy', { appid });
       await gamePublishActions.refreshWechat(artifactId);
     } catch (error) {
       patchWechat(artifactId, { keySaving: false, keyError: error instanceof Error ? error.message : String(error) });
@@ -462,8 +484,6 @@ export const gamePublishActions = {
             : undefined;
     if (problem) { update(artifactId, { open: true, view: 'step', stepProblem: problem }); return; }
     const next = session.stepIndex + 1;
-    // The Agent learns it from the conversation, like any message from the user, and explains the next step.
-    tellAgent(say('Done: {title}', { title: say(step.title) }) + (step.pick && session.picked ? ` (${session.picked})` : ''));
     if (next < platform.steps.length) {
       enterStep(artifactId, platform, next);
       return;
@@ -475,13 +495,15 @@ export const gamePublishActions = {
       published: latest.published.includes(platform.id) ? latest.published : [...latest.published, platform.id],
       status: { tone: 'done', key: 'Recorded what you did' },
     });
+    pushEntry(sessions.get(artifactId)!, {
+      kind: 'result',
+      title: platform.resultTitle,
+      detail: platform.resultDetail,
+      action: platform.resultAction,
+      href: platform.resultHref,
+    });
   },
 };
-
-/** A message from the user into the current conversation, for the Agent to continue from. */
-function tellAgent(prompt: string) {
-  queueSuperAgentHandoff({ prompt, mode: 'game', newChat: false, autoSend: true });
-}
 
 /** The publish run of this conversation, if any: its step controls live under the Agent's messages. */
 export function usePublishForChat(chatId: string | null | undefined): GamePublishSession | undefined {

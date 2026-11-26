@@ -5,16 +5,21 @@ export type CapabilityScriptContext = {
   store: WorkspaceStore;
   capability: CapabilityDefinition;
   requestId: string;
+  model?: string;
   prompt: string;
   options: Record<string, unknown>;
   parameters: Record<string, unknown>;
   references: { assetId: string; versionId: string; filename: string }[];
 };
 
+import { runOpenDesign3dScript, runOpenDesignWorldScript } from './opendesign-3d.ts';
+
 export type CapabilityScriptOutput = {
   sourcePath: string;
   name?: string;
   cleanup?: () => Promise<void>;
+  onCommitted?: () => Promise<void>;
+  result?: Record<string, unknown>;
 };
 
 export type CapabilityScriptHandler = (ctx: CapabilityScriptContext) => Promise<CapabilityScriptOutput>;
@@ -29,4 +34,7 @@ export type CapabilityScriptHandler = (ctx: CapabilityScriptContext) => Promise<
  *    capability entry in `shared/capability-registry.ts` (or via remote/local overrides).
  * Both Studio GUI and MCP `openmotion_capability_run` will route to it automatically.
  */
-export const builtinCapabilityScripts: Record<string, CapabilityScriptHandler> = {};
+export const builtinCapabilityScripts: Record<string, CapabilityScriptHandler> = {
+  'opendesign-3d': runOpenDesign3dScript,
+  'opendesign-world': runOpenDesignWorldScript,
+};

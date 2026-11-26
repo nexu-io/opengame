@@ -45,6 +45,11 @@ async function waitJob(projectId,jobId,terminal){const deadline=Date.now()+12000
 let owned;let report;
 try{
  const init=await rpc('initialize',{protocolVersion:'2025-11-25'});assert.equal(init.serverInfo.version,version);
+ const modernMeta={'io.modelcontextprotocol/protocolVersion':'2026-07-28',
+   'io.modelcontextprotocol/clientInfo':{name:'package-test',version:'1'},'io.modelcontextprotocol/clientCapabilities':{}};
+ const discovery=await rpc('server/discover',{_meta:modernMeta});assert.equal(discovery.serverInfo.version,version);
+ const modernNames=(await rpc('tools/list',{_meta:modernMeta})).tools.map(t=>t.name);
+ assert.deepEqual(modernNames,expected);
  const names=(await rpc('tools/list')).tools.map(t=>t.name);assert.deepEqual(names,expected);
  await tool('openmotion_media_use',{action:'inspect'});
  // Capture startup ownership before later Tool calls reuse the service.

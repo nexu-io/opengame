@@ -4,7 +4,7 @@ import { copyFile, link, lstat, mkdir, open, readFile, readdir, rename, rm, writ
 import path from 'node:path';
 import type { OmTracking } from '../shared/tracking.ts';
 import { WorkspaceStore } from '../workspace.ts';
-import { legacyRemoteTerminal, modelReferenceLimit, resumableJob, mediaProviders, modalities, type Agent, type GenerateInput, type GenerationJob, type GatewayStatus, type Model, type Modality, type ProviderId, type ProviderState } from '../shared/gateway.ts';
+import { accountResumableMedia, legacyRemoteTerminal, modelReferenceLimit, resumableJob, mediaProviders, modalities, type Agent, type GenerateInput, type GenerationJob, type GatewayStatus, type Model, type Modality, type ProviderId, type ProviderState } from '../shared/gateway.ts';
 import { builtinModels, discoverModels, modelKey, providerIds, providerLabels, validModelId } from './catalog.ts';
 import { detectAgents, generateCodexImage } from './agents.ts';
 import { downloadMedia, mediaType, publicProviderFetch, ProviderError, retryRead, type Fetcher } from './network.ts';
@@ -424,7 +424,7 @@ export class ModelGateway {
     if (typeof requestId !== 'string' || !/^[\w-]{1,100}$/.test(requestId)) throw new Error('A stable requestId is required');
     return this.store.lock(async () => {
       const job = await this.getJob(id);
-      if (!(job.model.provider === 'opendesign' || job.model.provider === 'account' && job.modality === 'image') || !job.remoteId || !/^[a-zA-Z0-9_-]{1,180}$/.test(job.remoteId)) throw new Error('Only an existing Cloud or account image task can be resumed');
+      if (!(job.model.provider === 'opendesign' || accountResumableMedia(job)) || !job.remoteId || !/^[a-zA-Z0-9_-]{1,180}$/.test(job.remoteId)) throw new Error('Only an existing Cloud or direct account image/sound-effects task can be resumed');
       if (['queued', 'running', 'completed'].includes(job.state)) return job;
       if (!resumableJob(job)) throw new Error(job.savePending ? 'Use retry_save for retained local outputs' : 'This task cannot be resumed');
       if (job.projectId && !this.store.projectCatalog().projects.some(project => project.id === job.projectId)) throw new Error('Project not found');

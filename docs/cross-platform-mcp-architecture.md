@@ -86,12 +86,12 @@ flowchart TD
 
 ### 2. External Agents -> Unified MCP Hub -> Domain Services
 
-Both external transports converge on the exact same `mcpRegistry('phase1')` definitions, `Phase1Service` tool execution, `workflowResources()`, and `validateInput()` guards:
+Both external transports support stateless MCP `2026-07-28`, including `server/discover` and per-request capabilities. Older clients use `initialize` for `2024-11-05`, `2025-03-26`, `2025-06-18`, or `2025-11-25`. Both transports share the same `mcpRegistry('phase1')` definitions, `Phase1Service` tool execution, `workflowResources()`, and `validateInput()` guards:
 
 - **Local Stdio MCP (`mcp.ts`)**: Used by desktop Agent hosts (Codex, Claude Code, Cursor, DeepSeek Harness) and Docker `docker exec`.
 - **Streamable HTTP MCP (`POST / GET / DELETE /mcp`, `gateway/mcp-http.ts`)**:
-  - Supports protocol revisions `2024-11-05`, `2025-03-26`, `2025-06-18`, and `2025-11-25`.
-  - Uses `Mcp-Session-Id` headers, optional `Accept: text/event-stream` SSE framing on `POST`, server-push notifications on `GET /mcp`, and explicit session termination on `DELETE /mcp`.
+  - Stateless requests use `POST /mcp` with the protocol version and method headers, plus the name header where applicable. See [the protocol details](mcp-phase1-tools.md#mcp-transports-and-versions).
+  - Legacy sessions use `Mcp-Session-Id`, optional SSE framing on `POST`, server-push SSE on `GET /mcp`, and session termination on `DELETE /mcp`.
   - Authenticated via SHA-256 hashed scoped Bearer tokens (`om_mcp_...`) managed in **Settings -> Local Agents -> Runtimes & Cloud Bridge** or `/motion-api/mcp/tokens` (`read` | `write` | `admin` scopes). In `cloud` mode or when `MOTION_MCP_REQUIRE_AUTH=1`, Bearer authentication is strictly mandatory.
 
 ### 3. Batch Content Optimization & Triggers

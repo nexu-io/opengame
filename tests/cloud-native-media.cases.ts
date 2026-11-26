@@ -574,7 +574,7 @@ test('Cloud discovery replaces legacy and removed rows, preserves unknown versus
   ];
   let reads = 0;
   gateway.options.fetcher = (async (url, init) => {
-    assert.equal(String(url), 'https://cloud.example/api/v1/media/models');
+    assert.equal(String(url), 'https://cloud.example/api/v1/media/models?include_audio=true');
     assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer catalogue-fixture-key'); reads++;
     return Response.json({ models: rows });
   }) as Fetcher;

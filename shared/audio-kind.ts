@@ -8,7 +8,13 @@ export function isAudioKind(value: unknown): value is AudioKind {
 
 /** Identify dedicated sound-effects / foley endpoints without misclassifying music generators. */
 export function isSfxModelText(text: string): boolean {
-  return /sound[-_ ]?effects?|\bsfx\b|foley|audio[-_ ]?effects?/i.test(text);
+  return /sound[-_ ]?effects?|elevenlabs[-_ ]sound|\bsfx\b|foley|audio[-_ ]?effects?/i.test(text);
+}
+
+/** Shared sound-effects model classifier used across capability matching, option schemas, routing and resume checks. */
+export function isSfxModel(model: { modelId?: string; label?: string }): boolean {
+  const combined = model.label ? `${model.modelId ?? ''} ${model.label}` : (model.modelId ?? '');
+  return isSfxModelText(combined);
 }
 
 /** Shared audio domain classifier used by both server-side persistence/filtering and Sound Studio UI. */

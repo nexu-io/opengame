@@ -1,4 +1,5 @@
 import type { Modality, Model } from './gateway.ts';
+import { isSfxModel } from './audio-kind.ts';
 import { modelCapabilities } from './model-capabilities.ts';
 
 export type CapabilityModality = Modality | '3d';
@@ -232,6 +233,62 @@ export const dubbingCapabilityControls: readonly CapabilityControl[] = [
     choices: [
       { value: 'off', label: 'Audio dubbing only', prompt: 're-voice audio without altering video pixels' },
       { value: 'on', label: 'Match speaker lips', prompt: 'synchronize speaker lip movements to translated audio' },
+    ],
+  },
+];
+
+export const asset3dCapabilityControls: readonly CapabilityControl[] = [
+  {
+    key: 'operation',
+    label: '3D workflow',
+    defaultValue: 'auto',
+    choices: [
+      { value: 'auto', label: 'Auto (infer from inputs)', prompt: 'automatically select rig/rig_retarget when original_model_task_id or rigPreset is supplied, image_to_model when a reference image is pinned, or text_to_model from text' },
+      { value: 'text_to_model', label: 'Text to 3D mesh', prompt: 'generate a static PBR 3D mesh (.glb) from a text prompt' },
+      { value: 'image_to_model', label: 'Image to 3D mesh (rigid)', prompt: 'reconstruct a static PBR 3D mesh (.glb) from 1 clean isolated concept image — use for rigid objects (vehicles, weapons, instanced foreground props/landmarks), not articulated humanoids' },
+      { value: 'rig', label: 'Humanoid auto-rig (2-step)', prompt: 'generate from 1 front-facing empty-handed A-pose concept image and auto-rig with a real Mixamo skeleton (.glb + boneNames + rigTaskId for optional later retargeting)' },
+      { value: 'rig_retarget', label: 'Humanoid rig & animate (3-step)', prompt: 'generate, auto-rig with Mixamo skeleton, and retarget an animation clip (idle/walk/run/slash, or pass parameters.animation / parameters.animations)' },
+      { value: 'retarget', label: 'Retarget existing rig (1-step)', prompt: 'reuse parameters.original_model_task_id (a prior rigTaskId) to attach additional Mixamo animation clips without re-meshing or re-rigging' },
+    ],
+  },
+  {
+    key: 'quality',
+    label: 'Mesh face budget',
+    defaultValue: 'hero-balanced',
+    choices: [
+      { value: 'prop-low', label: 'Prop (≤5k faces)', prompt: 'low-poly face budget (~5,000 faces; automatic WebP texture slimming) for signature weapons or instanced foreground landmarks (reuse >= 2)' },
+      { value: 'hero-balanced', label: 'Hero balanced (≤10k faces)', prompt: 'default focal actor face budget (~10,000 faces; automatic WebP texture slimming) for player hero, primary boss/rival, or hero vehicle' },
+      { value: 'hero-high', label: 'Hero high (≤18k faces)', prompt: 'high-detail showcase face budget (~18,000 faces; automatic WebP texture slimming) for close-up centerpiece hero or boss' },
+    ],
+  },
+  {
+    key: 'rigPreset',
+    label: 'Rig / animation preset',
+    defaultValue: 'none',
+    choices: [
+      { value: 'none', label: 'Static mesh only (rigid objects)', prompt: 'unrigged static PBR GLB for rigid vehicles, weapons, and instanced props only — never use with DIY bounding-box skinning for articulated humanoids' },
+      { value: 'mixamo-only', label: 'Mixamo skeleton only (2-step)', prompt: 'auto-rig with real Mixamo humanoid skeleton without retargeting a clip; returns boneNames and rigTaskId for reusing operation=retarget' },
+      { value: 'mixamo-idle', label: 'Mixamo rig + idle', prompt: 'auto-rig with Mixamo humanoid skeleton and preset:idle clip' },
+      { value: 'mixamo-walk', label: 'Mixamo rig + walk', prompt: 'auto-rig with Mixamo humanoid skeleton and preset:walk clip' },
+      { value: 'mixamo-run', label: 'Mixamo rig + run', prompt: 'auto-rig with Mixamo humanoid skeleton and preset:run clip' },
+      { value: 'mixamo-slash', label: 'Mixamo rig + slash', prompt: 'auto-rig with Mixamo humanoid skeleton and preset:slash melee clip' },
+    ],
+  },
+];
+
+export const world3dCapabilityControls: readonly CapabilityControl[] = [
+  {
+    key: 'operation',
+    label: 'Atlas v2 workflow',
+    defaultValue: 'auto',
+    choices: [
+      { value: 'auto', label: 'Auto (infer from inputs)', prompt: 'automatically select atlasGenerate when contextFrames and targetCameras are supplied, images2PosedRGBD when references are pinned without a prompt, or atlasTextToImage from text' },
+      { value: 'atlasTextToImage', label: 'Text to scene frame (PNG)', prompt: 'generate a scene concept image from text for downstream World Labs Atlas pipelines' },
+      { value: 'images2PosedRGBD', label: 'Images to posed RGB-D', prompt: 'estimate camera poses and RGB-D depth from reference images' },
+      { value: 'atlasGenerate', label: 'Novel-view synthesis', prompt: 'generate spatially consistent views from parameters.contextFrames and parameters.targetCameras' },
+      { value: 'atlasChisel', label: 'Layout / graybox edit', prompt: 'perform structural layout or graybox edits on an Atlas world' },
+      { value: 'posedImages2Splats', label: 'Posed images to splats', prompt: 'reconstruct 3D Gaussian Splats from posed images' },
+      { value: 'splats2Mesh', label: 'Splats to mesh (.glb)', prompt: 'convert Gaussian Splats into a standard polygonal .glb mesh' },
     ],
   },
 ];
@@ -642,7 +699,7 @@ export const defaultCapabilities: readonly CapabilityDefinition[] = [
   {
     id: 'music',
     title: 'Music',
-    summary: 'Generate instrumental music or sound effects from mood, tempo and style prompts.',
+    summary: 'Generate instrumental music or soundscapes from mood, tempo and style prompts.',
     modality: 'audio',
     category: 'audio-voice',
     icon: 'music-2-line',
@@ -652,6 +709,26 @@ export const defaultCapabilities: readonly CapabilityDefinition[] = [
     requiresExplicitApproval: true,
     input: { promptRequired: true, minReferences: 0, maxReferences: 0 },
     executor: { kind: 'model', mode: 'text-to-audio' },
+  },
+  {
+    id: 'sound-effects',
+    title: 'Sound effects',
+    summary: 'Generate short game sound effects, foley, UI cues, or seamless ambient loops from a concise text prompt (<= 400 chars).',
+    modality: 'audio',
+    category: 'audio-voice',
+    icon: 'volume-up-line',
+    status: 'live',
+    channels: { gui: true, mcp: true },
+    costTier: 'low',
+    requiresExplicitApproval: false,
+    input: { promptRequired: true, minReferences: 0, maxReferences: 0 },
+    executor: {
+      kind: 'dedicated-model',
+      providers: ['opendesign', 'account', 'fal'],
+      models: ['elevenlabs-sound-v3', 'elevenlabs-sound-effects-v3', 'fal-ai/elevenlabs/sound-effects/v2'],
+      recommendedModel: 'elevenlabs-sound-v3',
+      mode: 'text-to-audio',
+    },
   },
   {
     id: 'speech',
@@ -756,16 +833,30 @@ export const defaultCapabilities: readonly CapabilityDefinition[] = [
   {
     id: '3d-asset',
     title: '3D asset generation',
-    summary: 'Generate textured 3D mesh assets (.glb) from text or product reference images.',
+    summary: 'Generate PBR textured 3D mesh assets (.glb) from a clean isolated concept image (preferred) or text, with real Mixamo humanoid auto-rigging (operation="rig" 2-step or "rig_retarget" 3-step returning boneNames & rigTaskId) and automatic texture slimming. Allocate 3D budget first to P0 near-camera focal subjects (use rig/rig_retarget from front A-pose empty-handed concepts for articulated humanoids; use static image_to_model for rigid vehicles, weapons, and 1–2 reusable foreground props) rather than peripheral background decor.',
     modality: '3d',
     category: 'generate',
     icon: 'box-3-line',
-    status: 'coming_soon',
-    channels: { gui: false, mcp: false },
+    status: 'live',
+    channels: { gui: false, mcp: true },
     costTier: 'high',
     requiresExplicitApproval: true,
-    input: { promptRequired: true, minReferences: 0, maxReferences: 4 },
-    executor: { kind: 'model' },
+    input: { promptRequired: false, minReferences: 0, maxReferences: 1, controls: asset3dCapabilityControls },
+    executor: { kind: 'script', scriptId: 'opendesign-3d' },
+  },
+  {
+    id: '3d-world',
+    title: '3D world generation',
+    summary: 'Run World Labs Atlas v2 world pipeline tasks: scene concept frames (atlasTextToImage), posed RGB-D (images2PosedRGBD), novel-view synthesis (atlasGenerate with contextFrames + targetCameras), layout edits (atlasChisel), Gaussian Splats (posedImages2Splats), and polygonal meshes (splats2Mesh .glb).',
+    modality: '3d',
+    category: 'generate',
+    icon: 'global-line',
+    status: 'live',
+    channels: { gui: false, mcp: true },
+    costTier: 'high',
+    requiresExplicitApproval: true,
+    input: { promptRequired: false, minReferences: 0, maxReferences: 10, controls: world3dCapabilityControls },
+    executor: { kind: 'script', scriptId: 'opendesign-world' },
   },
 ];
 
@@ -845,11 +936,16 @@ export function capabilitySupportsModel(capability: CapabilityDefinition, model:
     return capability.executor.models.includes(model.modelId);
   }
   if (capability.executor.kind === 'dedicated-model') {
-    return capability.executor.providers.includes(model.provider)
-      && capability.executor.models.includes(model.modelId);
+    if (!capability.executor.providers.includes(model.provider)) return false;
+    if (capability.executor.models.includes(model.modelId)) return true;
+    return capability.id === 'sound-effects'
+      && model.modality === 'audio'
+      && model.mode === 'text-to-audio'
+      && isSfxModel(model);
   }
   if (capability.executor.kind === 'model') {
     if (capability.executor.mode && model.mode !== capability.executor.mode) return false;
+    if (capability.id === 'music' && isSfxModel(model)) return false;
     if (capability.input.minReferences > 0) {
       return Boolean(model.supportsImageReference || (model.maxInputImages ?? 0) > 0);
     }

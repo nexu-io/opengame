@@ -1,5 +1,6 @@
 import type { LibraryGeneration } from './asset-library.ts';
 import type { GenerationOptions } from './generation-options.ts';
+import { isSfxModel } from './audio-kind.ts';
 import { openDesignImageReferenceCap } from './opendesign-models.ts';
 /** Public contract shared by the model gateway, MCP and Studio. Never contains credentials. */
 export const modalities = ['image', 'video', 'audio'] as const;
@@ -80,9 +81,17 @@ export function modelReferenceLimit(model: Model): number {
   }
   return model.modality === 'video' ? Math.min(model.maxInputImages ?? 0, 1) : 0;
 }
+/** True when a direct account job's modality/model supports resuming an existing remote task. */
+export function accountResumableMedia(job: GenerationJob): boolean {
+  return job.model.provider === 'account' && (
+    job.modality === 'image'
+    || (job.modality === 'audio' && job.model.mode === 'text-to-audio' && isSfxModel(job.model))
+  );
+}
 /** Local eligibility; the service additionally rechecks project, origin and credentials. */
 export function resumableJob(job: GenerationJob): boolean {
-  return (job.model.provider === 'opendesign' || job.model.provider === 'account' && job.modality === 'image') && typeof job.remoteId === 'string' && /^[a-zA-Z0-9_-]{1,180}$/.test(job.remoteId)
+  return (job.model.provider === 'opendesign' || accountResumableMedia(job))
+    && typeof job.remoteId === 'string' && /^[a-zA-Z0-9_-]{1,180}$/.test(job.remoteId)
     && job.state === 'failed' && !job.savePending && !job.remoteTerminal
     && !legacyRemoteTerminal(job);
 }

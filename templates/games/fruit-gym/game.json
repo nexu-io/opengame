@@ -1,0 +1,27 @@
+{
+  "id": "fruit-gym",
+  "title": "Fruit Gym Tycoon",
+  "description": "Run a bustling retro gym for adorable fruits: drag members onto workout gear, sprint to serve water or wake up sleepy avocados, collect sweat coins, and expand across 7 themed days.",
+  "genre": "casual",
+  "style": "anime",
+  "setting": "modern",
+  "multiplayer": false,
+  "maxPlayers": 1,
+  "status": "published",
+  "cover": "cover.webp",
+  "entry": "index.html",
+  "controls": "Tap or drag waiting fruits onto gym stations, tap service bubbles to assist or wake slackers, tap coins to collect and sweat puddles to mop, and use Upgrade or Fever Bell.",
+  "orientation": "portrait",
+  "plays": 0,
+  "likes": 0,
+  "dislikes": 0,
+  "createdAt": "2026-11-26T00:00:00.000Z",
+  "updatedAt": "2026-11-26T00:00:00.000Z",
+  "i18n": {
+    "zh-CN": {
+      "title": "水果健身房",
+      "description": "复古暖纸手绘风模拟经营小游戏：点按或拖拽可爱水果上器械撸铁暴汗、派店长递水拍醒偷懒牛油果、收金币雇员工扩店，闯过 7 大主题日。",
+      "controls": "点按或拖拽门口水果上器械，点击气泡照料或拍醒偷懒，点击金币收钱、点击汗渍擦干，底部可扩店升级与敲打气钟。"
+    }
+  }
+}

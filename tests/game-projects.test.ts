@@ -1568,3 +1568,148 @@ test('built-in published template remixes keep a clean title and emit dual-path 
   assert.doesNotMatch(ownRemix.agentInstruction,/deliver immediately with zero rebuild/);
   assert.match(ownRemix.agentInstruction,/Use the openmotion-game Skill to remix game/);
 }));
+
+test('3D briefs auto-infer style "3d" and scaffold vendored Three.js unless negated or overridden',()=>fixture(async(_,workspace)=>{
+  const {service}=await fakeKits(workspace);
+  for (const prompt of ['雨夜古刹 3D 第三人称武侠 Boss 战', '三维机甲格斗竞技场', 'Three.js desert rally racer', 'Volcano 3D survival runner', 'Piano 3D rhythm stage', 'no 3ds Max, use Three.js']) {
+    const {game}=await service.create({prompt,genre:'casual',style:null,setting:null,multiplayer:false});
+    assert.equal(game.style,'3d',prompt);
+    assert.equal((await service.read(game.id,'vendor/three.module.min.js')).content,'// local three',prompt);
+  }
+  for (const negatedPrompt of [
+    '不要3D，做2D像素横版闯关',
+    '不要用3D，做一个2D平台跳跃游戏',
+    'avoid 3D, keep it flat 2D',
+    'without 3D effects',
+    'no WebGL, use Canvas 2D',
+    'skip 3D and stay top-down',
+    "don't use 3D rendering",
+  ]) {
+    const negated=await service.create({prompt:negatedPrompt,genre:'platformer',style:null,setting:null,multiplayer:false});
+    assert.equal(negated.game.style,null,negatedPrompt);
+    await assert.rejects(service.read(negated.game.id,'vendor/three.module.min.js'),/ENOENT/);
+  }
+
+  const explicit=await service.create({prompt:'Retro 3D-inspired pixel racer',genre:'racing',style:'pixel',setting:null,multiplayer:false});
+  assert.equal(explicit.game.style,'pixel');
+  await assert.rejects(service.read(explicit.game.id,'vendor/three.module.min.js'),/ENOENT/);
+}));
+
+test('gameHttp injects viewport guard only for iframe/guarded requests and keeps raw source untouched',()=>fixture(async(service,workspace)=>{
+  const {game}=await service.create(brief);
+  const rawHtml='<!doctype html><html><head><title>Guard Test</title></head><body><canvas id="c"></canvas></body></html>';
+  await service.write(game.id,[{path:'index.html',content:rawHtml}]);
+
+  async function fetchEntry(query='',headers:Record<string,string>={host:'localhost:4380'}){
+    let status=0;let body='';
+    await gameHttp(
+      {method:'GET',headers} as any,
+      {writeHead(code:number){status=code;},end(chunk?:Buffer|string){body=chunk?chunk.toString():'';}} as any,
+      new URL(`/motion-api/games/${game.id}/play/index.html${query}`,'http://localhost:4380'),
+      workspace,
+      async()=>({}),
+    );
+    return {status,body};
+  }
+
+  // Raw fetch (Code viewer, ZIP export, publish bundler) receives untouched source HTML.
+  const raw=await fetchEntry('?r=0',{host:'localhost:4380','sec-fetch-dest':'empty'});
+  assert.equal(raw.status,200);
+  assert.equal(raw.body,rawHtml);
+  assert.doesNotMatch(raw.body,/data-om-viewport-guard/);
+
+  // Iframe navigation (Sec-Fetch-Dest: iframe), explicit ?omViewportGuard=1, and ?omBridge=... all receive the guard.
+  for(const [query,headers] of [
+    ['',{host:'localhost:4380','sec-fetch-dest':'iframe'}],
+    ['?omViewportGuard=1',{host:'localhost:4380'}],
+    ['?omBridge=omb_valid123456',{host:'localhost:4380'}],
+  ] as const){
+    const guarded=await fetchEntry(query,headers);
+    assert.equal(guarded.status,200);
+    assert.match(guarded.body,/data-om-viewport-guard/);
+    if(query.includes('omBridge'))assert.match(guarded.body,/data-om-preview-bridge/);
+  }
+}));
+
+test('injected viewport guard replays resize for late async listeners after a 0x0 boot and stays inert on normal boots',async()=>{
+  const {buildViewportGuardScript}=await import('../shared/preview-bridge.ts');
+  const scriptMatch=buildViewportGuardScript().match(/<script[^>]*>([\s\S]*?)<\/script>/);
+  assert(scriptMatch,'viewport guard script tag');
+  const guardSource=scriptMatch[1];
+
+  function createSandbox(initialW:number,initialH:number){
+    let innerWidth=initialW;
+    let innerHeight=initialH;
+    const listeners=new Map<string,Set<Function>>();
+    const rafQueue:Function[]=[];
+    let roCallback:Function|null=null;
+    const win:any={
+      get innerWidth(){return innerWidth;},
+      get innerHeight(){return innerHeight;},
+      document:{
+        documentElement:{
+          get clientWidth(){return innerWidth;},
+          get clientHeight(){return innerHeight;},
+        },
+      },
+      Event:class FakeEvent{type:string;constructor(type:string){this.type=type;}},
+      ResizeObserver:class FakeRO{
+        constructor(cb:Function){roCallback=cb;}
+        observe(){}
+        disconnect(){}
+      },
+      requestAnimationFrame(cb:Function){rafQueue.push(cb);return rafQueue.length;},
+      addEventListener(type:string,fn:Function){
+        let set=listeners.get(type);
+        if(!set){set=new Set();listeners.set(type,set);}
+        set.add(fn);
+      },
+      removeEventListener(type:string,fn:Function){listeners.get(type)?.delete(fn);},
+      dispatchEvent(ev:{type:string}){
+        for(const fn of [...(listeners.get(ev.type)??[])])fn(ev);
+        return true;
+      },
+    };
+    win.window=win;
+    runInNewContext(guardSource,win);
+    return {
+      win,
+      setSize(w:number,h:number,fireResize=true){
+        innerWidth=w;innerHeight=h;
+        if(fireResize)win.dispatchEvent(new win.Event('resize'));
+      },
+      triggerRO(){roCallback?.();},
+      flushRaf(){while(rafQueue.length)rafQueue.shift()!();},
+    };
+  }
+
+  // Case 1: 0x0 OOPIF boot -> real size arrives during async load -> late resize listener still receives replay.
+  const zeroBoot=createSandbox(0,0);
+  zeroBoot.setSize(760,780,true);
+  let lateCalls=0;
+  const lateHandler=()=>{lateCalls++;};
+  zeroBoot.win.addEventListener('resize',lateHandler);
+  assert.equal(lateCalls,0);
+  zeroBoot.flushRaf();
+  assert.equal(lateCalls,1);
+  // removeEventListener must still work on the original listener reference.
+  zeroBoot.win.removeEventListener('resize',lateHandler);
+  zeroBoot.setSize(1200,780,true);
+  assert.equal(lateCalls,1);
+
+  // Case 2: Normal non-zero boot -> no extra synthetic resize replay.
+  const normalBoot=createSandbox(940,800);
+  let normalCalls=0;
+  normalBoot.win.addEventListener('resize',()=>{normalCalls++;});
+  normalBoot.flushRaf();
+  assert.equal(normalCalls,0);
+
+  // Case 3: ResizeObserver 0x0 -> non-zero transition (e.g. hidden -> visible) replays resize even without native resize event.
+  const roRecovery=createSandbox(0,0);
+  let roCalls=0;
+  roRecovery.win.addEventListener('resize',()=>{roCalls++;});
+  roRecovery.setSize(820,760,false);
+  roRecovery.triggerRO();
+  roRecovery.flushRaf();
+  assert.equal(roCalls,1);
+});

@@ -208,9 +208,14 @@ test('all seven user-request languages override host locale across welcome, card
     } finally { await f.close(); }
     const manual = fixture({ draft: false });
     try {
-      const data = { ...result(), language };
+      const data = { ...result(), language, onboarding: true };
       manual.ui.update(data);
-      manual.root.querySelector<HTMLButtonElement>('article .omtc-clone')!.click(); await flush();
+      const button = manual.root.querySelector<HTMLButtonElement>('article .omtc-clone')!;
+      const welcome = manual.root.querySelector('.omtc-welcome')!.textContent!;
+      assert.equal(button.textContent, translations[language].ui.copyPrompt);
+      assert.ok(welcome.includes(button.textContent!));
+      assert.ok(!welcome.includes(cloneLabels[index]));
+      button.click(); await flush();
       assert.equal(manual.messages.length, 0);
       assert.equal(manual.copied.at(-1), recreationPrompt(data.cards[0], language));
       assert.equal(manual.root.querySelector('textarea'), null);
@@ -354,13 +359,21 @@ test('host rejection, cancellation and transport errors retain the same retry id
   }
 });
 
-test('clipboard failure reports failure without claiming success or inserting another composer', async () => {
+test('clipboard failure exposes the exact selectable prompt without sending a message', async () => {
   const f = fixture({draft:false, copy: async () => { throw new Error('Permission denied'); }});
   try {
     f.show(); f.root.querySelector<HTMLButtonElement>('article .omtc-clone')!.click(); await flush();
     assert.equal(f.copied.length, 0); assert.equal(f.messages.length, 0);
-    assert.equal(f.root.querySelector('textarea'), null);
-    assert.match(f.root.querySelector('.motion-inline-toast')!.textContent!, /Copy failed/);
+    const field = f.root.querySelector<HTMLTextAreaElement>('textarea')!;
+    assert.equal(field.value, recreationPrompt(result().cards[0], 'en'));
+    assert.equal(field.readOnly, true);
+    assert.deepEqual([field.selectionStart, field.selectionEnd], [0, field.value.length]);
+    assert.equal(f.doc.activeElement, field);
+    assert.match(field.parentElement!.textContent!, /Copy the prompt below and paste it into the chat/);
+    f.root.querySelector<HTMLButtonElement>('article .omtc-cover')!.click();
+    assert.equal(f.root.querySelector('.omtc-detail textarea'), field);
+    f.root.querySelector<HTMLButtonElement>('.omtc-back')!.click();
+    assert.equal(f.root.querySelector('article textarea'), field);
   } finally { await f.close(); }
 });
 
@@ -400,7 +413,10 @@ test('a host without draft support copies the exact brief without a message or a
     try {
       const copied: string[] = [];
       Object.defineProperty(f.window.navigator, 'clipboard', { value: { writeText: async (value: string) => { copied.push(value); } } });
-      f.show(); f.root.querySelector<HTMLButtonElement>('article .omtc-clone')!.click(); await flush();
+      f.show();
+      const button = f.root.querySelector<HTMLButtonElement>('article .omtc-clone')!;
+      assert.equal(button.textContent, 'Copy remix prompt');
+      button.click(); await flush();
       assert.equal(f.messages.length, 0);
       assert.deepEqual(copied, [recreationPrompt(result().cards[0], 'en')]);
       assert.equal(f.root.querySelector('textarea'), null);

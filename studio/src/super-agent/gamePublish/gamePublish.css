@@ -356,7 +356,9 @@
 .om-gp-check-label { color: var(--motion-muted); }
 .om-gp-check-value { overflow-wrap: anywhere; }
 .om-gp-download { display: flex; flex-direction: column; align-items: flex-start; gap: var(--motion-space-8); margin-top: var(--motion-space-14); }
-.om-gp-download .om-gp-secondary { gap: var(--motion-space-6); }
+.om-gp-download .om-gp-primary,
+.om-gp-download .om-gp-secondary,
+.om-gp-inline-row .om-gp-secondary { gap: var(--motion-space-6); }
 .om-gp-link { color: var(--motion-accent); text-decoration: none; display: inline-flex; align-items: center; gap: 2px; font-size: var(--motion-text-sm); }
 
 /* Viewer toolbar entry: tonal so it sits beside the solid Share button. */
@@ -384,6 +386,7 @@
 }
 
 .om-gp-agent { font-size: var(--motion-text-sm); }
+.om-gp-agent-download { margin-top: var(--motion-space-8); }
 .om-gp-agent-title { color: var(--motion-muted); font-size: var(--motion-text-xs); margin-bottom: var(--motion-space-4); }
 .om-gp-line { display: flex; align-items: center; gap: var(--motion-space-6); color: var(--motion-muted); margin: 2px 0; }
 .om-gp-line[data-done] { color: var(--motion-text); }
@@ -578,6 +581,29 @@
 /* WeChat key file and preview code, under the Agent's message in the conversation. */
 .om-gp-inline { display: grid; justify-items: start; gap: var(--motion-space-8); }
 .om-gp-inline-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--motion-space-8); }
+.om-gp-inline-step-head { display: flex; flex-direction: column; gap: var(--motion-space-4); width: 100%; }
+.om-gp-inline-step-head strong { font-size: var(--motion-text-sm); font-weight: var(--motion-weight-semibold); color: var(--motion-text); }
+.om-gp-inline-todo { margin: 0; padding-left: 18px; list-style: decimal; display: flex; flex-direction: column; gap: 2px; font-size: var(--motion-text-xs); color: var(--motion-muted); line-height: 1.5; }
+.om-gp-result-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--motion-space-8); margin-top: var(--motion-space-6); }
+.om-gp-result-actions .om-gp-primary { margin-top: 0; gap: var(--motion-space-6); }
+.om-gp-link-signin { display: flex; flex-direction: column; align-items: flex-start; gap: var(--motion-space-8); }
+.om-gp-link-signin .om-gp-primary { gap: var(--motion-space-6); }
+.om-gp-post-signin {
+  width: 100%;
+  margin-top: var(--motion-space-10);
+  padding: var(--motion-space-10) var(--motion-space-12);
+  border-radius: var(--motion-radius-lg);
+  background: var(--motion-panel);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--motion-space-8);
+  text-align: center;
+}
+.om-gp-post-signin-copy { display: flex; flex-direction: column; gap: 2px; }
+.om-gp-post-signin-copy strong { font-size: var(--motion-text-xs); font-weight: var(--motion-weight-semibold); color: var(--motion-text); }
+.om-gp-post-signin-copy span { font-size: var(--motion-text-xs); line-height: 1.45; }
+.om-gp-post-signin-btn { gap: var(--motion-space-6); font-size: var(--motion-text-xs); }
 .om-gp-od-icon { background: var(--motion-strong); color: var(--motion-bg); }
 .om-gp-od-line { display: flex; align-items: center; gap: var(--motion-space-8); margin-top: var(--motion-space-12); color: var(--motion-muted); font-size: var(--motion-text-xs); }
 .om-gp-od-line-text { display: flex; align-items: center; gap: var(--motion-space-6); min-width: 0; flex: 1; overflow-wrap: anywhere; cursor: pointer; }

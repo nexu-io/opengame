@@ -184,20 +184,14 @@ describe('gamePublishStore', () => {
     expect(gamePublishSessionFor(input.artifactId)?.wechat?.status).toBeUndefined();
   });
 
-  it('other platforms hand the job to the Agent: no cards in the conversation, steps finish with a message to it', async () => {
+  it('other platforms run locally without queueing redundant Agent turns', async () => {
     gamePublishActions.open(input);
     gamePublishActions.setLinkToo(input.artifactId, false); // only this platform's entries
     gamePublishActions.choose(input.artifactId, 'itch');
-    expect(handoff).toHaveBeenCalledWith(expect.objectContaining({ newChat: false, autoSend: true, mode: 'game', prompt: expect.stringContaining('Coin Jar') }));
-    const guide = handoff.mock.calls[0][0].hiddenInstructions as string;
-    expect(guide).toContain('abc12345');
-    expect(guide).toContain('Step 1 of 2 · Download the HTML5 zip');
-    expect(guide).toContain('"Downloaded"');
-    expect(guide).toContain('One step per message');
-    expect(guide).not.toContain('kept OpenDesign selected');
+    expect(handoff).not.toHaveBeenCalled();
     await settle();
     gamePublishActions.completeStep(input.artifactId, { platformId: 'itch', stepIndex: 0 });
-    expect(handoff).toHaveBeenLastCalledWith({ prompt: 'Done: Download the HTML5 zip', mode: 'game', newChat: false, autoSend: true });
+    expect(handoff).not.toHaveBeenCalled();
     expect(gamePublishSessionFor(input.artifactId)?.stepIndex).toBe(1);
     // Only real work is logged in the conversation (the package build); there are no step cards or local user lines.
     expect(gamePublishThreadFor('chat-1').map(entry => entry.kind)).toEqual(['agent']);
@@ -212,11 +206,11 @@ describe('gamePublishStore', () => {
     expect(notify).toHaveBeenCalledWith('Could not copy the link', 'error');
   });
 
-  it('other platforms also publish the OpenDesign link by default and tell the Agent', async () => {
+  it('other platforms also publish the OpenDesign link by default when signed in', async () => {
     gamePublishActions.open(input);
     gamePublishActions.choose(input.artifactId, 'itch');
     expect(publish).toHaveBeenCalledTimes(1);
-    expect(handoff.mock.calls[0][0].hiddenInstructions).toContain('kept OpenDesign selected');
+    expect(handoff).not.toHaveBeenCalled();
     await settle();
     expect(gamePublishSessionFor(input.artifactId)?.linkUrl).toBe('https://play.opendesign.app/g/abc');
   });
@@ -337,5 +331,77 @@ describe('gamePublishStore', () => {
     gamePublishActions.close(input.artifactId);
     gamePublishActions.reopen(input.artifactId);
     expect(gamePublishSessionFor(input.artifactId)).toMatchObject({ open: true, view: 'step', platformId: 'douyin' });
+  });
+
+  it('guest choosing a non-Telegram platform skips OpenDesign link publish and builds package cleanly', async () => {
+    gamePublishActions.open(input);
+    gamePublishActions.choose(input.artifactId, 'xiaohongshu', { signedIn: false });
+    await settle();
+    expect(publish).not.toHaveBeenCalled();
+    expect(handoff).not.toHaveBeenCalled();
+    const session = gamePublishSessionFor(input.artifactId)!;
+    expect(session.linkToo).toBe(false);
+    expect(session.linkError).toBeUndefined();
+    expect(session.package).toMatchObject({ state: 'ready', target: 'xiaohongshu' });
+    expect(gamePublishThreadFor('chat-1').some(entry => entry.kind === 'link-failed')).toBe(false);
+  });
+
+  it('guest choosing Telegram does not spam a failing link publish before sign-in', async () => {
+    gamePublishActions.open(input);
+    gamePublishActions.choose(input.artifactId, 'telegram', { signedIn: false });
+    await settle();
+    expect(publish).not.toHaveBeenCalled();
+    expect(gamePublishThreadFor('chat-1').some(entry => entry.kind === 'link-failed')).toBe(false);
+    expect(gamePublishSessionFor(input.artifactId)).toMatchObject({ view: 'step', platformId: 'telegram', stepIndex: 0 });
+  });
+
+  it('retrying a failed link publish replaces previous failure cards instead of stacking, and dismissLinkError clears it', async () => {
+    publish.mockRejectedValue(new WebPublishApiError('AUTH_REQUIRED', 'Sign in first', 401));
+    gamePublishActions.open(input);
+    await gamePublishActions.publishLink(input.artifactId);
+    await gamePublishActions.publishLink(input.artifactId);
+    const failures = gamePublishThreadFor('chat-1').filter(entry => entry.kind === 'link-failed');
+    expect(failures).toHaveLength(1);
+    gamePublishActions.dismissLinkError(input.artifactId);
+    expect(gamePublishSessionFor(input.artifactId)).toMatchObject({ linkToo: false, linkError: undefined });
+    expect(gamePublishThreadFor('chat-1').some(entry => entry.kind === 'link-failed')).toBe(false);
+  });
+
+  it('deferred link persists in session across close/reopen and resolves cleanly for signed-in, guest, and Telegram', async () => {
+    gamePublishActions.open(input);
+    gamePublishActions.choose(input.artifactId, 'xiaohongshu', { deferLink: true });
+    expect(publish).not.toHaveBeenCalled();
+    expect(gamePublishSessionFor(input.artifactId)).toMatchObject({ linkToo: true, linkDeferred: true });
+    gamePublishActions.close(input.artifactId);
+    gamePublishActions.reopen(input.artifactId);
+    expect(gamePublishSessionFor(input.artifactId)?.linkDeferred).toBe(true);
+    gamePublishActions.resolveDeferredLink(input.artifactId, true);
+    await settle();
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(gamePublishSessionFor(input.artifactId)).toMatchObject({ linkDeferred: false, linkUrl: 'https://play.opendesign.app/g/abc' });
+
+    // Guest resolution on a non-Telegram platform clears linkToo/linkError and does not publish.
+    resetGamePublishStore();
+    publish.mockClear();
+    gamePublishActions.open(input);
+    gamePublishActions.choose(input.artifactId, 'xiaohongshu', { deferLink: true });
+    gamePublishActions.close(input.artifactId);
+    gamePublishActions.reopen(input.artifactId);
+    gamePublishActions.resolveDeferredLink(input.artifactId, false);
+    await settle();
+    expect(publish).not.toHaveBeenCalled();
+    expect(gamePublishSessionFor(input.artifactId)).toMatchObject({ linkDeferred: false, linkToo: false, linkError: undefined });
+
+    // Guest resolution on Telegram keeps linkToo true so LinkStep offers direct sign-in.
+    resetGamePublishStore();
+    publish.mockClear();
+    gamePublishActions.open(input);
+    gamePublishActions.choose(input.artifactId, 'telegram', { deferLink: true });
+    gamePublishActions.close(input.artifactId);
+    gamePublishActions.reopen(input.artifactId);
+    gamePublishActions.resolveDeferredLink(input.artifactId, false);
+    await settle();
+    expect(publish).not.toHaveBeenCalled();
+    expect(gamePublishSessionFor(input.artifactId)).toMatchObject({ linkDeferred: false, linkToo: true });
   });
 });

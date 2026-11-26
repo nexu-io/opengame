@@ -45,9 +45,9 @@ main() {
     echo 'Usage: install.sh [--package EXACT_SPEC [Codex setup options]]. With no arguments, install from source.' >&2
     return 2
   fi
-  local motion_repo='https://github.com/nexu-io/openmotion.git'
-  local motion_ref="${OPENMOTION_REF:-main}"
-  local motion_destination="${OPENMOTION_INSTALL_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/open-motion}"
+  local motion_repo='https://github.com/nexu-io/opengame.git'
+  local motion_ref="${OPENGAME_REF:-${OPENMOTION_REF:-main}}"
+  local motion_destination="${OPENGAME_INSTALL_DIR:-${OPENMOTION_INSTALL_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/opengame}}"
 
   for motion_command in git node npm codex; do
     command -v "$motion_command" >/dev/null || { echo "缺少 $motion_command，请先安装后重试。" >&2; exit 1; }
@@ -66,12 +66,17 @@ main() {
   fi
 
   mkdir -p "$(dirname -- "$motion_destination")"
-  echo "下载 OpenMotion ($motion_ref) 到 $motion_destination"
+  echo "下载 OpenGame ($motion_ref) 到 $motion_destination"
   local motion_download_started=$SECONDS
   # Optional media remain LFS pointers. Ignore stale global LFS filters even when
   # git-lfs was uninstalled; this affects this clone only, never global settings.
   git -c filter.lfs.process= -c filter.lfs.smudge= -c filter.lfs.required=false \
     clone --depth 1 --single-branch --branch "$motion_ref" -- "$motion_repo" "$motion_destination"
+  if git lfs version >/dev/null 2>&1; then
+    git -C "$motion_destination" lfs install --local --skip-smudge
+  else
+    echo '安装 Git LFS 后即可按需获取游戏模板素材。' >&2
+  fi
   export OPENMOTION_SOURCE_DOWNLOAD_SECONDS=$((SECONDS - motion_download_started))
   echo "[OpenMotion] source-download: $OPENMOTION_SOURCE_DOWNLOAD_SECONDS seconds"
   bash "$motion_destination/scripts/install-motion.command"

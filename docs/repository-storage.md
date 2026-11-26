@@ -11,12 +11,13 @@ Embedded documentation images must fit GitHub's 5 MB image-proxy limit. Three la
 ```sh
 git clone --depth 1 https://github.com/nexu-io/opengame.git
 cd opengame
+git lfs install --local --skip-smudge
 npm ci
 npm run build:studio
 npm start
 ```
 
-`--depth 1` avoids downloading old history. Omit it when you need the history, or run `git fetch --unshallow` later. This migration does not rewrite shared history: a full clone still downloads the large ordinary Git objects in old commits.
+`--depth 1` avoids downloading old history. Omit it when you need the history, or run `git fetch --unshallow` later. A full clone still downloads large ordinary Git objects from old commits. Game Studio keeps catalog metadata, covers, editable source and Tidebreaker in ordinary Git. Other game templates store binary assets in LFS. Playing or remixing a template fetches its assets into the checkout. For manual offline preparation use `git lfs pull --include="templates/games/<game-id>/**" --exclude=""`.
 
 The checked-in `.lfsconfig` excludes LFS downloads by default. Normal clones with Git LFS installed keep pointers until you request the media. Without Git LFS installed, pointers remain ordinary text files. GitHub and local Markdown viewers load registered public README images/GIFs directly, without CMS authentication or an LFS download. Those previews require internet access. Built-in Studio templates and repository catalog source retain their local dependencies. Linked CMS references are not made available offline.
 
@@ -43,7 +44,7 @@ git lfs pull --include="library/templates/presenter-tech/**" --exclude=""
 git lfs pull --include="docs/readme/**" --exclude=""
 
 # Everything needed for complete plugin/platform bundles and resource verification.
-git lfs pull --include="docs/readme/**,library/**,examples/**" --exclude="library/templates/catalog/**"
+git lfs pull --include="docs/readme/**,library/**,examples/**,templates/games/**" --exclude="library/templates/catalog/**"
 ```
 
 For a contributed catalog template, use the [template-specific pull command](template-repository.md#contribute-media-without-cms-access). LFS objects are fetched from the selected remote; reviewing a fork contribution requires the remote that holds its objects. A pointer is not playable video or an executable archive. Full bundles and Library Skill copying refuse unresolved pointers with a download command. Fetch the selected Motion Design profile before materializing it. Once fetched, those resources retain their existing offline behavior.
@@ -51,6 +52,8 @@ For a contributed catalog template, use the [template-specific pull command](tem
 ## Prepare final PR media before merging
 
 Contributors edit their original PR normally. A new catalog video, audio file or large image/font can be committed under `<id>/source/assets/` (at most 50 MiB per file). Git LFS remains a supported input, not a required account or separate upload step. Keep small imported assets and small README artwork in ordinary Git. Raw media can make the policy check red until final preparation; do not repeatedly transfer every draft update.
+
+Each PR can transfer up to 100 changed media files and 320 MiB of media in total. Split larger additions into separate PRs and prepare each batch independently.
 
 After the content review, a maintainer opens `nexu-io/opengame` in GitHub, chooses **Actions → Prepare and merge PR → Run workflow**, selects `main` and enters the original PR number. Starting this workflow authorizes preparation and subsequent Squash merge of the prepared commit:
 

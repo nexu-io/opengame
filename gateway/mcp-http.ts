@@ -1,7 +1,8 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
-import { rpc, releaseRegistry } from '../mcp.ts';
+import { rpc, releaseRegistry, modernMcpServer, type McpRpcOptions } from '../mcp.ts';
+import { hasMcpEnvelope, loadModernMcpSdk, modernMcpVersion } from '../shared/mcp-modern.ts';
 import {
   MCP_HTTP_PATH,
   MCP_TOKEN_PREFIX,
@@ -23,7 +24,7 @@ const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_SESSIONS = 128;
 const SESSION_TTL_MS = 30 * 60_000;
 const VALID_MCP_TOKEN = /^om_mcp_[a-f0-9]{16,128}$/;
-const PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'] as const;
+const PROTOCOL_VERSIONS = [modernMcpVersion, '2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'] as const;
 
 type StoredMcpToken = {
   id: string;
@@ -330,14 +331,14 @@ export class McpHttpGateway {
   async handle(
     req: IncomingMessage,
     res: ServerResponse,
-    options: { invokePhase1: McpPhase1Invoker; editorToken?: string; env?: NodeJS.ProcessEnv },
+    options: { invokePhase1: McpPhase1Invoker; editorToken?: string; previewOrigin?: string; env?: NodeJS.ProcessEnv },
   ): Promise<void> {
     const env = options.env ?? process.env;
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
         Allow: 'GET, POST, DELETE, OPTIONS',
         'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id, Accept',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Accept',
         'Access-Control-Expose-Headers': 'Mcp-Session-Id',
       });
       res.end();
@@ -362,12 +363,46 @@ export class McpHttpGateway {
       return;
     }
 
+    const rpcOptions: McpRpcOptions = {
+      authorizeToolCall: tool => {
+        if (auth.scope === 'read' && tool.annotations?.readOnlyHint !== true) {
+          throw Object.assign(
+            new Error(`MCP_SCOPE_FORBIDDEN: Token scope "read" cannot invoke "${tool.name}"`),
+            { jsonRpcCode: -32003 },
+          );
+        }
+      },
+      transport: 'http',
+      previewOrigin: options.previewOrigin,
+      callPhase1: options.invokePhase1,
+    };
+    const modernHeader = req.headers['mcp-protocol-version'];
+    const claimsModern = typeof modernHeader === 'string' && modernHeader >= modernMcpVersion;
+    const sendModern = async (payload?: unknown) => {
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(req.headers)) {
+        for (const entry of Array.isArray(value) ? value : [value]) {
+          if (entry !== undefined) headers.append(name, entry);
+        }
+      }
+      const request = new Request('http://localhost' + MCP_HTTP_PATH, { method: req.method, headers });
+      const sdk = await loadModernMcpSdk();
+      const reply = await sdk.runModernMcpHttp(request, payload, () => modernMcpServer(sdk, this.store, rpcOptions));
+      res.writeHead(reply.status, reply.headers);
+      res.end(reply.body);
+    };
+    if (claimsModern && req.method !== 'POST') {
+      await sendModern();
+      return;
+    }
+
     const sessionHeader = req.headers['mcp-session-id'];
     const requestedSessionId = typeof sessionHeader === 'string' ? sessionHeader.trim() : '';
 
     if (req.method === 'DELETE') {
       if (!requestedSessionId || !this.sessions.has(requestedSessionId)) {
-        sendJson(res, 404, { error: 'MCP session not found' });
+        res.writeHead(404);
+        res.end();
         return;
       }
       const session = this.sessions.get(requestedSessionId)!;
@@ -437,6 +472,11 @@ export class McpHttpGateway {
       return;
     }
 
+    if (claimsModern || (Array.isArray(payload) ? payload.some(hasMcpEnvelope) : hasMcpEnvelope(payload))) {
+      await sendModern(payload);
+      return;
+    }
+
     const isBatch = Array.isArray(payload);
     const messages: unknown[] = Array.isArray(payload) ? payload : [payload];
     if (isBatch && messages.length === 0) {
@@ -464,18 +504,7 @@ export class McpHttpGateway {
         releaseRegistry,
         session?.connection,
         session?.clientState,
-        {
-          authorizeToolCall: tool => {
-            if (auth.scope === 'read' && tool.annotations?.readOnlyHint !== true) {
-              throw Object.assign(
-                new Error(`MCP_SCOPE_FORBIDDEN: Token scope "read" cannot invoke "${tool.name}"`),
-                { jsonRpcCode: -32003 },
-              );
-            }
-          },
-          transport: 'http',
-          callPhase1: options.invokePhase1,
-        },
+        rpcOptions,
       );
       if (reply !== null) responses.push(reply);
     }

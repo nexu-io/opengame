@@ -16,6 +16,8 @@ export const openDesignModels: readonly { modelId: string; label: string; modali
   { modelId: 'byteplus-tts-2', label: 'BytePlus TTS 2.0', modality: 'audio', mode: 'text-to-speech' },
   // The Cloud catalogue does not list its music model yet, so discovery would otherwise show no music.
   { modelId: 'elevenlabs-music-v2', label: 'Eleven Music v2', modality: 'audio', mode: 'text-to-audio' },
+  { modelId: 'elevenlabs-sound-v3', label: 'ElevenLabs Sound v3', modality: 'audio', mode: 'text-to-audio' },
+  { modelId: 'elevenlabs-sound-effects-v3', label: 'ElevenLabs Sound Effects v3', modality: 'audio', mode: 'text-to-audio' },
 ];
 
 export const openDesignModelLabel = (modelId: string) => openDesignModels.find(model => model.modelId === modelId)?.label;

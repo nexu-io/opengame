@@ -3,8 +3,10 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { startServer } from '../server.ts';
+import { gameProjectsFor } from '../game-projects.ts';
 import { MCP_HTTP_PATH, MCP_STATUS_API, MCP_TOKENS_API } from '../shared/mcp-http.ts';
 import { fixture } from './fixtures.ts';
+import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/server';
 
 test('Streamable HTTP /mcp supports initialize, tools/list, tools/call, scoped tokens, SSE GET, and DELETE termination', () =>
   fixture(async store => {
@@ -238,3 +240,72 @@ test('Streamable HTTP /mcp supports initialize, tools/list, tools/call, scoped t
       await running.close();
     }
   }));
+
+
+test('strict MCP 2026-07-28 HTTP clients discover, read and call without a session', () => fixture(async store => {
+  const running = await startServer(store, 0, { editor: false });
+  const origin = `http://127.0.0.1:${(running.server.address() as { port: number }).port}`;
+  const url = origin + MCP_HTTP_PATH;
+  const version = '2026-07-28';
+  const capabilities = { extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } } };
+  const tokenResponse = await fetch(origin + MCP_TOKENS_API, {
+    method: 'POST',
+    headers: { Origin: origin, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label: 'Modern read scope', scope: 'read' }),
+  });
+  assert.equal(tokenResponse.status, 201);
+  const { token } = await tokenResponse.json();
+
+  let id = 0;
+  function request(method: string, params: Record<string, unknown> = {}, clientCapabilities = {}) {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      Authorization: `Bearer ${token}`,
+      'Mcp-Protocol-Version': version,
+      'Mcp-Method': method,
+    };
+    if (typeof params.name === 'string') headers['Mcp-Name'] = params.name;
+    if (typeof params.uri === 'string') headers['Mcp-Name'] = params.uri;
+    return fetch(url, {
+      method: 'POST', headers,
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: ++id, method,
+        params: { ...params, _meta: {
+          [PROTOCOL_VERSION_META_KEY]: version,
+          [CLIENT_INFO_META_KEY]: { name: 'OpenGame integration test', version: '1.0.0' },
+          [CLIENT_CAPABILITIES_META_KEY]: clientCapabilities,
+        } },
+      }),
+    });
+  }
+
+  try {
+    const discovery = await request('server/discover');
+    assert.equal(discovery.status, 200);
+    assert.equal(discovery.headers.get('mcp-session-id'), null);
+    assert.ok((await discovery.json()).result.supportedVersions.includes(version));
+    const listed = (await (await request('tools/list', {}, capabilities)).json()).result.tools;
+    assert.ok(listed.some((tool: { name: string }) => tool.name === 'openmotion_show_template_recommendations'));
+    const plain = (await (await request('tools/list')).json()).result.tools;
+    assert.ok(plain.some((tool: { name: string }) => tool.name === 'openmotion_game_get'));
+    assert.ok(!plain.some((tool: { name: string }) => tool.name === 'openmotion_show_template_recommendations'));
+    const workflow = await request('resources/read', { uri: 'openmotion://workflow/game/start' });
+    assert.ok((await workflow.json()).result.contents[0].text.includes('openmotion_game'));
+    const { game } = await gameProjectsFor(store.directory).create({
+      prompt: 'Preview link integration game', multiplayer: false, genre: 'casual', style: 'minimal', setting: 'modern',
+    });
+    const response = await request('tools/call', { name: 'openmotion_game_get', arguments: { id: game.id } });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('mcp-session-id'), null);
+    const { result } = await response.json();
+    assert.equal(result.resultType, 'complete');
+    assert.notEqual(result.isError, true, JSON.stringify(result.structuredContent));
+    assert.equal(result.structuredContent.playUrl, `${origin}/api/games/${game.id}/play/index.html`);
+    assert.equal((await fetch(result.structuredContent.playUrl)).status, 200);
+    const denied = await request('tools/call', { name: 'openmotion_game_create', arguments: { prompt: 'Read scope must deny this' } });
+    assert.equal((await denied.json()).error.code, -32003);
+  } finally {
+    await running.close();
+  }
+}));

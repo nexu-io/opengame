@@ -60,7 +60,7 @@ for (const kind of ['image', 'video', 'audio', 'music'] as const) test(`Cloud ${
   gateway.options.fetcher = (async (url, init = {}) => {
     const target = String(url); assert(target.startsWith('https://cloud.example/api/v1/media/'));
     assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer test-cloud-private');
-    if (kind === 'music' && target.endsWith('/models')) return Response.json({ models: [{ model: 'workspace-music', kind: 'audio_music' }] });
+    if (kind === 'music' && new URL(target).pathname.endsWith('/models')) return Response.json({ models: [{ model: 'workspace-music', kind: 'audio_music' }] });
     methods.push(`${init.method ?? 'GET'} ${new URL(target).pathname}`);
     if (init.method === 'POST') {
       assert.match(new Headers(init.headers).get('Idempotency-Key')!, /^[a-f0-9-]{36}$/);

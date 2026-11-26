@@ -13,7 +13,8 @@ import { readSettings, writeSettings } from './settings-storage.ts';
 import { planMediaEntitlement } from './account-media.ts';
 import { registeredProvider } from '../shared/provider-registry.ts';
 import { defaultVideoAudioEnabled, resolveGenerationParameters } from '../shared/generation-options.ts';
-import { apiJson, ProviderError, retryRead, type Fetcher } from './network.ts';
+import { isSfxModel } from '../shared/audio-kind.ts';
+import { apiJson, MAX_MEDIA_BYTES, ProviderError, readCappedBytes, retryRead, streamMedia, type Fetcher } from './network.ts';
 import { cloudImageParameters, mediaSubmitHeaders, productionApi, uploadInputs } from './opendesign.ts';
 import type { ProviderContext } from './providers.ts';
 import { resumableDownload, type DownloadProgress } from './resumable-download.ts';
@@ -893,10 +894,10 @@ export class OpenDesignAccount {
     const media = JSON.parse(await this.run(['media', 'models', '--json']));
     if (!Array.isArray(media.models)) throw new Error('OpenDesign media catalogue is unavailable');
     for (const row of media.models) {
-      // The connector reports speech and music models as `audio_speech` and `audio_music`.
-      const kind = ({ image: 'image', video: 'video', audio_speech: 'audio', audio_music: 'audio' } as const)[row.kind as 'image' | 'video' | 'audio_speech' | 'audio_music'];
+      // The connector reports speech, music and sound-effects models as `audio_speech`, `audio_music` and `audio_sound_effects`.
+      const kind = ({ image: 'image', video: 'video', audio_speech: 'audio', audio_music: 'audio', audio_sound_effects: 'audio' } as const)[row.kind as 'image' | 'video' | 'audio_speech' | 'audio_music' | 'audio_sound_effects'];
       if (typeof row.model !== 'string' || !/^[\w./:-]{1,180}$/.test(row.model) || !kind) continue;
-      const mode = row.kind === 'audio_speech' ? 'text-to-speech' : row.kind === 'audio_music' ? 'text-to-audio' : `text-to-${kind}`;
+      const mode = row.kind === 'audio_speech' ? 'text-to-speech' : row.kind === 'audio_music' || row.kind === 'audio_sound_effects' ? 'text-to-audio' : `text-to-${kind}`;
       // An image model publishes `edits` only when this account is entitled to edit input images.
       const capabilities = row.capabilities && typeof row.capabilities === 'object' && !Array.isArray(row.capabilities) ? row.capabilities as Record<string, unknown> : undefined;
       const editable = kind === 'image' && capabilities?.edits === true;
@@ -907,6 +908,29 @@ export class OpenDesignAccount {
         ...(kind === 'video' && maxInputs ? { maxInputImages: 1 } : {}),
         ...(capabilities ? { nativeOptions: capabilities } : {}),
       });
+    }
+    // Older AMR CLI releases call /api/v1/media/models without ?include_audio=true; probe once directly
+    // with controlKey so newly activated audio_sound_effects models light up without waiting for a CLI upgrade.
+    if (!media.models.some((row: any) => row.kind === 'audio_sound_effects')) {
+      const access = await this.controlAccess().catch(() => undefined);
+      if (access) {
+        const directAudio = await apiJson(
+          this.options.fetcher ?? fetch,
+          `${access.baseUrl}/api/v1/media/models?include_audio=true`,
+          { headers: { Authorization: `Bearer ${access.key}` } },
+          { timeoutMs: 8_000, maxBytes: 1024 * 1024 },
+        ).catch(() => undefined);
+        if (Array.isArray(directAudio?.models)) {
+          for (const row of directAudio.models) {
+            if (row?.kind !== 'audio_sound_effects' || typeof row.model !== 'string' || !/^[\w./:-]{1,180}$/.test(row.model)) continue;
+            const capabilities = row.capabilities && typeof row.capabilities === 'object' && !Array.isArray(row.capabilities) ? row.capabilities as Record<string, unknown> : undefined;
+            models.push({
+              id: 'account:' + row.model, provider: 'account', modelId: row.model, label: row.model, kind: 'audio', enabled: row.enabled !== false, source: 'live', mode: 'text-to-audio',
+              ...(capabilities ? { nativeOptions: capabilities } : {}),
+            });
+          }
+        }
+      }
     }
     if (generation !== this.generation) return [];
     await this.commit(generation, async () => {
@@ -919,6 +943,11 @@ export class OpenDesignAccount {
     return generation === this.generation ? withBuiltinAudio(this.cachedModels) : [];
   }
   async identity() { await this.adopt(); return (await readSettings<{ id?: string }>(path.join(this.root, 'session.json'), {})).id; }
+  async controlAccess(): Promise<{ baseUrl: string; key: string } | undefined> {
+    const profile = await this.profile();
+    if (!signedInProfile(profile) || !profile?.controlKey || profile.apiUrl?.replace(/\/$/, '') !== productionApi) return undefined;
+    return { baseUrl: productionApi, key: profile.controlKey };
+  }
   async mediaModels(): Promise<Model[]> {
     return (await this.models()).filter(model => model.enabled && ['image', 'video', 'audio'].includes(model.kind)).map(model => {
       const maxInputs = model.kind === 'video' && model.maxInputImages === undefined && Number.isInteger(model.nativeOptions?.max_input_images) && (model.nativeOptions!.max_input_images as number) > 0 ? 1 : model.maxInputImages;
@@ -932,17 +961,28 @@ export class OpenDesignAccount {
     const kind = job.modality, params = resolveGenerationParameters(job.model, job.parameters, !!reference || references.length > 0);
     if (job.providerOrigin !== await this.identity() || (await this.summary()).state !== 'signed-in') throw new Error(jobMessages.accountChangedBeforeSubmit);
     const music = kind === 'audio' && job.model.mode === 'text-to-audio';
+    const soundEffects = music && isSfxModel(job.model);
     if ((reference || references.length) && kind !== 'image' && kind !== 'video') throw new Error('Account reference images are supported for image editing and video first frames only');
-    const allowed = kind === 'image' ? ['aspect_ratio', 'resolution', 'quality', 'size', 'background'] : kind === 'video' ? ['ratio', 'resolution', 'duration', 'generate_audio'] : music ? ['duration'] : ['voice'];
+    const allowed = kind === 'image'
+      ? ['aspect_ratio', 'resolution', 'quality', 'size', 'background']
+      : kind === 'video'
+        ? ['ratio', 'resolution', 'duration', 'generate_audio']
+        : soundEffects
+          ? ['duration_seconds', 'loop', 'prompt_influence']
+          : music
+            ? ['duration']
+            : ['voice'];
     if (Object.keys(params).some(key => !allowed.includes(key))) throw new Error('Unsupported account model parameter');
+    if (soundEffects && job.prompt.trim().length > 450) throw new Error('Sound effects prompt must be at most 450 characters');
     if (kind === 'audio' && !music && (typeof params.voice !== 'string' || !params.voice)) throw new Error('Choose a voice in parameters.voice');
-    // The connector has no background flag and sends one input image; those image jobs go to the same media API with the account key.
+    // The connector has no background flag and sends one input image; those image jobs and dedicated sound-effects jobs go to the media API with the account key.
     const direct = kind === 'image' && (params.background !== undefined || references.length > 1);
+    const directSfx = soundEffects;
     const operation = kind === 'audio' ? music ? 'music' : 'speech' : kind === 'image' && reference ? 'edit' : 'gen';
     const referenceArgs = reference ? [kind === 'video' ? '--first-frame' : '--image', reference] : [];
     const args = [kind, operation, '--model', job.model.modelId, '--prompt', job.prompt, ...referenceArgs, '--no-wait', '--json'];
     const generateAudio = kind === 'video' && params.generate_audio === undefined && defaultVideoAudioEnabled(job.model) ? true : params.generate_audio;
-    for (const [key, value] of Object.entries(direct ? {} : params)) {
+    for (const [key, value] of Object.entries(direct || directSfx ? {} : params)) {
       if (key === 'generate_audio') continue;
       if (typeof value === 'string' || typeof value === 'number') args.push('--' + key.replaceAll('_', '-'), String(value));
       else throw new Error('Invalid account model parameter');
@@ -953,13 +993,20 @@ export class OpenDesignAccount {
       else throw new Error('Invalid account model parameter');
     }
     // Recovery never submits again, even when the draft or reference file has changed.
-    const submitted = job.remoteId ? { task_id: job.remoteId } : direct ? await this.submitImage(job, params, references, signal, progress) : JSON.parse(await this.run(args, signal, {
-      VELA_SOURCE_PRODUCT: 'openmotion', VELA_OPENMOTION_JOB_ID: job.id,
-    }));
+    const submitted = job.remoteId
+      ? { task_id: job.remoteId }
+      : direct
+        ? await this.submitImage(job, params, references, signal, progress)
+        : directSfx
+          ? await this.submitSoundEffect(job, params, signal)
+          : JSON.parse(await this.run(args, signal, {
+              VELA_SOURCE_PRODUCT: 'openmotion', VELA_OPENMOTION_JOB_ID: job.id,
+            }));
     if (typeof submitted.task_id !== 'string' || !/^[\w-]{1,180}$/.test(submitted.task_id)) throw new Error('Account provider did not return a task ID');
     const taskId = submitted.task_id;
     await progress('submitted', taskId);
     if (kind === 'image') return [await this.imageResult(job, taskId, directory, signal, progress)];
+    if (directSfx) return [await this.audioTaskResult(job, taskId, directory, signal, progress)];
     const output = path.join(directory, 'account-output.bin');
     for (;;) {
       await delay(this.options.pollMs ?? 2000, undefined, { signal });
@@ -1007,6 +1054,79 @@ export class OpenDesignAccount {
       throw new Error((Object.hasOwn(requestMessages, code) ? requestMessages[code] : undefined) ?? (response.status === 401 ? requestMessages.unauthorized : jobMessages.service));
     }
     return body ?? {};
+  }
+  private async submitSoundEffect(job: GenerationJob, parameters: Record<string, unknown>, signal: AbortSignal) {
+    const access = await this.controlAccess();
+    if (!access) throw new Error(requestMessages.unauthorized);
+    const fetcher = this.options.fetcher ?? fetch, api = access.baseUrl + '/api/v1/media';
+    const headers = { Authorization: `Bearer ${access.key}`, 'Content-Type': 'application/json' };
+    let response: Response;
+    try {
+      response = await fetcher(api + '/audio/sound-effects', {
+        method: 'POST', headers: { ...headers, ...mediaSubmitHeaders(access.baseUrl, job.id) }, redirect: 'error', signal,
+        body: JSON.stringify({ model: job.model.modelId, parameters: { ...parameters, text: job.prompt } }),
+      });
+    } catch (error) { if (signal.aborted) throw error; throw new Error(jobMessages.connection); }
+    const body = await response.json().catch(() => undefined) as { task_id?: unknown; error?: { code?: unknown }; code?: unknown } | undefined;
+    if (!response.ok) {
+      const code = String(body?.error?.code ?? body?.code ?? '');
+      throw new Error((Object.hasOwn(requestMessages, code) ? requestMessages[code] : undefined) ?? (response.status === 401 ? requestMessages.unauthorized : jobMessages.service));
+    }
+    return body ?? {};
+  }
+  private async audioTaskResult(job: GenerationJob, taskId: string, directory: string, signal: AbortSignal,
+    progress: (phase: string, id?: string, download?: DownloadProgress) => Promise<void>) {
+    const read = async () => {
+      if (job.providerOrigin !== await this.identity()) throw new Error(jobMessages.accountChangedAfterSubmit);
+      const access = await this.controlAccess();
+      if (!access) throw new Error(jobMessages.resultUnauthorized);
+      try {
+        const task = await retryRead(() => apiJson(this.options.fetcher ?? fetch,
+          `${access.baseUrl}/api/v1/media/audio/tasks/${encodeURIComponent(taskId)}`,
+          { headers: { Authorization: `Bearer ${access.key}` }, signal }, { timeoutMs: 15_000, maxBytes: 1024 * 1024 }), signal, 3);
+        if (job.providerOrigin !== await this.identity()) throw new Error(jobMessages.accountChangedAfterSubmit);
+        if (task.task_id !== taskId || task.model && task.model !== job.model.modelId) throw new Error(jobMessages.resultUnreadable);
+        return task;
+      } catch (error) {
+        if ((error as { status?: number }).status === 401) throw new Error(jobMessages.resultUnauthorized);
+        throw new Error(jobMessages.resultUnreadable);
+      }
+    };
+    const assetFrom = (task: any) => {
+      if (!Array.isArray(task.assets) || !task.assets.length) throw new Error(jobMessages.resultUnreadable);
+      const asset = task.assets[0];
+      if (typeof asset.url !== 'string') throw new Error(jobMessages.resultUnreadable);
+      const assetId = typeof asset.asset_id === 'string' && /^[\w-]{1,180}$/.test(asset.asset_id) ? asset.asset_id : taskId;
+      return { assetId, size: typeof asset.size_bytes === 'number' ? asset.size_bytes : undefined, mime: typeof asset.mime_type === 'string' ? asset.mime_type : 'audio/mpeg', url: asset.url };
+    };
+    let completedTask: any;
+    for (;;) {
+      const task = await read();
+      if (['failed', 'cancelled', 'canceled'].includes(task.status)) { await progress('remote_failed'); throw new Error(jobMessages.taskFailed); }
+      if (task.status === 'succeeded') { completedTask = task; break; }
+      if (!['queued', 'pending', 'running', 'processing', 'submitted'].includes(task.status)) throw new Error(jobMessages.unknownTaskStatus);
+      await progress('generating'); await delay(this.options.pollMs ?? 2000, undefined, { signal });
+    }
+    const initialAsset = assetFrom(completedTask);
+    if (typeof initialAsset.size === 'number' && Number.isSafeInteger(initialAsset.size) && initialAsset.size >= 24) {
+      return resumableDownload(directory, async () => {
+        const task = await read();
+        if (['failed', 'cancelled', 'canceled'].includes(task.status)) { await progress('remote_failed'); throw new Error(jobMessages.taskFailed); }
+        if (task.status !== 'succeeded') throw new Error(jobMessages.resultUnreadable);
+        const resolved = assetFrom(task);
+        if (typeof resolved.size !== 'number') throw new Error(jobMessages.resultUnreadable);
+        return { ...resolved, size: resolved.size };
+      }, signal, download => progress('downloading', undefined, download), this.options.download, 3, 'audio/');
+    }
+    const transport = this.options.download ?? streamMedia;
+    const response = await retryRead(async () => {
+      const res = await transport(initialAsset.url, { signal });
+      if (!res.ok) throw new ProviderError('Audio download failed', res.status);
+      return res;
+    }, signal, 3);
+    const bytes = await readCappedBytes(response, MAX_MEDIA_BYTES);
+    if (bytes.length < 24) throw new Error(jobMessages.resultUnreadable);
+    return bytes;
   }
   private async imageResult(job: GenerationJob, taskId: string, directory: string, signal: AbortSignal,
     progress: (phase: string, id?: string, download?: DownloadProgress) => Promise<void>) {

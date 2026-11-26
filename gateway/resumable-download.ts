@@ -12,7 +12,7 @@ export const downloadInterrupted = 'The original image could not be downloaded. 
 
 /** URLs stay in memory. A strong ETag and a hashed checkpoint are required before appending bytes. */
 export async function resumableDownload(directory: string, resolve: () => Promise<DownloadAsset>, signal: AbortSignal,
-  progress: (value: DownloadProgress) => Promise<void>, transport: typeof streamMedia = streamMedia, attempts = 3) {
+  progress: (value: DownloadProgress) => Promise<void>, transport: typeof streamMedia = streamMedia, attempts = 3, allowedMimePrefix: 'image/' | 'audio/' = 'image/') {
   const partial = path.join(directory, 'image.partial'), metadata = path.join(directory, 'image-download.json');
   const file = await open(partial, constants.O_RDWR | constants.O_CREAT | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600);
   let checkpoint: Checkpoint | undefined;
@@ -28,7 +28,7 @@ export async function resumableDownload(directory: string, resolve: () => Promis
       signal.throwIfAborted();
       // Also refresh expired signed URLs and recheck account/task identity on every attempt.
       const asset = await resolve();
-      if (!asset.assetId || !Number.isSafeInteger(asset.size) || asset.size < 24 || asset.size > MAX_MEDIA_BYTES || !asset.mime.startsWith('image/')) throw new Error(downloadInterrupted);
+      if (!asset.assetId || !Number.isSafeInteger(asset.size) || asset.size < 24 || asset.size > MAX_MEDIA_BYTES || !asset.mime.startsWith(allowedMimePrefix)) throw new Error(downloadInterrupted);
       let bytes = 0, hash = createHash('sha256');
       if (checkpoint?.assetId === asset.assetId && checkpoint.size === asset.size && checkpoint.mime === asset.mime
         && Number.isSafeInteger(checkpoint.bytes) && checkpoint.bytes > 0 && checkpoint.bytes <= asset.size && (await file.stat()).size >= checkpoint.bytes) {

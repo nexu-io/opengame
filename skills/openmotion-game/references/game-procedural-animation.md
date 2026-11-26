@@ -26,10 +26,10 @@ root (Group)          ← world position, facing, bob
   size; keep them in a config object next to the motion constants.
 - Share geometry and materials across instances; for swarms, animate an
   `InstancedMesh` per segment type and write matrices per instance.
-- Optional runtime skinning (for smooth serpents/tails, or when animating a static high-res GLB without prebuilt bones):
+- Optional runtime skinning (strictly for **non-humanoid soft or ribbon-like bodies** such as serpents, tails, tentacles, wings, or banners — **never** use coordinate/bounding-box runtime skinning on an unrigged static humanoid GLB when real auto-rigging via `3d-asset` `operation:"rig"` / `"rig_retarget"` is available, because box-cut weights tear cloaks/robes and misalign hands):
   - Build a `SkinnedMesh` + bone chain and **always call `skinnedMesh.bind(skeleton, new THREE.Matrix4())` in clean unparented local space before attaching to the world hierarchy** (binding after world transforms misaligns `boneInverses` and throws vertices off-screen).
   - Blend bone weights across joint boundaries with C1-continuous `smoothstep` transitions (never hard `if` cutoffs that tear spikes at armpits/seams), and damp state transitions/envelopes rather than low-pass filtering periodic flap/walk waveforms.
-  - Count weighted vertices > 0 before relying on the rig. *(Note: when auto-rigged GLBs are available from 3D generation, prefer native clips over manual runtime skinning.)*
+  - Count weighted vertices > 0 before relying on the rig. *(Note: for articulated humanoids or when auto-rigged GLBs are available from 3D generation, always use real native skeletons and clips instead of manual runtime skinning.)*
 
 ## Motion recipes per creature type
 

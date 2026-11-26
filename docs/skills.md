@@ -59,7 +59,9 @@ Before material grouping, the recreation guidance distinguishes object motion, i
 
 ## Primary installation Skill
 
-[openmotion](https://github.com/nexu-io/openmotion/blob/main/skills/openmotion/SKILL.md) is the standalone GitHub/Skills CLI entry for setup and first use. It reuses a connected workspace or follows the maintained source installation guide, then reads the matching specialist through installed files or MCP resources. It does not introduce a sixth creative workflow or require already-selected specialists to return through a router. The bootstrap Skill is discoverable in the source plugin and on GitHub; runtime distributions retain their existing specialist list. It is installed separately through the official Skills CLI rather than copied into npm-owned workflow directories.
+[opengame](../skills/opengame/SKILL.md) is the standalone GitHub/Skills CLI entry for OpenGame local setup and first use. It checks for an active `openmotion_game_*` MCP connection or follows [docs/opengame-setup.md](opengame-setup.md), then routes game work to `openmotion-game` and standalone media generation to `openmotion-media` through installed files or MCP resources. Like `openmotion`, it is excluded from runtime specialist distributions and installed separately through the official Skills CLI.
+
+[openmotion](https://github.com/nexu-io/openmotion/blob/main/skills/openmotion/SKILL.md) is the standalone GitHub/Skills CLI entry for OpenMotion setup and first use. It reuses a connected workspace or follows the maintained source installation guide, then reads the matching specialist through installed files or MCP resources. It does not introduce a sixth creative workflow or require already-selected specialists to return through a router. The bootstrap Skill is discoverable in the source plugin and on GitHub; runtime distributions retain their existing specialist list. It is installed separately through the official Skills CLI rather than copied into npm-owned workflow directories.
 
 ## 职责与入口
 

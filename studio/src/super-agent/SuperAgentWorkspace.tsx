@@ -1556,21 +1556,27 @@ export function SuperAgentWorkspace({
       resumeRequestIds.current.set(key, requestId);
     }
     const publish = card.kind === 'web_publish_sign_in';
+    const topUp = card.kind === 'top_up';
     const target = publish
       ? [card.targetKind, card.targetId].filter(Boolean).join(' ')
       : '';
-    const continued = await handleSend(t(publish ? 'Signed in — please publish again.' : 'Signed in — please continue.'), {
-      requestId,
-      hiddenInstructions: publish
-        ? 'The user just signed in to OpenDesign. Retry the web publish that failed with sign-in required in the previous turn'
-          + (target ? ` (target: ${target})` : '')
-          + ', calling the same publish tool with the same target and arguments. Do not regenerate, rebuild or edit the content first; publish it as it is now and share the resulting link. Do not ask the user to reply again.'
-        : 'The user just signed in to OpenDesign' + (plan ? ` (plan: ${plan})` : '')
-          + '. Retry the media generation that was blocked by sign-in or plan in the previous turn, with the same brief and settings. Before any paid generation, still state the expected cost as the existing rules require; do not ask the user to reply again.',
-      followUpBehavior: 'queue',
-      overrideAttachments: [],
-      keepDraftAttachments: true,
-    });
+    const continued = await handleSend(
+      t(publish ? 'Signed in — please publish again.' : topUp ? 'Balance topped up — please continue.' : 'Signed in — please continue.'),
+      {
+        requestId,
+        hiddenInstructions: publish
+          ? 'The user just signed in to OpenDesign. Retry the web publish that failed with sign-in required in the previous turn'
+            + (target ? ` (target: ${target})` : '')
+            + ', calling the same publish tool with the same target and arguments. Do not regenerate, rebuild or edit the content first; publish it as it is now and share the resulting link. Do not ask the user to reply again.'
+          : topUp
+            ? 'The user just topped up their OpenDesign balance or upgraded their plan. Re-check account status if needed and retry the media generation that was blocked by low balance in the previous turn, with the same brief and settings. Do not ask the user to reply again.'
+            : 'The user just signed in to OpenDesign' + (plan ? ` (plan: ${plan})` : '')
+              + '. Retry the media generation that was blocked by sign-in or plan in the previous turn, with the same brief and settings. Do not ask the user to reply again.',
+        followUpBehavior: 'queue',
+        overrideAttachments: [],
+        keepDraftAttachments: true,
+      },
+    );
     if (!continued) throw new Error(t('Could not continue the conversation. Try again.'));
   };
 
@@ -2340,6 +2346,7 @@ export function SuperAgentWorkspace({
             <ArtifactBrowserPane
               active={active}
               chatId={activeChat?.id ?? null}
+              chatRunning={activeChat?.state === 'running' || activeChat?.state === 'waiting'}
               workingDir={activeChat?.workingDir}
               artifacts={viewerArtifacts}
               openTabIds={openTabIds}

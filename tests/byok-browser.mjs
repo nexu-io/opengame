@@ -232,7 +232,9 @@ try {
   await gateway.configureProvider('opendesign', { apiKey: 'synthetic-cloud-key', baseUrl: 'https://cloud.fixture.example' });
   let edits;
   gateway.options.fetcher = async (url, init = {}) => {
-    assert.equal(String(url), 'https://cloud.fixture.example/api/v1/media/models');
+    const requestUrl = new URL(String(url));
+    assert.equal(requestUrl.origin + requestUrl.pathname, 'https://cloud.fixture.example/api/v1/media/models');
+    assert.equal(requestUrl.searchParams.get('include_audio'), 'true');
     assert.equal(init.method ?? 'GET', 'GET');
     assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer synthetic-cloud-key');
     return Response.json({ models: [{ model: 'cloud-image-fixture', kind: 'image', capabilities: edits === undefined ? {} : { edits, max_input_images: 2 } }] });

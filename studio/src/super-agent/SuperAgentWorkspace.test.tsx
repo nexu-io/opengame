@@ -3724,16 +3724,16 @@ it('auto-enters Game mode when opened from Game Studio, plays games in Artifact 
 
   const trialFrame = viewer?.querySelector<HTMLIFrameElement>('iframe[title="Gate Legion"]');
   expect(trialFrame?.getAttribute('src')).toContain('/motion-api/games/gate-legion/play/index.html');
-  expect(trialFrame?.closest('.om-sa-iframe-stage')?.getAttribute('data-viewport')).toBe('desktop');
+  expect(trialFrame?.closest('.om-sa-iframe-stage')?.getAttribute('data-viewport')).toBe('mobile');
   expect(viewer?.querySelector('.om-sa-game-use-btn')?.textContent).toContain('Remix');
   expect(viewer?.querySelector('.om-sa-share-trigger')?.textContent).toContain('Share');
   expect(viewer?.querySelector('.om-sa-view-mode-trigger, .om-sa-annotate-btn, .om-sa-publish-trigger')).toBeNull();
   const trialViewport = viewer!.querySelector<HTMLButtonElement>('button[aria-label="Viewport presets"]')!;
   await act(async () => trialViewport.click());
-  const mobilePreset = [...document.querySelectorAll<HTMLButtonElement>('.om-sa-device-menu [role="menuitemradio"]')]
-    .find(button => button.textContent?.includes('Mobile'))!;
-  await act(async () => mobilePreset.click());
-  expect(trialFrame?.closest('.om-sa-iframe-stage')?.getAttribute('data-viewport')).toBe('mobile');
+  const desktopPreset = [...document.querySelectorAll<HTMLButtonElement>('.om-sa-device-menu [role="menuitemradio"]')]
+    .find(button => button.textContent?.includes('Desktop'))!;
+  await act(async () => desktopPreset.click());
+  expect(trialFrame?.closest('.om-sa-iframe-stage')?.getAttribute('data-viewport')).toBe('desktop');
   expect(viewer?.querySelector('iframe[title="Gate Legion"]')).toBe(trialFrame);
 
   // Closing the last game preview tab collapses the split viewer back to the full homepage
@@ -8328,4 +8328,234 @@ it('folds intermediate progress notes into WorkLogSection, renders 16:9 game cov
     await act(async () => root.unmount());
     container.remove();
   }
+});
+
+it('shows building overlay only while the chat is actively running and defaults portrait game trials to mobile viewport', async () => {
+  const { ArtifactBrowserPane } = await import('./ArtifactBrowserPane');
+  const buildingGameId = '488898ce-e147-478a-8c5b-65ad17372f46';
+  const portraitTemplateId = 'ace-archer-3d';
+
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    if ((url.includes('/motion-api/games') || url.includes('/api/games')) && !url.includes('/play/')) {
+      return json({
+        games: [
+          {
+            id: buildingGameId,
+            title: '寒刹听雨',
+            description: 'Rainy temple 3D boss duel',
+            genre: 'casual',
+            orientation: 'landscape',
+            multiplayer: false,
+            maxPlayers: 1,
+            status: 'building',
+            source: 'mine',
+            playUrl: `/api/games/${buildingGameId}/play/index.html`,
+            plays: 0,
+            likes: 0,
+            dislikes: 0,
+            createdAt: '2026-11-26T03:21:42.706Z',
+            updatedAt: '2026-11-26T03:35:19.392Z',
+          },
+          {
+            id: portraitTemplateId,
+            title: 'Ace Archer',
+            description: 'Portrait archer template',
+            genre: 'shooter',
+            orientation: 'portrait',
+            multiplayer: false,
+            maxPlayers: 1,
+            status: 'published',
+            source: 'template',
+            playUrl: `/api/games/${portraitTemplateId}/play/index.html`,
+            plays: 0,
+            likes: 0,
+            dislikes: 0,
+            createdAt: '2026-11-25T00:00:00.000Z',
+            updatedAt: '2026-11-25T00:00:00.000Z',
+          },
+        ],
+      });
+    }
+    return json({});
+  }) as typeof fetch;
+
+  const buildingArtifact = {
+    id: `game:${buildingGameId}`,
+    kind: 'game-project' as const,
+    title: '寒刹听雨 · 试玩',
+    subtitle: 'casual · Game Studio',
+    projectId: buildingGameId,
+    scenario: 'landscape',
+    revision: '2026-11-26T03:35:19.392Z',
+    url: `/motion-api/games/${buildingGameId}/play/index.html`,
+    createdAt: 1000,
+    updatedAt: 2000,
+  };
+  const portraitTemplateArtifact = {
+    id: `game:${portraitTemplateId}`,
+    kind: 'game-project' as const,
+    title: 'Ace Archer',
+    subtitle: 'shooter · Game Studio',
+    projectId: portraitTemplateId,
+    scenario: 'portrait',
+    revision: '2026-11-25T00:00:00.000Z',
+    url: `/motion-api/games/${portraitTemplateId}/play/index.html`,
+    createdAt: 1000,
+    updatedAt: 1000,
+  };
+
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const baseProps = {
+    active: true,
+    chatId: 'chat-stuck-building',
+    artifacts: [buildingArtifact, portraitTemplateArtifact],
+    openTabIds: [buildingArtifact.id, portraitTemplateArtifact.id],
+    expanded: false,
+    workspaceItems: [],
+    onSelectTab: vi.fn(),
+    onCloseTab: vi.fn(),
+    onNewTab: vi.fn(),
+    onOpenWebUrl: vi.fn(),
+    onOpenArtifact: vi.fn(),
+    onOpenResource: vi.fn(),
+    onToggleExpand: vi.fn(),
+    onClosePane: vi.fn(),
+    onAttachArtifact: vi.fn(),
+    onOpenInDesignStudio: vi.fn(),
+    onOpenInMotionStudio: vi.fn(),
+    onOpenInAssets: vi.fn(),
+    onOpenInBrandKit: vi.fn(),
+  };
+
+  try {
+    // 1. While chat is actively running, a `building` game shows the loading placeholder.
+    await act(async () => root.render(
+      <I18nProvider>
+        <ArtifactBrowserPane {...baseProps} chatRunning={true} activeTabId={buildingArtifact.id} />
+      </I18nProvider>,
+    ));
+    await flush();
+    expect(container.querySelector('.om-sa-game-draft-stage')).not.toBeNull();
+    expect(container.querySelector(`iframe[title="${buildingArtifact.title}"]`)).toBeNull();
+
+    // 2. Once the chat is idle, a workspace game left in `building` renders its playable iframe instead of hanging forever.
+    await act(async () => root.render(
+      <I18nProvider>
+        <ArtifactBrowserPane {...baseProps} chatRunning={false} activeTabId={buildingArtifact.id} />
+      </I18nProvider>,
+    ));
+    await flush();
+    expect(container.querySelector('.om-sa-game-draft-stage')).toBeNull();
+    const buildingFrame = container.querySelector<HTMLIFrameElement>(`iframe[title="${buildingArtifact.title}"]`);
+    expect(buildingFrame).not.toBeNull();
+    expect(buildingFrame?.closest('.om-sa-iframe-stage')?.getAttribute('data-viewport')).toBe('desktop');
+
+    // 3. Switching to a portrait template trial defaults to the mobile (9:16) viewport automatically.
+    await act(async () => root.render(
+      <I18nProvider>
+        <ArtifactBrowserPane {...baseProps} chatRunning={false} activeTabId={portraitTemplateArtifact.id} />
+      </I18nProvider>,
+    ));
+    await flush();
+    const portraitFrame = container.querySelector<HTMLIFrameElement>('iframe[title="Ace Archer"]');
+    expect(portraitFrame).not.toBeNull();
+    expect(portraitFrame?.closest('.om-sa-iframe-stage')?.getAttribute('data-viewport')).toBe('mobile');
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
+it('keeps the game building overlay mounted while a chat is waiting on approval', async () => {
+  clearSuperAgentCache();
+  const waitingChatId = 'chat-waiting-approval-game';
+  const buildingGameId = 'game-waiting-approval';
+  const gameArtifact = {
+    id: `game:${buildingGameId}`,
+    kind: 'game-project' as const,
+    title: 'Waiting Build Game',
+    subtitle: 'casual · Game Studio',
+    projectId: buildingGameId,
+    scenario: 'landscape',
+    revision: '2026-11-26T06:00:00.000Z',
+    url: `/motion-api/games/${buildingGameId}/play/index.html`,
+    createdAt: 1000,
+    updatedAt: 2000,
+  };
+  const waitingChat: SuperAgentChat = {
+    ...sampleChat,
+    id: waitingChatId,
+    title: 'Waiting Build',
+    intent: 'game',
+    state: 'waiting',
+    activeArtifactId: gameArtifact.id,
+    artifacts: [gameArtifact],
+  };
+
+  const baseFetch = globalThis.fetch;
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.includes(`${SUPER_AGENT_API}/chats/${waitingChatId}`)) return Response.json({ conversation: waitingChat });
+    if (url.includes(`${SUPER_AGENT_API}/chats`)) return Response.json({ conversations: [summarizeSuperAgentChat(waitingChat)] });
+    if ((url.includes('/motion-api/games') || url.includes('/api/games')) && !url.includes('/play/')) {
+      return Response.json({
+        games: [
+          {
+            id: buildingGameId,
+            title: 'Waiting Build Game',
+            description: 'Building while waiting on generation approval',
+            genre: 'casual',
+            orientation: 'landscape',
+            multiplayer: false,
+            maxPlayers: 1,
+            status: 'building',
+            source: 'mine',
+            playUrl: `/api/games/${buildingGameId}/play/index.html`,
+            plays: 0,
+            likes: 0,
+            dislikes: 0,
+            createdAt: '2026-11-26T06:00:00.000Z',
+            updatedAt: '2026-11-26T06:00:00.000Z',
+          },
+        ],
+      });
+    }
+    return baseFetch(input, init);
+  }) as typeof fetch;
+
+  await act(async () => {
+    root.render(
+      <I18nProvider initialLocale="en">
+        <SuperAgentWorkspace
+          active
+          chatId={waitingChatId}
+          onChatIdChange={vi.fn()}
+          onOpenDesignProject={vi.fn()}
+          onOpenMotionProject={vi.fn()}
+          onOpenAsset={vi.fn()}
+          onOpenBrandKit={vi.fn()}
+          onOpenAgentSettings={vi.fn()}
+          onOpenMcp={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+  });
+  await flush();
+
+  const viewerToggle = [...document.querySelectorAll('button')].find(
+    b => b.getAttribute('aria-label') === 'Artifact Viewer',
+  ) as HTMLButtonElement;
+  expect(viewerToggle).toBeTruthy();
+  await act(async () => viewerToggle.click());
+  await vi.waitFor(async () => {
+    await flush();
+    expect(document.querySelector('.om-sa-viewer .om-sa-game-draft-stage')).not.toBeNull();
+  }, { timeout: 3000 });
+  expect(document.querySelector(`.om-sa-viewer iframe[title="${gameArtifact.title}"]`)).toBeNull();
 });

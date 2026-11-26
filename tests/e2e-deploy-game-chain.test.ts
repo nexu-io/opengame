@@ -303,6 +303,7 @@ test('E2E full chain: Streamable HTTP & stdio MCP deployment, game lifecycle wit
       });
       const createdGame = createdGameRes.result.structuredContent.game;
       assert.equal(createdGame.status, 'draft');
+      assert.equal(createdGame.playUrl, `${origin}/api/games/${createdGame.id}/play/index.html`);
 
       // Read-only token can inspect the newly created game
       const readGameRes = await callHttpTool(mcpUrl, readToken, readSessionId, 12, 'openmotion_game_get', { id: createdGame.id });
@@ -343,7 +344,8 @@ test('E2E full chain: Streamable HTTP & stdio MCP deployment, game lifecycle wit
         id: createdGame.id,
       });
       assert.equal(localPublishRes.result.structuredContent.game.status, 'published');
-      assert.ok(localPublishRes.result.structuredContent.playUrl.includes(createdGame.id));
+      assert.equal(localPublishRes.result.structuredContent.playUrl, createdGame.playUrl);
+      assert.equal(localPublishRes.result.structuredContent.game.playUrl, createdGame.playUrl);
 
       // Verify local preview CSP allows opaque-origin iframe to fetch workspace assets & own game files without allow-same-origin
       const playHtmlRes = await fetch(`${origin}/motion-api/games/${encodeURIComponent(createdGame.id)}/play/index.html`);

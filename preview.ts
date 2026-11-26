@@ -61,11 +61,16 @@ function initialPort() {
   if (!Number.isInteger(value) || value < 1024 || value > 65526) throw new Error('PORT 必须在 1024–65526 之间');
   return value;
 }
-async function registeredPort(store: WorkspaceStore): Promise<number | null> {
+async function readPreviewRegistration(store: WorkspaceStore): Promise<{ port: number | null; pid?: number }> {
   try {
     const value = JSON.parse(await readFile(path.join(store.directory, 'preview.json'), 'utf8'));
-    return Number.isInteger(value.port) && value.port >= 1024 && value.port <= 65535 ? value.port : null;
-  } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError) return null; throw error; }
+    const port = Number.isInteger(value.port) && value.port >= 1024 && value.port <= 65535 ? value.port : null;
+    const pid = Number.isInteger(value.pid) && value.pid > 1 ? value.pid : undefined;
+    return { port, pid };
+  } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError) return { port: null }; throw error; }
+}
+async function registeredPort(store: WorkspaceStore): Promise<number | null> {
+  return (await readPreviewRegistration(store)).port;
 }
 export async function previewUrl(store: WorkspaceStore) {
   if (sharedEditorEnabled) { const editor = await readEditor(store.directory); if (editor) return new URL(editor.endpoint).origin; }
@@ -107,7 +112,7 @@ export async function openPreview(store = new WorkspaceStore(), environment: Pre
   await mkdir(store.directory, { recursive: true });
   const lockPath = path.join(store.directory, 'preview-start.lock');
   return withProcessLock(lockPath, async () => {
-    const firstPort = initialPort(), previous = await registeredPort(store);
+    const firstPort = initialPort(), registration = await readPreviewRegistration(store), previous = registration.port;
     const candidates = [...new Set([...(previous ? [previous] : []), ...Array.from({ length: 10 }, (_, i) => firstPort + i)])];
     let available: number | null = null;
     const matches = (result: Probe) => result.kind === 'motion' && result.health.service === 'motion-preview' && result.health.protocol === 2 && result.health.ready
@@ -119,8 +124,9 @@ export async function openPreview(store = new WorkspaceStore(), environment: Pre
         if (!matches(updated) || !updated.health?.studioUrl) throw new Error('编辑器启动后未通过就绪检查');
         health = updated.health;
       }
+      const effectivePid = pid ?? (reused && registration.port === port ? registration.pid : undefined);
       const file = path.join(store.directory, 'preview.json'); const temporary = file + '.' + crypto.randomUUID() + '.tmp';
-      try { await writeFile(temporary, JSON.stringify({ port, pid, version: health.version }), { mode: 0o600 }); await rename(temporary, file); }
+      try { await writeFile(temporary, JSON.stringify({ port, pid: effectivePid, version: health.version }), { mode: 0o600 }); await rename(temporary, file); }
       finally { await rm(temporary, { force: true }); }
       return { previewUrl: `http://localhost:${port}`, studioUrl: health.studioUrl ? `http://localhost:${port}/#project/${store.projectId}` : undefined, hyperframesCli: health.hyperframesCli, authoringGuide: health.authoringGuide, engine: 'hyperframes', ready: true, reused, ffmpeg: health.ffmpeg, revision: (await store.get()).revision,
         mcp: health.mcp, dataDirectory: store.directory, editorReady: Boolean(health.studioUrl), browserOpened: false, previewTarget: 'host-built-in-browser',

@@ -54,7 +54,8 @@ export function checkRepositoryStorage(cwd: string, base?: string, options: { fi
       errors.push(`${entry.name}: require a canonical LFS pointer and staged LFS attributes`);
       continue;
     }
-    if (!repositoryMediaFile.test(entry.name) && !/\.motion$/i.test(entry.name)) errors.push(`${entry.name}: LFS is for media and optional template archives`);
+    const gameBinary = entry.name.startsWith('templates/games/') && /\.(?:bin|cconb|wasm|glb|fbx|part\d+)$/i.test(entry.name);
+    if (!repositoryMediaFile.test(entry.name) && !/\.motion$/i.test(entry.name) && !gameBinary) errors.push(`${entry.name}: LFS is for media and optional template archives`);
     if (pointer.bytes > maxLfsAssetBytes) errors.push(`${entry.name}: LFS file exceeds 50 MiB`);
     lfsBytes += pointer.bytes;
     lfsFiles++;

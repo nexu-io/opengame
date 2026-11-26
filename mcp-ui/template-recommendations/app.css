@@ -23,6 +23,8 @@ body { margin: 0; padding: 6px; }
 .omtc-title { min-width: 0; border: 0; padding: 0; text-align: left; color: inherit; background: transparent; font-weight: 600 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .omtc-title:hover { text-decoration: underline; }
 .omtc-description, .omtc-status, .omtc-feedback { margin: 0; font-size: 12px; color: light-dark(#535660, #b7bac5); }
+.omtc-feedback p { margin: 0 0 var(--motion-space-6); }
+.omtc-feedback textarea { display: block; width: 100%; font: inherit; resize: vertical; }
 .omtc-description { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 11px; min-height: 2.8em; }
 .omtc-clone, .omtc-back { min-height: 36px; border-radius: 7px; padding: 6px 8px; }
 .omtc-clone { width: 100%; border: 1px solid light-dark(#252733, #dddfe8); color: light-dark(#fff, #20222a); background: light-dark(#252733, #dddfe8); }

@@ -43,8 +43,13 @@ export async function apiJson(fetcher: Fetcher, url: string, init: RequestInit =
   try { return JSON.parse(body); } catch { throw new Error('Provider returned invalid JSON'); }
 }
 // Stop reading as soon as the peer exceeds the cap instead of buffering the whole body first.
-export async function readCappedText(response: Response, maximum: number): Promise<string> {
-  if (!response.body) return '';
+export async function readCappedBytes(response: Response, maximum: number): Promise<Buffer> {
+  const declared = Number(response.headers.get('content-length') || 0);
+  if (Number.isFinite(declared) && declared > maximum) {
+    await response.body?.cancel().catch(() => {});
+    throw new Error(`Provider response exceeds ${maximum / 1024 / 1024} MB`);
+  }
+  if (!response.body) return Buffer.alloc(0);
   const reader = response.body.getReader(), chunks: Uint8Array[] = [];
   let size = 0;
   try {
@@ -57,8 +62,11 @@ export async function readCappedText(response: Response, maximum: number): Promi
       chunks.push(value);
     }
   } finally { await reader.cancel().catch(() => {}); }
+  return Buffer.concat(chunks);
+}
+export async function readCappedText(response: Response, maximum: number): Promise<string> {
   // TextDecoder strips a leading BOM, which Buffer#toString kept and which made valid JSON fail.
-  return new TextDecoder().decode(Buffer.concat(chunks));
+  return new TextDecoder().decode(await readCappedBytes(response, maximum));
 }
 export function isPublicAddress(address: string) {
   if (isIP(address) === 4) {

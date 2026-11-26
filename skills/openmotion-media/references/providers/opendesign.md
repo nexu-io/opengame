@@ -12,11 +12,11 @@ The service injects `Authorization: Bearer ...`. Agents discover with `openmotio
 {"action":"models","provider":"opendesign","refresh":true,"modality":"image","limit":20}
 ```
 
-Discovery calls the authenticated `GET /api/v1/media/models` on the dashboard API origin. The response is `{models:[{model,kind,capabilities}]}`. Change/omit modality to discover video/audio. Account/workspace availability comes from this list, not the example names below. Tool entries are normalized; check the current contract/model capabilities for required options. Cached entries do not establish current entitlement. Billing and credentials belong to the Cloud workspace, not its upstream model vendor; workspace allowance is used first and additional use may consume recharge balance.
+Discovery calls the authenticated `GET /api/v1/media/models?include_audio=true` on the dashboard API origin. The response is `{models:[{model,kind,capabilities}]}`. Change/omit modality to discover video/audio/3D. Account/workspace availability comes from this list, not the example names below. Tool entries are normalized; check the current contract/model capabilities for required options. Cached entries do not establish current entitlement. Billing and credentials belong to the Cloud workspace, not its upstream model vendor; workspace allowance is used first and additional use may consume recharge balance.
 
 The catalogue is bound to the configured key and API origin. Use `action: "models"` with `refresh: true` or Settings → Sync models to refresh it. Explicit `capabilities.edits: false` disables image references; absent or malformed values mean unknown and remain disabled. Refreshing never submits a generation request. Model names and generic image-input metadata do not establish editing access.
 
-Cloud catalogue kinds `audio_speech` and `audio_music` both appear as `modality: "audio"`, with `mode: "text-to-speech"` and `mode: "text-to-audio"` respectively. Legacy `audio` entries retain speech behavior. Use the discovered model's mode; a vendor name alone does not establish whether it generates speech or music.
+Cloud catalogue kinds `audio_speech`, `audio_music`, and `audio_sound_effects` all appear as `modality: "audio"`, with `mode: "text-to-speech"` for speech and `mode: "text-to-audio"` for music (`audioKind: "music"`) and sound effects (`audioKind: "sfx"`, e.g. `elevenlabs-sound-v3`). Spatial kinds `3d_generations` (e.g. `tripo-3.0`) and `world_generations` (e.g. `worldlabs-atlas`) surface through `openmotion_capability_discover` (`modality: "3d"`) as capabilities `3d-asset` and `3d-world` only when returned active by discovery. Legacy `audio` entries retain speech behavior. Use the discovered model's mode and capability; a vendor name alone does not establish what it generates.
 
 ## Choosing a video model
 
@@ -70,6 +70,20 @@ Music:
 
 `elevenlabs-music-v2` is a built-in entry: the Cloud catalogue does not list it yet, so discovery shows it with `source: "builtin"`. Like the speech examples, it does not prove workspace access. Music does not require a voice. The example requests 10 seconds using the provider-native `music_length_ms` option; accepted parameters and duration limits depend on the selected model. OpenMotion passes music options through without rounding the duration to a preset.
 
+Sound effects (when `audio_sound_effects` such as `elevenlabs-sound-v3` is active in live discovery; keep prompt concise, **≤ 400 characters**, hard cap 450):
+
+```json
+{"tool":"openmotion_capability_run","arguments":{"capabilityId":"sound-effects","requestId":"cloud-sfx-01","prompt":"Crisp retro arcade coin pickup chime, bright metallic ping","parameters":{"duration_seconds":1.5,"loop":false,"prompt_influence":0.5}}}
+```
+
+3D assets and 3D worlds (only when `openmotion_capability_discover(modality="3d", refresh=true)` reports `3d-asset` or `3d-world` available):
+
+```json
+{"tool":"openmotion_capability_run","arguments":{"capabilityId":"3d-asset","requestId":"cloud-3d-01","prompt":"Stylized steampunk knight","references":[{"assetId":"A","versionId":"A1"}],"options":{"operation":"image_to_model","quality":"hero-balanced","rigPreset":"mixamo-run"}}}
+```
+
+`3d-asset` supports `operation`: `text_to_model`, `image_to_model` (1 pinned reference image), `rig`, `rig_retarget` (base → Mixamo rig → retarget; up to 3 paid tasks), plus `retarget` / `decimate` / `texture` / `convert` with `parameters.original_model_task_id`; quality presets `prop-low` / `hero-balanced` / `hero-high`; never pass `quad: true`. `3d-world` (`worldlabs-atlas`) follows the Atlas v2 task contract: pure text defaults to `operation: "atlasTextToImage"` (returns a scene concept PNG frame such as `frames_0_image`), `images2PosedRGBD` estimates poses/RGB-D from uploaded reference images, `atlasGenerate` requires native `parameters.contextFrames` + `parameters.targetCameras`, `atlasChisel` performs structural graybox edits, `posedImages2Splats` builds `.spz` Gaussian Splats, and `splats2Mesh` converts splats into a polygonal `.glb` mesh. Downloaded `.glb` or image/video artifacts are imported into Workspace Assets (with optional `parameters.artifact` selection) while preserving all returned `artifacts[]` descriptors in `version.result.artifacts`. On client timeout for `3d-asset`/`3d-world`, re-invoke `openmotion_capability_run` with the exact same `requestId` and inputs to resume from its saved remote task checkpoint without re-billing.
+
 Wire mapping (all paths are relative to the dashboard API origin):
 
 | Type | POST path | JSON body | Poll path |
@@ -78,6 +92,9 @@ Wire mapping (all paths are relative to the dashboard API origin):
 | Video | `/api/v1/media/videos/tasks` | `{model,prompt,...parameters}` | `/api/v1/media/videos/tasks/{task_id}` |
 | Speech | `/api/v1/media/audio/speech` | `{model,voice,parameters:{text,...options}}` | `/api/v1/media/audio/tasks/{task_id}` |
 | Music | `/api/v1/media/audio/music` | `{model,parameters:{prompt,...options}}` | `/api/v1/media/audio/tasks/{task_id}` |
+| Sound effects | `/api/v1/media/audio/sound-effects` | `{model,parameters:{text,duration_seconds?,loop?,prompt_influence?}}` | `/api/v1/media/audio/tasks/{task_id}` |
+| 3D asset | `/api/v1/media/3d/tasks` | `{model,operation,prompt?,image_asset_ids?,parameters}` | `/api/v1/media/3d/tasks/{task_id}` |
+| 3D world | `/api/v1/media/worlds/tasks` | `{model,operation,prompt?,image_asset_ids?,parameters?}` | `/api/v1/media/worlds/tasks/{task_id}` |
 
 For Cloud image requests, `aspect_ratio` and `resolution` represent a paired output profile: when the synced catalogue publishes `capabilities.profiles` (using the `edits` envelope when input references or `parameters.images` are present, and `generations` otherwise), OpenMotion validates against the active envelope, completes a missing half using the envelope's default or first matching pair, and packs the pair into `output: { aspect_ratio, resolution }` on the wire. Unpublished ratios, resolutions, or pairs, as well as combining `size` or `output` with `aspect_ratio`/`resolution`, are rejected before submission. An explicit `parameters.output` object passes through unchanged. When a model publishes no `capabilities.profiles`, passing only one of `aspect_ratio` or `resolution` is rejected before submission; supply both together or pass an explicit `output` object.
 

@@ -6,10 +6,12 @@ import { lstat, mkdir, readFile, readdir, readlink, writeFile } from 'node:fs/pr
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const inputs = ['package.json', 'package-lock.json', 'studio', 'shared', 'tracking', 'packages/design-system', 'packages/open-design-ui', 'mcp-ui', 'web',
+export const SOURCE_BUILD_INPUTS = ['package.json', 'package-lock.json', 'studio', 'shared', 'tracking', 'packages/design-system', 'packages/open-design-ui', 'mcp-ui', 'web',
   'scripts/diagnostic-redaction.mjs',
-  'scripts/build-inline-ui.mjs', 'scripts/build-template-cards.mjs', 'scripts/source-build-state.mjs'];
-const outputs = ['studio/build', 'mcp-ui/template-recommendations/build', 'web/inline-video.html'];
+  'scripts/build-inline-ui.mjs', 'scripts/build-template-cards.mjs', 'scripts/build-template-guide.mjs', 'scripts/source-build-state.mjs'];
+export const SOURCE_BUILD_OUTPUTS = ['studio/build', 'mcp-ui/template-recommendations/build', 'web/inline-video.html'];
+const inputs = SOURCE_BUILD_INPUTS;
+const outputs = SOURCE_BUILD_OUTPUTS;
 const receipt = '.artifacts/install/source-build.json';
 const dependenciesReceipt = '.artifacts/install/source-dependencies.sha256';
 const digest = value => createHash('sha256').update(value).digest('hex');

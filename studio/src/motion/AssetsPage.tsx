@@ -81,8 +81,8 @@ export function AssetsPage({ active, hasProject = false, studio, routeId, routeV
     else tracking.reportAssetsPageView(hasProject);
   }, [active, studio?.destination.studio.id, studio?.destination.scene.id, studio?.destination.landing]);
   const audioStudio = studio?.openCreate ? studio : undefined;
-  const hasGuide = studio?.destination.landing || layout === 'workbench';
-  const guide = Boolean(hasGuide && (studioTab ? studioTab === 'guide' : studio?.destination.landing || browser.data?.total === 0));
+  const hasGuide = Boolean(studio?.destination.landing || layout === 'workbench' || draft.guideExample);
+  const guide = Boolean(hasGuide && (studioTab ? studioTab === 'guide' : studio?.destination.landing || Boolean(draft.guideExample) || browser.data?.total === 0));
   const applyPrompt = (prompt: string) => { setDraft(current => ({ ...current, prompt })); setMobileView('create'); };
   const gallery = useRef<HTMLElement>(null), galleryScroll = useRef<{ top: number; key: string } | undefined>(undefined);
   useLayoutEffect(() => {
@@ -402,7 +402,7 @@ export function AssetsPage({ active, hasProject = false, studio, routeId, routeV
   const soundCapability = soundWorkbench && soundTabId !== 'sfx'
     ? findCapability(soundTabId, studio?.catalog.catalog?.capabilities)
     : undefined;
-  const studioModels = studioForm ? creationModels(studioForm.catalog.catalog, draft.modality, studioForm.destination.model ?? draft.model, studioForm.destination.scene, isFeatureScene(studioForm.destination.scene), draft.references.length, draft.preferredModel) : undefined;
+  const studioModels = studioForm ? creationModels(studioForm.catalog.catalog, draft.modality, studioForm.destination.model ?? draft.model, studioForm.destination, draft.references.length, draft.preferredModel) : undefined;
   const studioAttachableReferences = soundWorkbench
     ? (soundCapability?.input.maxReferences ?? 0)
     : studioForm && studioModels
@@ -560,7 +560,8 @@ export function AssetsPage({ active, hasProject = false, studio, routeId, routeV
     setMobileView('create');
   };
   const blankCanvas = layout === 'canvas' && browser.data?.total === 0 && !placeholderJobs.length && !browser.query && (mediaGenerations || browser.source === 'all');
-  const studioEmpty = studio && (layout === 'canvas' ? <StudioIdeas destination={studio.destination} onPrompt={applyPrompt}
+  const studioEmpty = studio && (layout === 'canvas' ? <StudioIdeas destination={studio.destination} active={active} onPrompt={applyPrompt}
+    featuredExample={draft.guideExample}
     modelName={studioModels?.selected && imageModelLabel(studioModels.selected)} /> : <p className="om-muted">{t('No assets yet')}</p>);
   const history = { tasks, selectedKey, loading: historyLoading, error: historyError, onRetry: () => { setHistoryLoading(true); setHistoryRetry(value => value + 1); }, onSelect: (task: AssetTask) => { tracking.reportAssetsClick('asset_tasks', 'select_task', { task_mode: task.mode }); void selectTask(task); } };
   const taskMenu = <AssetTaskMenu {...history} disabled={selectingTask} />;
@@ -665,7 +666,7 @@ export function AssetsPage({ active, hasProject = false, studio, routeId, routeV
         <Button variant="plain" className="om-nav-item" aria-pressed={!guide} onClick={() => setStudioTab('library')}>{t('Generations')}{activePlaceholderCount > 0 && <span className="om-badge om-tab-count" role="status">{activePlaceholderCount}</span>}</Button>
       </div> : <h2 className="om-subtitle">{t('Generations')}</h2>}{!mediaGenerations && <div className="om-asset-actions">{taskMenu}</div>}</header> : <header className="om-assets-heading"><div><h1 className="om-title">{t(kind === 'trash' ? 'Trash' : 'Workspace assets')}</h1><p className="om-muted">{t('One library for every creation.')}</p></div><div className="om-asset-actions">{taskMenu}<Button variant="ghost" className="om-button h-auto" disabled={uploading} onClick={() => { tracking.reportAssetsClick('assets_library', 'upload'); upload.current?.click(); }}><RemixIcon name="upload-2-line" size={16} />{t(uploading ? 'Uploading…' : 'Upload')}</Button><Button variant="ghost" className="om-button h-auto" data-primary onClick={create}><RemixIcon name="add-line" size={16} />{t('AI Create')}</Button></div></header>}
 
-      {guide && studio ? <StudioIdeas destination={studio.destination} active={active} onPrompt={applyPrompt} /> : studio && (studio.destination.scene.modality === 'image' || studio.destination.scene.modality === 'video') ? (
+      {guide && studio ? <StudioIdeas destination={studio.destination} active={active} onPrompt={applyPrompt} featuredExample={draft.guideExample} /> : studio && (studio.destination.scene.modality === 'image' || studio.destination.scene.modality === 'video') ? (
         <MediaGenerationHistory
           modality={studio.destination.scene.modality}
           browser={browser}

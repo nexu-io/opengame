@@ -1,22 +1,19 @@
 import { Button } from 'open-design-ui/button';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { AccountSummary } from '../../../../shared/provider-directory';
 import { useI18n } from '../../i18n/I18n';
 import { RemixIcon } from '../../icons/RemixIcons';
 import { useAccountSummary } from '../../motion/AccountSettings';
 import { BLACK_FRIDAY_CAMPAIGN, campaignPricingUrl, newCampaignEntryId, useBlackFridayActive } from '../../motion/campaignAttribution';
 import { readAccountPlan, useCheckoutReturnRefresh } from '../../motion/entitlementAttribution';
-import { gatewayRequest } from '../../motion/gatewayClient';
 import { reportEntitlementGateClick, reportEntitlementGateView } from '../../motion/pageTracking';
-import { newTrackingId, send } from '../../motion/reporting';
-import { notifyProvidersChanged } from '../../motion/useProviderDirectory';
-import { copyGamePublishLink, gamePublishActions, useGamePublishSession, type GamePublishSession } from './gamePublishStore';
+import { gamePublishActions, useGamePublishSession, type GamePublishSession } from './gamePublishStore';
 import { GamePublishResultAction } from './GamePublishThread';
 import { ENABLED_PUBLISH_PLATFORMS, GAME_PUBLISH_PLATFORMS, gamePublishPlatform, type GamePublishPlatform, type GamePublishPlatformId } from './platforms';
 import { ChoiceTiles } from '../../components/ui/ChoiceTiles';
 import { PlatformIcon } from '../../../../packages/design-system/react/PlatformIcon';
 import { CompactLink, WechatProgress } from './WechatProgress';
 import { PlatformProgress } from './PlatformStepControls';
+import { useOpenDesignPublishSignIn } from './useOpenDesignPublishSignIn';
 import './gamePublish.css';
 
 type Notify = (message: string, tone?: 'info' | 'error') => void;
@@ -32,7 +29,15 @@ export function GamePublishPanel({ artifactId, coverUrl, onNotify }: {
   onNotify?: Notify;
 }) {
   const { t } = useI18n();
+  const { account, error: accountError } = useAccountSummary();
   const session = useGamePublishSession(artifactId);
+
+  // Resolve any deferred OpenDesign link decision once the account summary resolves or fails, even after panel reopen.
+  useEffect(() => {
+    if (!session?.linkDeferred || (!account && !accountError)) return;
+    gamePublishActions.resolveDeferredLink(artifactId, account?.state === 'signed-in');
+  }, [account, accountError, artifactId, session?.linkDeferred]);
+
   if (!session?.open) return null;
   const platform = gamePublishPlatform(session.platformId);
   const close = () => gamePublishActions.close(artifactId);
@@ -69,7 +74,12 @@ export function GamePublishPanel({ artifactId, coverUrl, onNotify }: {
         })),
       ]}
       onChange={id => {
-        if (id) gamePublishActions.choose(artifactId, id);
+        if (!id) return;
+        if (!account && !accountError) {
+          gamePublishActions.choose(artifactId, id, { deferLink: true });
+          return;
+        }
+        gamePublishActions.choose(artifactId, id, { signedIn: account?.state === 'signed-in' });
       }}
     />
   );
@@ -106,7 +116,7 @@ export function GamePublishPanel({ artifactId, coverUrl, onNotify }: {
       </>
     );
   } else {
-    // Other platforms are guided by the Agent in the conversation too; the panel only shows where things stand.
+    // Non-WeChat platforms render self-contained step cards in the publish thread; the panel tracks live step progress.
     head = header(t(platform.name), { label: t('Platforms'), onClick: () => gamePublishActions.showList(artifactId) });
     body = (
       <>
@@ -144,35 +154,16 @@ export function GamePublishPanel({ artifactId, coverUrl, onNotify }: {
  */
 function OpenDesignChoice({ session, onNotify }: { session: GamePublishSession; onNotify?: Notify }) {
   const { locale, t } = useI18n();
-  const { account, setAccount } = useAccountSummary();
+  const { account, signedIn, authorizing, signingIn, startSignIn: startPanelSignIn } = useOpenDesignPublishSignIn(session.artifactId, onNotify);
   const campaign = useBlackFridayActive();
-  const [signingIn, setSigningIn] = useState(false);
   const [upgradeEntryId, setUpgradeEntryId] = useState(newCampaignEntryId);
   const markCheckoutReturn = useCheckoutReturnRefresh('creative_studio', 'game_publish_unlisted_upgrade');
-  const pendingPublishAfterSignInRef = useRef(false);
-  const prevStateRef = useRef<AccountSummary['state'] | undefined>(undefined);
   const reportedGateRef = useRef<string | null>(null);
 
-  const signedIn = account?.state === 'signed-in';
-  const authorizing = account?.state === 'authorizing';
   const plan = readAccountPlan(account);
   const isFreePlan = signedIn && plan === 'free';
   const isPaidPlan = signedIn && Boolean(plan) && plan !== 'free';
   const needsSignIn = Boolean(account && !signedIn && (session.linkToo || session.linkError?.authRequired));
-
-  // Auto-publish the OpenDesign link once sign-in triggered from this panel finishes,
-  // and clear the pending auto-publish if authorization was cancelled or failed.
-  useEffect(() => {
-    if (prevStateRef.current !== 'signed-in' && signedIn && pendingPublishAfterSignInRef.current) {
-      pendingPublishAfterSignInRef.current = false;
-      notifyProvidersChanged();
-      window.dispatchEvent(new Event('motion:account-changed'));
-      void gamePublishActions.publishLink(session.artifactId);
-    } else if (prevStateRef.current === 'authorizing' && !authorizing && !signedIn) {
-      pendingPublishAfterSignInRef.current = false;
-    }
-    prevStateRef.current = account?.state;
-  }, [account?.state, authorizing, signedIn, session.artifactId]);
 
   // Report gate impression once per distinct state.
   useEffect(() => {
@@ -192,50 +183,6 @@ function OpenDesignChoice({ session, onNotify }: { session: GamePublishSession; 
       });
     }
   }, [needsSignIn, isFreePlan, upgradeEntryId, campaign]);
-
-  async function startPanelSignIn() {
-    const entryId = newTrackingId();
-    reportEntitlementGateClick('creative_studio', 'start_sign_in', 'game_publish_panel_signin', {
-      studio_id: 'game',
-      publish_target: 'game',
-      entry_id: entryId,
-    });
-    setSigningIn(true);
-    pendingPublishAfterSignInRef.current = true;
-    try {
-      const next = await gatewayRequest<AccountSummary>('settings/account/login', 'POST', {
-        hookId: 'game_publish_panel_signin',
-        entryId,
-      });
-      setAccount(next);
-      window.dispatchEvent(new Event('motion:account-changed'));
-      send('web_publish_result', {
-        publish_target: 'game',
-        action: 'sign_in',
-        outcome: next.state === 'signed-in' || next.state === 'authorizing' ? 'success' : 'failure',
-        publish_attempt_id: newTrackingId(),
-        hook_id: 'game_publish_panel_signin',
-        entry_id: entryId,
-      });
-      if (next.state === 'signed-in') {
-        pendingPublishAfterSignInRef.current = false;
-        void gamePublishActions.publishLink(session.artifactId);
-      }
-    } catch {
-      pendingPublishAfterSignInRef.current = false;
-      send('web_publish_result', {
-        publish_target: 'game',
-        action: 'sign_in',
-        outcome: 'failure',
-        publish_attempt_id: newTrackingId(),
-        hook_id: 'game_publish_panel_signin',
-        entry_id: entryId,
-      });
-      onNotify?.(t("Couldn't start OpenDesign sign-in. Try again."), 'error');
-    } finally {
-      setSigningIn(false);
-    }
-  }
 
   function handleUpgradeClick() {
     const clickedId = upgradeEntryId;

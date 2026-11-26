@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rpc, mcpRegistry } from '../mcp.ts';
 import { fixture } from './fixtures.ts';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
+import { createInterface } from 'node:readline';
+import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/server';
 import { cp, mkdtemp, readFile, rm, writeFile, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -157,6 +160,46 @@ test('actual stdio preserves negotiated UI state and disabling template cards re
     assert.equal(responses[1].result.tools.length, disabled ? 40 : 41);
     if (disabled) assert.equal(responses[2].result.structuredContent.error.code, 'MCP_TOOL_NOT_EXPOSED');
     else assert.deepEqual(responses[2].result.structuredContent.cards.map((card: any) => card.templateId), ids);
+  }
+}));
+
+test('actual stdio accepts stateless discovery and request-scoped MCP Apps capabilities', () => fixture(async store => {
+  const child = spawn(process.execPath, ['--experimental-strip-types', 'mcp.ts'], {
+    env: { ...process.env, MOTION_DATA_DIR: store.directory, OPENMOTION_TELEMETRY: '0', OPENMOTION_TEMPLATE_CARDS: '1' },
+    stdio: ['pipe', 'pipe', 'pipe'], timeout: 8_000,
+  });
+  child.stderr.resume();
+  const exit = once(child, 'exit');
+  const output = createInterface({ input: child.stdout });
+  const lines = output[Symbol.asyncIterator]();
+  const version = '2026-07-28';
+  async function request(method: string, params = {}, clientCapabilities = {}) {
+    const input = message(method, { ...params, _meta: {
+      [PROTOCOL_VERSION_META_KEY]: version,
+      [CLIENT_INFO_META_KEY]: { name: 'OpenGame stdio test', version: '1.0.0' },
+      [CLIENT_CAPABILITIES_META_KEY]: clientCapabilities,
+    } });
+    child.stdin.write(JSON.stringify(input) + '\n');
+    const line = await lines.next();
+    assert.equal(line.done, false, `Expected a response to ${method}`);
+    const reply = JSON.parse(line.value);
+    assert.equal(reply.id, input.id);
+    assert.ok(!reply.error, JSON.stringify(reply.error));
+    return reply.result;
+  }
+  try {
+    assert.ok((await request('server/discover')).supportedVersions.includes(version));
+    const list = await request('tools/list', {}, capabilities);
+    assert.ok(list.tools.some((tool: { name: string }) => tool.name === name));
+    const plain = await request('tools/list');
+    assert.ok(!plain.tools.some((tool: { name: string }) => tool.name === name));
+    const selected = await request('tools/call', { name, arguments: { templateIds: ids } }, capabilities);
+    assert.equal(selected.resultType, 'complete');
+    assert.deepEqual(selected.structuredContent.cards.map((card: { templateId: string }) => card.templateId), ids);
+  } finally {
+    child.stdin.end();
+    output.close();
+    await exit;
   }
 }));
 

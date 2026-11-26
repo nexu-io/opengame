@@ -577,7 +577,7 @@ test('gateway runs up to 4 OpenDesign jobs concurrently while keeping BYOK and l
     download: async () => png,
     fetcher: (async (u, init = {}) => {
       const url = String(u);
-      if (url.endsWith('/api/v1/media/models')) {
+      if (/\/api\/v1\/media\/models(?:\?include_audio=true)?$/.test(url)) {
         return Response.json({ models: [{ model: 'seedream-5.0-flash', kind: 'image', capabilities: { edits: true } }] });
       }
       if (url.startsWith('https://queue.fal.run/') && init?.method === 'POST') {

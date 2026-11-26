@@ -317,11 +317,115 @@ ${designAnnotations ? DESIGN_ANNOTATION_BRIDGE + DESIGN_DECK_BRIDGE : ''}
 </script>`;
 }
 
-export function injectPreviewBridgeHtml(rawHtml: Buffer | string, token: string, designAnnotations = false): Buffer {
+export function buildViewportGuardScript(): string {
+  return `<script data-om-viewport-guard>
+(function(){
+  if (window.__omViewportGuardInstalled) return;
+  window.__omViewportGuardInstalled = true;
+  var origAdd = window.addEventListener.bind(window);
+  function readSize() {
+    var w = window.innerWidth || (document.documentElement && document.documentElement.clientWidth) || 0;
+    var h = window.innerHeight || (document.documentElement && document.documentElement.clientHeight) || 0;
+    return [w, h];
+  }
+  var init = readSize();
+  var lastW = init[0];
+  var lastH = init[1];
+  var needsSync = !(lastW > 0 && lastH > 0);
+  var hasResizeListener = false;
+  var replaying = false;
+  var pendingRaf = 0;
+  var replayCount = 0;
+  var MAX_REPLAYS = 6;
+  var seenListeners = typeof WeakSet === 'function' ? new WeakSet() : null;
+
+  function scheduleReplay() {
+    if (replaying || pendingRaf || replayCount >= MAX_REPLAYS) return;
+    var sz = readSize();
+    if (!(sz[0] > 0 && sz[1] > 0)) return;
+    pendingRaf = requestAnimationFrame(function() {
+      pendingRaf = 0;
+      var now = readSize();
+      if (!(now[0] > 0 && now[1] > 0)) return;
+      lastW = now[0];
+      lastH = now[1];
+      replayCount++;
+      replaying = true;
+      try {
+        window.dispatchEvent(new Event('resize'));
+      } finally {
+        replaying = false;
+      }
+    });
+  }
+
+  function noteViewportChange(fromObserver) {
+    var sz = readSize();
+    var w = sz[0], h = sz[1];
+    if (!(w > 0 && h > 0)) {
+      needsSync = true;
+      replayCount = 0;
+      lastW = w;
+      lastH = h;
+      return;
+    }
+    var wasZero = !(lastW > 0 && lastH > 0);
+    var changed = w !== lastW || h !== lastH;
+    if (!changed) return;
+    lastW = w;
+    lastH = h;
+    if (wasZero) {
+      needsSync = true;
+      replayCount = 0;
+      if (fromObserver) scheduleReplay();
+    } else if (!hasResizeListener) {
+      needsSync = true;
+    } else if (!fromObserver) {
+      // A real non-zero resize just delivered to all live listeners; no further boot replay needed.
+      needsSync = false;
+    }
+  }
+
+  origAdd('resize', function() {
+    if (!replaying) noteViewportChange(false);
+  }, true);
+
+  window.addEventListener = function(type, listener, options) {
+    var result = origAdd.apply(window, arguments);
+    if (type === 'resize' && listener && !replaying) {
+      var sz = readSize();
+      if (!hasResizeListener && sz[0] > 0 && sz[1] > 0 && (sz[0] !== lastW || sz[1] !== lastH)) {
+        needsSync = true;
+        lastW = sz[0];
+        lastH = sz[1];
+      }
+      hasResizeListener = true;
+      var trackable = typeof listener === 'function' || typeof listener === 'object';
+      var isNew = !seenListeners || !trackable || !seenListeners.has(listener);
+      if (seenListeners && trackable) seenListeners.add(listener);
+      if (needsSync && isNew && sz[0] > 0 && sz[1] > 0) {
+        scheduleReplay();
+      }
+    }
+    return result;
+  };
+
+  function observeRoot() {
+    if (typeof ResizeObserver !== 'function' || !document.documentElement) return;
+    var ro = new ResizeObserver(function() {
+      noteViewportChange(true);
+    });
+    ro.observe(document.documentElement);
+  }
+  if (document.documentElement) observeRoot();
+  else origAdd('DOMContentLoaded', observeRoot);
+})();
+</script>`;
+}
+
+function injectHeadScriptHtml(rawHtml: Buffer | string, script: string): Buffer {
   const buf = Buffer.isBuffer(rawHtml) ? rawHtml : Buffer.from(rawHtml, 'utf8');
-  if (!isValidPreviewBridgeToken(token)) return buf;
   const html = buf.toString('utf8');
-  const script = buildPreviewBridgeScript(token, designAnnotations);
   let out: string;
   if (/<head\b[^>]*>/i.test(html)) {
     out = html.replace(/<head\b[^>]*>/i, match => `${match}\n${script}`);
@@ -335,4 +439,14 @@ export function injectPreviewBridgeHtml(rawHtml: Buffer | string, token: string,
     out = `${script}\n${html}`;
   }
   return Buffer.from(out, 'utf8');
+}
+
+export function injectViewportGuardHtml(rawHtml: Buffer | string): Buffer {
+  return injectHeadScriptHtml(rawHtml, buildViewportGuardScript());
+}
+
+export function injectPreviewBridgeHtml(rawHtml: Buffer | string, token: string, designAnnotations = false): Buffer {
+  const buf = Buffer.isBuffer(rawHtml) ? rawHtml : Buffer.from(rawHtml, 'utf8');
+  if (!isValidPreviewBridgeToken(token)) return buf;
+  return injectHeadScriptHtml(buf, buildPreviewBridgeScript(token, designAnnotations));
 }

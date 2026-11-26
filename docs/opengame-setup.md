@@ -4,21 +4,36 @@ This guide installs the `nexu-io/opengame` checkout and connects its game tools 
 
 ## Prerequisites
 
-- Git, npm and Node.js **26.11.1** (the CI version). `package.json` declares Node.js 22.18.0 or later.
+- Git, Git LFS, npm and Node.js **26.11.1** (the CI version). `package.json` declares Node.js 22.18.0 or later.
 - A local agent with stdio MCP support for AI-assisted creation. Browsing and playing bundled games does not require an agent connection.
 - Chrome/Chromium for automated game screenshots and play-tests. Video trailers additionally require FFmpeg/ffprobe and the prepared export runtime.
 - Media-provider credentials or an OpenDesign account only when using the corresponding generation or hosting services.
+
+## Install the main OpenGame Skill
+
+Install the main `opengame` Skill once through the official Skills CLI as the first setup step before cloning or configuring MCP:
+
+```sh
+npx --yes skills@1.9.0 add nexu-io/opengame --skill opengame --global --agent AGENT --copy --yes
+```
+
+Use `codex` for Codex and `claude-code` for Claude Code. For DeepSeek Harness (DSH) or any host without a dedicated Skills CLI target, use `universal`. Select only the intended host; for custom or isolated profiles, omit `--global` and run inside that profile or project directory instead of the daily global profile.
+
+Reuse an existing official installation and skip this step if `opengame` is already installed from `nexu-io/opengame` (for example, when setup started from the `opengame` Skill itself). Preserve unrelated Skills, foreign same-name entries, and the CLI's telemetry opt-outs (`DISABLE_TELEMETRY`, `DO_NOT_TRACK`). Setting `OPENMOTION_SKIP_PUBLIC_SKILL=1` skips this optional step. Do not reinstall merely to generate another install event.
+
+A Skills CLI failure or timeout does not block Studio or MCP setup: report it briefly and continue below. Skills CLI installs instructions only; continue the local source installation and stdio MCP setup below in this same conversation.
 
 ## Install and build
 
 ```sh
 git -c filter.lfs.process= -c filter.lfs.smudge= -c filter.lfs.required=false clone --depth 1 --single-branch --branch main https://github.com/nexu-io/opengame.git
 cd opengame
+git lfs install --local --skip-smudge
 npm ci
 npm run build:studio
 ```
 
-The clone command skips optional large LFS media. The game templates and the README screenshots are ordinary Git files. Optional video resources have separate [storage instructions](repository-storage.md).
+The shallow clone includes game source, catalog metadata, covers and the complete Tidebreaker game. Other templates keep binary assets in Git LFS. Studio and MCP fetch the selected template's assets on demand and reuse them in this checkout. To prepare a template for offline use, run `git lfs pull --include="templates/games/<game-id>/**" --exclude=""` from the checkout. Optional videos have separate [storage instructions](repository-storage.md).
 
 ## Start a separate workspace
 
@@ -62,11 +77,11 @@ Use your client's local stdio MCP configuration. The example below is the JSON f
 }
 ```
 
-For Windows JSON, escape backslashes (`C:\\Users\\name\\...`) or use forward slashes. In this example, `opengame` is only the client-side connection label. The current public tool prefix remains **`openmotion_game_*`**, the game Skill remains **`openmotion-game`**, and the resource URI remains **`openmotion://workflow/game/start`**. Renaming these identifiers would prevent discovery or calls from matching this implementation.
+For Windows JSON, escape backslashes (`C:\\Users\\name\\...`) or use forward slashes. In this example, `opengame` is only the client-side connection label. The main entry Skill is **`opengame`** ([`skills/opengame/SKILL.md`](../skills/opengame/SKILL.md)), while the current public tool prefix remains **`openmotion_game_*`**, the specialist game workflow Skill remains **`openmotion-game`**, and the resource URI remains **`openmotion://workflow/game/start`**. Renaming those MCP identifiers would prevent discovery or calls from matching this implementation.
 
 Refresh MCP in the selected client. Ask the agent to discover its tools, read the game workflow resource and inspect the draft you selected. A saved configuration is not proof of an active connection; verify that `openmotion_game_get` can read that draft's exact ID in the intended workspace.
 
-The [game Skill](../skills/openmotion-game/SKILL.md) is also available directly in the checkout. Installing Skill instructions does not install the application or connect MCP. A cloud-only client cannot reach a local stdio process through this configuration.
+Both the [entry Skill](../skills/opengame/SKILL.md) and the [game workflow Skill](../skills/openmotion-game/SKILL.md) are also available directly in the checkout. Installing Skill instructions does not install the application or connect MCP. A cloud-only client cannot reach a local stdio process through this configuration.
 
 ## Create and remix
 
@@ -81,11 +96,18 @@ Validate and play-test it, then give me its local play link.
 
 The game service exposes creation, reading, file edits, metadata, validation, simulation, play-testing, cover capture, status, local publication and gameplay trailers. See the current [tool schemas](../shared/game-tools.ts) for exact names and inputs.
 
+## Staying up to date
+
+When running from a clean Git checkout on `main`, creation and generation calls across OpenGame and OpenMotion (`openmotion_game_create`, `openmotion_create_project`, `openmotion_design_project` with `action: "create"`, `openmotion_capability_run` without `dryRun`, and `openmotion_assets_use` / `openmotion_media_use` with `action: "generate"`) share a single 24-hour check window in `MOTION_DATA_DIR/.update-check.json` and silently apply newer `origin/main` commits before running. Dependencies and Studio assets are rebuilt only when their input fingerprints change, local copies of installed Skills are refreshed, an idle local backend is restarted cleanly on macOS, Linux and Windows (if active work or an unmanaged backend defers restart, `restartDeferred: true` is returned so the updated backend takes effect on the next restart), and any build failure rolls back automatically to the previous commit.
+
+- **Manual update anytime:** run `npm run update` (or `node --experimental-strip-types scripts/update.ts --apply`) from the checkout root. Use `--check` to inspect status without applying changes.
+- **Disable automatic checks:** set `OPENMOTION_AUTO_UPDATE=0` in the MCP server's `env` block. Local edits or non-`main` branches are never overwritten automatically.
+
 ## Generation and sharing
 
 Configure only the providers you intend to use. Available models are discovered from the connected environment; paid image, music or voice generation uses the selected provider or account balance. See the [media workflow](../skills/openmotion-media/SKILL.md).
 
-- **Local publication:** `openmotion_game_publish` lists the game in this workspace's catalog. A localhost URL is only reachable on the machine running it.
+- **Local publication:** `openmotion_game_publish` lists the game in this workspace's catalog. Game tools return an absolute link to this OpenGame instance. A localhost URL is only reachable on the machine running it.
 - **Public sharing:** the separate `openmotion_assets_use` operation with `action: "web_publish"` and `targetKind: "game"` publishes a static snapshot through an authenticated OpenDesign account and hosting workspace. Follow the [game sharing guide](../skills/openmotion-game/references/game-flow.md). Check the returned status and final URL; later local edits do not automatically update a published snapshot.
 - **Multiplayer:** new creation is single-player. Existing local room-based projects keep their local server requirement; static hosting does not deploy that server.
 - **Trailers:** gameplay capture and video export have additional Chrome/FFmpeg/runtime prerequisites. Automated captures do not establish sound quality, real-device performance or human gameplay acceptance.
@@ -99,5 +121,7 @@ Configure only the providers you intend to use. Available models are discovered 
 | A template cannot be edited | Use **Remix** to create an owned draft first. |
 | Play works but automated capture fails | Check Chrome/Chromium availability and loopback access; ordinary play and server-side capture have different requirements. |
 | A shared link still shows the previous version | Publish a new static snapshot through the sharing flow. |
+
+If you or your agent reproduce a bug in setup, template downloads or Studio, we welcome a fix via pull request against `main` in [nexu-io/opengame](https://github.com/nexu-io/opengame). Include the steps to reproduce and how you verified the fix. See the [contribution guide](../CONTRIBUTING.md).
 
 [Back to OpenGame](../README.md)

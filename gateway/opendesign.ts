@@ -1,12 +1,15 @@
 import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Model } from '../shared/gateway.ts';
+import { isSfxModel } from '../shared/audio-kind.ts';
 import { openDesignImageReferenceCap } from '../shared/opendesign-models.ts';
 import { resolveGenerationParameters } from '../shared/generation-options.ts';
 import { apiJson, publicProviderFetch, ProviderError, retryRead, type Fetcher } from './network.ts';
 import type { ProviderAdapter, ProviderContext } from './providers.ts';
 
 export const productionApi = 'https://amr-api.open-design.ai';
+const CLOUD_MODELS_PATH = '/api/v1/media/models?include_audio=true';
+const CLOUD_MODEL_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,179}$/;
 
 /** Custom Cloud gateways keep their existing idempotency protocol. */
 export function mediaSubmitHeaders(baseUrl: string, jobId: string): Record<string, string> {
@@ -17,15 +20,67 @@ export function mediaSubmitHeaders(baseUrl: string, jobId: string): Record<strin
 }
 
 export async function cloudModels(baseUrl: string, key: string, fetcher: Fetcher = publicProviderFetch): Promise<Model[]> {
-  const body = await apiJson(fetcher, baseUrl + '/api/v1/media/models', { headers: { Authorization: `Bearer ${key}` } });
+  const body = await apiJson(fetcher, baseUrl + CLOUD_MODELS_PATH, { headers: { Authorization: `Bearer ${key}` } });
   if (!Array.isArray(body.models)) throw new Error('OpenDesign Cloud catalogue format changed');
-  return body.models.filter((row: any) => typeof row.model === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,179}$/.test(row.model)
-    && ['image', 'video', 'audio', 'audio_speech', 'audio_music'].includes(row.kind)).map((row: any) => ({
+  return body.models.filter((row: any) => typeof row.model === 'string' && CLOUD_MODEL_ID_PATTERN.test(row.model)
+    && ['image', 'video', 'audio', 'audio_speech', 'audio_music', 'audio_sound_effects'].includes(row.kind)).map((row: any) => ({
     id: 'opendesign:' + row.model, provider: 'opendesign', modelId: row.model, label: row.model,
     modality: row.kind.startsWith('audio') ? 'audio' : row.kind,
-    mode: row.kind === 'audio_music' ? 'text-to-audio' : row.kind.startsWith('audio') ? 'text-to-speech' : 'text-to-' + row.kind, source: 'live',
+    mode: row.kind === 'audio_music' || row.kind === 'audio_sound_effects' ? 'text-to-audio' : row.kind.startsWith('audio') ? 'text-to-speech' : 'text-to-' + row.kind, source: 'live',
     ...inputImages(row),
   }));
+}
+
+export type Cloud3dModelEntry = {
+  modelId: string;
+  label: string;
+  capabilities?: Record<string, unknown>;
+  description?: string;
+  tier?: 'flagship' | 'balanced' | 'fast';
+  bestFor?: string[];
+};
+
+const SPATIAL_3D_LABELS: Record<string, string> = {
+  'tripo-3.0': 'Tripo 3D v3 (GLB + PBR + optional rig/retarget)',
+};
+const SPATIAL_WORLD_LABELS: Record<string, string> = {
+  'worldlabs-atlas': 'World Labs Atlas v2 (Scene frames, RGB-D, Splats & Mesh)',
+};
+
+function filterSpatialEntries(
+  models: unknown[],
+  kind: '3d_generations' | 'world_generations',
+  labels: Record<string, string>,
+): Cloud3dModelEntry[] {
+  return models
+    .filter((row: any) => typeof row?.model === 'string' && CLOUD_MODEL_ID_PATTERN.test(row.model) && row.kind === kind)
+    .map((row: any) => ({
+      modelId: row.model,
+      label: labels[row.model] ?? row.model,
+      ...(row.capabilities && typeof row.capabilities === 'object' && !Array.isArray(row.capabilities) ? { capabilities: row.capabilities } : {}),
+    }));
+}
+
+export async function cloudSpatialCatalog(
+  baseUrl: string,
+  bearer: string,
+  fetcher: Fetcher = publicProviderFetch,
+): Promise<{ models3d: Cloud3dModelEntry[]; modelsWorld: Cloud3dModelEntry[] }> {
+  // AMR returns only image/video unless include_audio=true is passed.
+  const body = await apiJson(fetcher, baseUrl + CLOUD_MODELS_PATH, { headers: { Authorization: `Bearer ${bearer}` } });
+  if (!Array.isArray(body.models)) return { models3d: [], modelsWorld: [] };
+  return {
+    models3d: filterSpatialEntries(body.models, '3d_generations', SPATIAL_3D_LABELS),
+    modelsWorld: filterSpatialEntries(body.models, 'world_generations', SPATIAL_WORLD_LABELS),
+  };
+}
+
+export async function cloud3dModels(baseUrl: string, bearer: string, fetcher: Fetcher = publicProviderFetch): Promise<Cloud3dModelEntry[]> {
+  return (await cloudSpatialCatalog(baseUrl, bearer, fetcher)).models3d;
+}
+
+export async function cloudWorldModels(baseUrl: string, bearer: string, fetcher: Fetcher = publicProviderFetch): Promise<Cloud3dModelEntry[]> {
+  return (await cloudSpatialCatalog(baseUrl, bearer, fetcher)).modelsWorld;
 }
 
 /** Edit-capable image models accept references; video models with input images accept a first frame. */
@@ -80,18 +135,24 @@ export const opendesign: ProviderAdapter = {
     const api = ctx.baseUrl + '/api/v1/media';
     const audio = job.modality === 'audio';
     const speech = audio && job.model.mode === 'text-to-speech';
+    const soundEffects = audio && !speech && isSfxModel(job.model);
     let remoteId = job.remoteId;
     if (!remoteId) {
       const parameters = resolveGenerationParameters(job.model, job.parameters, !!ctx.references?.length);
-      const { voice, ...speechOptions } = parameters;
+      const { voice, ...audioOptions } = parameters;
       if (speech && (typeof voice !== 'string' || !voice.trim())) throw new Error('Choose a provider voice ID in parameters.voice');
+      if (soundEffects && job.prompt.trim().length > 450) throw new Error('Sound effects prompt must be at most 450 characters');
       const wireParameters = job.modality === 'image' ? cloudImageParameters(parameters) : parameters;
-      const audioBody = speech ? { voice, parameters: { ...speechOptions, text: job.prompt } } : { parameters: { ...parameters, prompt: job.prompt } };
+      const audioBody = speech
+        ? { voice, parameters: { ...audioOptions, text: job.prompt } }
+        : soundEffects
+          ? { parameters: { ...audioOptions, text: job.prompt } }
+          : { parameters: { ...parameters, prompt: job.prompt } };
       const inputs = audio ? [] : await uploadInputs(fetcher, api, headers, job.id, ctx);
       const images = inputs.length ? { images: job.modality === 'video' ? [{ asset_id: inputs[0], role: 'first_frame' }] : inputs } : {};
       const payload = audio ? { model: job.model.modelId, ...audioBody }
         : { ...wireParameters, model: job.model.modelId, prompt: job.prompt, ...images };
-      const endpoint = audio ? speech ? '/audio/speech' : '/audio/music' : job.modality === 'image' ? inputs.length || Array.isArray(parameters.images) && parameters.images.length ? '/images/edits' : '/images/generations' : '/videos/tasks';
+      const endpoint = audio ? speech ? '/audio/speech' : soundEffects ? '/audio/sound-effects' : '/audio/music' : job.modality === 'image' ? inputs.length || Array.isArray(parameters.images) && parameters.images.length ? '/images/edits' : '/images/generations' : '/videos/tasks';
       const submitted = await apiJson(fetcher, api + endpoint, { method: 'POST', headers: { ...headers, ...mediaSubmitHeaders(ctx.baseUrl, job.id) }, body: JSON.stringify(payload), signal: ctx.signal });
       if (typeof submitted.task_id !== 'string' || !/^[a-zA-Z0-9_-]{1,180}$/.test(submitted.task_id)) throw new Error('OpenDesign Cloud did not return a task ID');
       remoteId = submitted.task_id;

@@ -806,6 +806,7 @@ export async function distributionFiles(profile: string, include: (file: string)
     'scripts/install-onboarding.mjs', 'scripts/inline-onboarding.mjs', 'scripts/codex-host-handoff.mjs', 'scripts/onboarding-catalog.ts', 'scripts/open-template-library.ts', 'scripts/install-library-skill.mjs',
     'scripts/inline-storyboard.mjs', 'mcp-ui/storyboard/inline.css', 'mcp-ui/storyboard/inline.js',
     'scripts/diagnostics.mjs', 'scripts/diagnostic-redaction.mjs', 'scripts/zip.mjs',
+    'scripts/update.ts', 'scripts/source-build-state.mjs',
     'scripts/verify-export.ts', 'scripts/export-adapters.ts', 'scripts/package.ts', 'scripts/distribution.ts', 'scripts/build-template-guide.mjs',
     'scripts/repository-media.ts', 'scripts/prepare-font.ts', 'scripts/font-specimen.ts', 'scripts/build-template-cards.mjs',
     'shared/install-attribution.ts', 'shared/asset-name-ui.json', 'shared/design-mention-titles.zh-CN.json', 'shared/workflow-entry.js', 'shared/inline-video-result.js', 'shared/provider-registry-LICENSE.txt', 'shared/provider-registry-NOTICE.md', 'studio/LICENSE', 'studio/README.md', 'studio/skill-cover-attribution.md', 'template-library/LICENSE', 'shared/editor-launch.pl',

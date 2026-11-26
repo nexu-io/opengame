@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { commitCleanup, finalizeMediaCleanup, prepareMediaCleanup, preparePullRequest, publishMedia, type TreeFile } from '../scripts/prepare-pr-media.ts';
+import { commitCleanup, finalizeMediaCleanup, prepareMediaCleanup, preparePullRequest, publishMedia, readGitTreePair, type GitTreeResponse, type TreeFile } from '../scripts/prepare-pr-media.ts';
 import { pullMedia } from '../scripts/repository-media.ts';
 import { downloadMedia, mediaDigest, mediaKey, mediaOrigin, validateMediaManifest, type MediaLock } from '../shared/repository-media.ts';
 import { refreshManifest } from '../scripts/template-library.ts';
@@ -346,7 +346,7 @@ function mergeState() {
     labels: page([]), latestReviews: page([{ state: 'APPROVED' }]), reviewThreads: page([]),
     commits: { nodes: [{ commit: { oid: sourceSHA, statusCheckRollup: { contexts: page([
       { name: 'standalone', status: 'COMPLETED', conclusion: 'SUCCESS' },
-      { name: 'controls', status: 'COMPLETED', conclusion: 'SUCCESS' },
+      { name: 'controls', status: 'COMPLETED', conclusion: 'SKIPPED' },
     ]) } } }] } };
 }
 
@@ -360,7 +360,10 @@ test('the merge entry waits for new-head CI and then sends only a SHA-guarded Sq
         assert.match(query, /repository\(owner:\$owner,name:\$name\)/);
         assert.deepEqual(variables, { owner: 'nexu-io', name: 'opengame', number: 42 });
         const pr = mergeState();
-        if (++polls === 1) pr.commits.nodes[0].commit.statusCheckRollup.contexts.nodes.pop();
+        if (++polls === 1) {
+          const contexts = pr.commits.nodes[0].commit.statusCheckRollup.contexts;
+          contexts.nodes = contexts.nodes.filter(check => check.name !== 'standalone');
+        }
         return Response.json({ data: { repository: { pullRequest: pr } } });
       }
       assert.equal(url, 'https://api.github.com/repos/nexu-io/opengame/pulls/42/merge');
@@ -371,6 +374,13 @@ test('the merge entry waits for new-head CI and then sends only a SHA-guarded Sq
     },
   });
   assert.equal(polls, 2); assert.equal(waits, 1); assert.equal(merges, 1);
+});
+
+test('a prepared PR can merge when the controls check is absent', () => {
+  const pr = mergeState();
+  const contexts = pr.commits.nodes[0].commit.statusCheckRollup.contexts;
+  contexts.nodes = contexts.nodes.filter(check => check.name !== 'controls');
+  assert.equal(preparedMergeStatus(pr, sourceSHA), 'ready');
 });
 
 test('merge guards stop changed PRs, failed checks, requested changes, conflicts and holds without any merge write', async () => {
@@ -441,4 +451,75 @@ test('both media entry points reject dispatch from another repository or workflo
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /Configure OPENGAME_MEDIA_MAINTAINER_TOKEN|Missing maintainer token/);
   }
+});
+
+test('readGitTreePair walks subtrees when GitHub recursive tree hits the 100k truncation limit', async () => {
+  const blob = (name: string, sha: string, size = 128): TreeFile => ({ path: name, mode: '100644', sha, size, type: 'blob' });
+  const dir = (name: string, sha: string): TreeFile => ({ path: name, mode: '040000', sha, size: 0, type: 'tree' });
+  const fetched: string[] = [];
+  const trees: Record<string, { shallow: TreeFile[]; recursive?: GitTreeResponse }> = {
+    'head-root': {
+      shallow: [blob('repository-media.json', 'm1'), dir('docs', 'docs-same'), dir('library', 'lib-head'), dir('templates', 'tpl-head')],
+      recursive: { truncated: true, tree: [] },
+    },
+    'base-root': {
+      shallow: [blob('repository-media.json', 'm1'), dir('docs', 'docs-same'), dir('library', 'lib-base'), dir('templates', 'tpl-base')],
+      recursive: { truncated: true, tree: [] },
+    },
+    'docs-same': {
+      shallow: [blob('guide.md', 'd1')],
+      recursive: { truncated: false, tree: [blob('guide.md', 'd1')] },
+    },
+    'lib-head': {
+      shallow: [dir('game-previews', 'gp-head')],
+      recursive: { truncated: false, tree: [blob('game-previews/demo.mp4', 'vid1', 2048)] },
+    },
+    'lib-base': {
+      shallow: [],
+      recursive: { truncated: false, tree: [] },
+    },
+    'tpl-head': {
+      shallow: [dir('games', 'games-head')],
+      recursive: { truncated: true, tree: [] },
+    },
+    'tpl-base': {
+      shallow: [dir('games', 'games-base')],
+      recursive: { truncated: true, tree: [] },
+    },
+    'games-head': {
+      shallow: [dir('unchanged-game', 'ug-same'), dir('edited-game', 'eg-head')],
+      recursive: { truncated: true, tree: [] },
+    },
+    'games-base': {
+      shallow: [dir('unchanged-game', 'ug-same'), dir('edited-game', 'eg-base')],
+      recursive: { truncated: true, tree: [] },
+    },
+    'eg-head': {
+      shallow: [blob('big.bin', 'b2', 2 * 1024 * 1024)],
+      recursive: { truncated: false, tree: [blob('big.bin', 'b2', 2 * 1024 * 1024)] },
+    },
+    'eg-base': {
+      shallow: [blob('big.bin', 'b1', 64)],
+      recursive: { truncated: false, tree: [blob('big.bin', 'b1', 64)] },
+    },
+  };
+  const fetcher = async (sha: string, recursive: boolean): Promise<GitTreeResponse> => {
+    fetched.push(`${sha}:${recursive ? 'rec' : 'flat'}`);
+    const entry = trees[sha];
+    assert(entry, 'Unexpected subtree fetch: ' + sha);
+    return recursive && entry.recursive ? entry.recursive : { truncated: false, tree: entry.shallow };
+  };
+  const { head, base } = await readGitTreePair('head-root', 'base-root', fetcher, fetcher);
+  assert(!fetched.some(call => call.startsWith('ug-same:')), 'Unchanged game subtrees should be skipped');
+  assert.deepEqual(head.map(f => f.path).sort(), [
+    'docs/guide.md',
+    'library/game-previews/demo.mp4',
+    'repository-media.json',
+    'templates/games/edited-game/big.bin',
+  ]);
+  assert.deepEqual(base.map(f => f.path).sort(), [
+    'docs/guide.md',
+    'repository-media.json',
+    'templates/games/edited-game/big.bin',
+  ]);
 });

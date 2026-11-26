@@ -1,11 +1,11 @@
 import { onboardingSourceFiles } from '../shared/onboarding-templates.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { zip } from '../scripts/package.ts';
+import { packageModernMcpSdk, zip } from '../scripts/package.ts';
 import { distributionFiles } from '../scripts/distribution.ts';
 import { getWorkflow, workflowRegistry } from '../shared/workflow.ts';
 import { designSystemDocuments, designSystemRuntimeFiles } from '../packages/design-system/index.js';
-import { readFile, readdir, mkdtemp, mkdir, copyFile, rm } from 'node:fs/promises';
+import { readFile, readdir, mkdtemp, mkdir, copyFile, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -107,7 +107,7 @@ test('ZIP stores UTF-8 names and file sizes in local and central headers', () =>
 
 test('source and distribution expose only canonical Skill folders', async () => {
   const { readdir } = await import('node:fs/promises');
-  const core = ['openmotion', 'openmotion-design', 'openmotion-game', 'openmotion-media', 'openmotion-video'];
+  const core = ['opengame', 'openmotion', 'openmotion-design', 'openmotion-game', 'openmotion-media', 'openmotion-video'];
   const library = ['openmotion-ad-script', 'openmotion-adaptive-layout', 'openmotion-ai-assistant-tour', 'openmotion-archive-collage', 'openmotion-article-illustrations', 'openmotion-aurora-gradient', 'openmotion-before-after', 'openmotion-bilingual-captions', 'openmotion-bold-type-poster', 'openmotion-brandkit', 'openmotion-bubble-field', 'openmotion-caption-styling', 'openmotion-card-carousel', 'openmotion-cards-and-text', 'openmotion-chalk-blueprint', 'openmotion-cinematic-logo', 'openmotion-clay-explainer', 'openmotion-color-pop-poster', 'openmotion-content-cover', 'openmotion-coral-title-cards', 'openmotion-corner-frames', 'openmotion-dark-premium-poster', 'openmotion-design-remix', 'openmotion-design-styles', 'openmotion-digital-human-presenter', 'openmotion-doc-promo', 'openmotion-echo-stack-type', 'openmotion-edit-to-script', 'openmotion-editorial-explainer', 'openmotion-editorial-poster', 'openmotion-editorial-webinar', 'openmotion-electric-impact-type', 'openmotion-felt-stop-motion', 'openmotion-flat-beat', 'openmotion-flat-card-explainer', 'openmotion-flat-lay-product', 'openmotion-folder-pop', 'openmotion-footage-to-handpainted', 'openmotion-giant-flip-type', 'openmotion-glitch-logo-sting', 'openmotion-growth-teardown', 'openmotion-hand-drawn-explainer', 'openmotion-hidden-feature-demo', 'openmotion-highlighter-notes', 'openmotion-in-hand-product', 'openmotion-ink-ribbon', 'openmotion-isometric-card-flight', 'openmotion-juicy-splash-poster', 'openmotion-light-shadow-product', 'openmotion-liquid-blob', 'openmotion-liquid-glass-logo', 'openmotion-liquid-logo', 'openmotion-livestream-clips', 'openmotion-magnet-particles', 'openmotion-manifesto-pop', 'openmotion-monochrome-magazine', 'openmotion-motion-graphic-placement', 'openmotion-multi-clips-to-reels', 'openmotion-multicam-edit', 'openmotion-mystery-box-reveal', 'openmotion-neon-outline-type', 'openmotion-nova-intro', 'openmotion-one-bit-dither', 'openmotion-orange-unfiltered', 'openmotion-paper-collage-explainer', 'openmotion-paper-diorama', 'openmotion-paper-map-journey', 'openmotion-paper-stop-motion', 'openmotion-pastel-flat-2d', 'openmotion-pixel-art-explainer', 'openmotion-pop-style', 'openmotion-premium-halo', 'openmotion-presenter-story', 'openmotion-push-in-type', 'openmotion-quantum-particles', 'openmotion-red-pen-archive', 'openmotion-relight-reveal', 'openmotion-retro-flat-scene', 'openmotion-retro-print-poster', 'openmotion-ring-mask-reveal', 'openmotion-runway-rebel', 'openmotion-sale-carousel', 'openmotion-sale-countdown', 'openmotion-sale-promo', 'openmotion-shortlist-shorts', 'openmotion-shot-breakdown', 'openmotion-shutter-bands', 'openmotion-smooth-wipes', 'openmotion-spec-sheet', 'openmotion-splash-float-product', 'openmotion-split-slot-type', 'openmotion-step-by-step-tutorial', 'openmotion-sticker-bounce', 'openmotion-sticker-peel', 'openmotion-storyboard-to-motion', 'openmotion-storybook-myth', 'openmotion-surreal-3d-poster', 'openmotion-talking-head-recreation', 'openmotion-time-freeze', 'openmotion-translucent-glass', 'openmotion-velocity-lines', 'openmotion-video-dubbing', 'openmotion-website-launch', 'openmotion-whiteboard-doodle', 'openmotion-whiteboard-marker', 'openmotion-wireframe-style'];
   assert.deepEqual((await readdir(new URL('../skills/', import.meta.url))).filter(name => !name.startsWith('.')).sort(), core);
   assert.deepEqual((await readdir(new URL('../library/skills/', import.meta.url))).sort(), library);
@@ -115,6 +115,7 @@ test('source and distribution expose only canonical Skill folders', async () => 
     const files = await distributionFiles(profile);
     const roots = [...new Set(files.filter(file => /^(?:library\/)?skills\//.test(file)).map(file => file.split('/').at(file.startsWith('library/') ? 2 : 1)))];
     assert(roots.length >= 4);
+    assert(!roots.includes('opengame') && !roots.includes('openmotion'), 'Entry Skills stay outside runtime package distributions');
     assert(roots.every(name => name?.startsWith('openmotion-')), roots.join(', '));
   }
 });
@@ -173,6 +174,42 @@ test('packaged server imports without local dependencies and captions use the se
       if (captionTracks(enabled.content)[0]?.cueCount !== 0) throw new Error('Packaged empty caption lane failed');
     `;
     const result = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', script], { cwd: extracted, encoding: 'utf8', timeout: 30000 });
+    assert.equal(result.status, 0, result.stderr || result.error?.message);
+  } finally { await rm(extracted, { recursive: true, force: true }); }
+});
+
+test('standalone MCP SDK accepts stateless requests without node_modules', async () => {
+  const extracted = await mkdtemp(path.join(tmpdir(), 'motion-mcp-package-'));
+  try {
+    await mkdir(path.join(extracted, 'shared'));
+    for (const { name, data } of await packageModernMcpSdk()) {
+      await writeFile(path.join(extracted, name), data);
+    }
+    const notices = await readFile(path.join(extracted, 'shared/mcp-modern-sdk.LICENSE.txt'), 'utf8');
+    assert.match(notices, /^@modelcontextprotocol\/core@2\.4\.0$/m);
+    assert.doesNotMatch(notices, /^@modelcontextprotocol\/core@2\.0\.0$/m);
+    await copyFile(new URL('../shared/mcp-modern.ts', import.meta.url), path.join(extracted, 'shared/mcp-modern.ts'));
+    const script = `
+      const { loadModernMcpSdk } = await import('./shared/mcp-modern.ts');
+      const sdk = await loadModernMcpSdk();
+      const version = '2026-07-28';
+      const payload = { jsonrpc: '2.0', id: 1, method: 'server/discover', params: { _meta: {
+        'io.modelcontextprotocol/protocolVersion': version,
+        'io.modelcontextprotocol/clientInfo': { name: 'package-test', version: '1' },
+        'io.modelcontextprotocol/clientCapabilities': {},
+      } } };
+      const request = new Request('http://localhost/mcp', { method: 'POST', headers: {
+        'Content-Type': 'application/json', Accept: 'application/json',
+        'MCP-Protocol-Version': version, 'Mcp-Method': payload.method,
+      } });
+      const response = await sdk.runModernMcpHttp(request, payload, () => sdk.createModernMcpServer({
+        serverInfo: { name: 'openmotion', version: '1' }, capabilities: { tools: {} },
+      }, async () => ({ result: { tools: [] } })));
+      if (response.status !== 200 || !JSON.parse(response.body).result.supportedVersions.includes(version)) {
+        throw new Error(response.body.toString());
+      }
+    `;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { cwd: extracted, encoding: 'utf8', timeout: 30_000 });
     assert.equal(result.status, 0, result.stderr || result.error?.message);
   } finally { await rm(extracted, { recursive: true, force: true }); }
 });

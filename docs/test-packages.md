@@ -1,6 +1,6 @@
 # 本地测试包：默认 npm，完整 ZIP 备用
 
-下列命令在仓库根目录执行。日常测试包由仓库根目录的 `.github/workflows/ci.yml` 构建。迁移基线及历史验收范围见[迁移说明](repository-migration.md)。
+OpenMotion 构建 `@openmotion/app` 测试包。下列本地复现命令在源码仓库根目录执行。OpenGame 的 CI 范围见[迁移说明](repository-migration.md#ci-and-acceptance)。
 
 MCP 公开入口由包内 `shared/mcp-release.json` 固化，详见[一期注册清单](mcp-phase1-tools.md)。`build <target> <release-version> [legacy|phase1]` 将 profile 和工具名写入 `release.json`；默认沿用源码的 phase1，公开11个 motion_ Tool 并包含5个配套 Skill。缺注册时在创建 staging／ZIP 前失败；本次验证的插件 ZIP 不等于各平台完整原生包已重新验收。
 
@@ -8,20 +8,20 @@ MCP 公开入口由包内 `shared/mcp-release.json` 固化，详见[一期注册
 
 ## 手动构建
 
-合入后，在本仓库 → Actions → **Motion standalone checks** → Run workflow 选择 `format`。默认 `npm`，`full` 组装两个已声明目标的完整 ZIP。两种格式共用源码、锁定依赖和unique test versions。
+要构建 npm 测试候选包，选择 `main` 分支、`mode=prepublish` 和 `channel=test`。入口在 [OpenMotion 的 Motion package and release 工作流](https://github.com/nexu-io/openmotion/actions/workflows/motion-publish-test.yml)。完整 ZIP 可按下方命令在本地组装。
 
-`template_environment` selects the configuration platform for either format: `dev` (default in standalone CI, `r.powerformer.net`) or `prod` (`r.open-design.ai`). Local builders accept `--template-env=dev|prod`. The choice is embedded in `shared/template-config.json` and recorded as `templateEnvironment` in the release manifest; Studio and MCP share it. DEV application archives and full ZIP manifests have a `-dev` suffix. This selects the template source, not a publication channel; publishing remains disabled. See [template configuration](template-catalog.md#环境与构建).
+本地构建器通过 `--template-env=dev|prod` 选择模板源。Studio 和 MCP 读取包内的 `shared/template-config.json`，发布清单用 `templateEnvironment` 记录该值。DEV 应用归档和完整 ZIP 清单带有 `-dev` 后缀。见[模板配置](template-catalog.md#环境与构建)。
 
 | 选择 | 构建产物 | 运行时 |
 | --- | --- | --- |
 | `npm`（默认） | Application npm `.tgz` with embedded app/manifest, plus external archive, release record and SHA256 | 目标机按应用 lockfile 安装 npm 依赖；首次需要时下载固定原生工具 |
 | `full`（备用） | Mac arm64 / Windows x64 完整 ZIP、SHA256、`release-<target>.json` | 内置目标平台 Node、生产依赖和原生工具 |
 
-Ordinary builds retain candidate installation-guide artifacts for review; they do not publish npm, Release or R2 objects. 正式候选包和发布流程见[发布手册](release-workflows.md)。两种格式误勾 `publish` 均会失败。本地构建的制品位于 `dist/`，The tgz alone is sufficient for setup; adjacent application/manifest files are evidence and an explicit-manifest fallback. See [installation](npm-installation.md) and [test/stable acceptance](release-guide.md).
+本地构建产物位于 `dist/`。安装只需 `.tgz`，相邻的应用归档和清单可用于核验或显式指定清单安装。见[安装说明](npm-installation.md)和[测试版与稳定版验收](release-guide.md)。
 
-Explicit builds accept stable `MAJOR.MINOR.PATCH` or `MAJOR.MINOR.PATCH-test.N[.N]`. The shared helper selects next-patch `test.<run>.<attempt>` (for example, 0.6.3 → 0.6.4-test.42.1). [Motion package and release](release-workflows.md#1-build) runs from `main`. In `mode=prepublish`, a blank test version uses a short workflow-counter version, for example `0.6.4-test.7` (rerun `0.6.4-test.7.2`). Ordinary check builds retain their workflow-local numbering. To publish a retained candidate, select `mode=publish` and enter its exact version and `candidate_run_id`. All embedded identities agree; output directories cannot be overwritten and source versions do not change. Explicit test npm builds default to DEV and candidate; stable npm builds default to prod and stage. Unversioned and channel/environment-mismatched builds remain private. The backup ZIP builder defaults to prod.
+本地构建接受 `MAJOR.MINOR.PATCH` 或 `MAJOR.MINOR.PATCH-test.N[.N]`。下方复现命令用 `scripts/test-package.mjs version` 生成唯一测试版本。OpenMotion 工作流的 `test` 候选包可以留空版本号，由工作流分配。复用候选包发布时需要准确的版本号和 `candidate_run_id`。见[发布手册](release-workflows.md)。
 
-PR / main 工作流执行清单、类型、Studio 构建与回归、安装/打包测试，以及逐一调用全部 18 个公开注册 Tool 名的真实 ZIP E2E。Linux 是组装与测试环境，不是已支持的用户运行平台。发布工作流在 macOS 和 Windows 验证 npm 候选包安装。完整 ZIP 的最终试装和真实出片仍需在对应系统验收。
+OpenGame 的 PR 和 `main` 检查覆盖源码、Studio 和应用运行时。OpenMotion 发布工作流在 macOS 和 Windows 验证 npm 候选包安装。完整 ZIP 可以在 Linux 组装，最终试装和真实出片需在对应目标系统验收。
 
 ## 固定运行时
 

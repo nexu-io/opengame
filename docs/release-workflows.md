@@ -25,7 +25,7 @@ Keep these control files together:
 - `.github/scripts/motion-release.mjs`, `motion-scan.mjs`, `motion-registry.mjs`, `motion-registry-smoke.mjs`, `motion-release-notes.mjs`, `publish-install-guide.mjs` and `.github/gitleaks.toml`.
 - `scripts/runtime-assets.mjs`, `release-version.mjs`, `install-guide.mjs`, `docs/install.md`, `docs/templates/release-record.md` and `docs/templates/candidate-install.md`.
 
-`docs/install.md` is the single maintained source for source setup, the main Skill installation, npm setup and onboarding. `scripts/install-guide.mjs` omits its marked source-only blocks and fills the released npm identity before publication. The root `install.md` and former onboarding URL only forward to this guide; they contain no separate installation rules.
+`docs/install.md` is the single maintained source for source setup, the main Skill installation, npm setup and onboarding. `scripts/install-guide.mjs` omits its marked source-only blocks and fills the released npm identity before publication. The root `install.md` (which forwards OpenGame users to `docs/opengame-setup.md` and retains the link to `docs/install.md` for legacy OpenMotion releases) and the former onboarding URL contain no separate installation rules.
 
 Protect changes to the trusted control files and `main`; keep default-branch registration aligned. There is no `motion-test-publish` GitHub Environment prerequisite or Review deployments step in this version.
 

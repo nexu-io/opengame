@@ -4,6 +4,7 @@ import { inlineVideoUri, legacyInlineVideoUri } from './shared/inline-video.ts';
 import { publicToolName, legacyToolName, publicToolResult } from './shared/public-names.mjs';
 import { assetReadToolResult } from './shared/asset-library.ts';
 import { createInterface } from 'node:readline';
+import type { JSONRPCMessage, Transport } from '@modelcontextprotocol/server';
 import { readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { WorkspaceStore } from './workspace.ts';
@@ -26,9 +27,12 @@ import { identifyHost, unknownHost } from './tracking/host.ts';
 import type { HostContext } from './tracking/host.ts';
 import { templateCatalogFor } from './prism-templates.ts';
 import { templateConfig } from './shared/template-config.ts';
-import { createMcpClientState, negotiateTemplatePresentation, showTemplateRecommendations, templatePresentationName } from './shared/mcp-template-recommendations.ts';
+import { createMcpClientState, negotiateTemplatePresentation, showTemplateRecommendations, templatePresentationName, templatePresentationUriPrefix } from './shared/mcp-template-recommendations.ts';
 import type { McpClientState } from './shared/mcp-template-recommendations.ts';
 import { gameToolAnnotations } from './shared/game-tools.ts';
+import { hasMcpEnvelope, loadModernMcpSdk, type ModernMcpSdk } from './shared/mcp-modern.ts';
+import { resolvePublicOrigin } from './gateway/agent-runtimes.ts';
+import { compactRuntimeUpdateNotice, maybeAutoUpdateBeforeCreation, shouldAutoUpdateForToolCall, type RuntimeUpdateNotice, type SourceUpdateApplyResult, type SourceUpdateCheckResult } from './shared/source-update.ts';
 
 export function mcpRegistry(profile = releaseProfile) { return createToolRegistry(profile === 'phase1' ? phase1Tools : tools, profile); }
 export const releaseRegistry = mcpRegistry();
@@ -52,15 +56,18 @@ function trackingFor(store: WorkspaceStore) {
 }
 const runtimeRoot = fileURLToPath(new URL('./', import.meta.url));
 const runtimeDirectory = statSync(runtimeRoot);
-const serverIcons = ['light', 'dark'].map(theme => ({
+const serverIcons = (['light', 'dark'] as const).map(theme => ({
   src: 'data:image/svg+xml;base64,' + readFileSync(new URL(`./docs/readme/opendesign-symbol${theme === 'dark' ? '-dark' : ''}.svg`, import.meta.url)).toString('base64'),
   mimeType: 'image/svg+xml', sizes: ['any'], theme,
 }));
 
 export type McpRpcOptions = {
   transport?: 'stdio' | 'http';
+  previewOrigin?: string;
+  stateless?: boolean;
   authorizeToolCall?: (tool: { name: string; annotations?: { readOnlyHint?: boolean } }, args: unknown) => void;
   callPhase1?: (payload: { name: string; arguments: any; trackingHost: HostContext; trackingContext?: string }) => Promise<any>;
+  autoUpdate?: (context: { repoRoot: string; dataDirectory: string; restartBackend: boolean }) => Promise<SourceUpdateCheckResult | SourceUpdateApplyResult>;
 };
 
 export async function rpc(message: any, store = new WorkspaceStore(), registry = releaseRegistry, connection?: { selection: Selection }, clientState?: McpClientState, options?: McpRpcOptions) {
@@ -145,18 +152,54 @@ export async function rpc(message: any, store = new WorkspaceStore(), registry =
   return response;
 }
 
+const baseServerInfo = { name: 'openmotion', title: 'OpenMotion', version: VERSION };
+const appCapability = 'io.modelcontextprotocol/ui';
+const appMimeType = 'text/html;profile=mcp-app';
+
+function configureClient(client: object, profile: string, capabilities: any, state?: McpClientState) {
+  negotiateTemplatePresentation(state, profile, capabilities);
+  videoAppClients.delete(client);
+  const mimeTypes = capabilities?.extensions?.[appCapability]?.mimeTypes;
+  if (profile === 'phase1' && Array.isArray(mimeTypes) && mimeTypes.includes(appMimeType)) videoAppClients.add(client);
+}
+
+export function modernMcpServer(sdk: ModernMcpSdk, store: WorkspaceStore, options: McpRpcOptions = {}) {
+  const discovery = {
+    serverInfo: { ...baseServerInfo, icons: serverIcons },
+    capabilities: { tools: {}, ...(releaseRegistry.profile === 'phase1' ? { resources: {} } : {}) },
+    ...(releaseRegistry.instructions ? { instructions: releaseRegistry.instructions } : {}),
+  };
+  return sdk.createModernMcpServer(discovery, (message, capabilities) => {
+    const clientState = createMcpClientState();
+    const needsPresentation = message.method === 'tools/list' || message.method === 'resources/list'
+      || (message.method === 'tools/call' && publicToolName(message.params?.name) === templatePresentationName)
+      || (message.method === 'resources/read' && typeof message.params?.uri === 'string'
+        && message.params.uri.startsWith(templatePresentationUriPrefix));
+    configureClient(clientState, releaseRegistry.profile, capabilities, needsPresentation ? clientState : undefined);
+    return rpc(message, store, releaseRegistry, { selection: {} }, clientState, { ...options, stateless: true });
+  });
+}
+
+function withPlayableUrl(value: any, origin: string | undefined) {
+  if (!origin || !value || typeof value !== 'object') return value;
+  const absolute = (url: unknown) => typeof url === 'string' && /^\/(?:motion-)?api\/games\//.test(url)
+    ? new URL(url, origin).href : url;
+  const fields = (game: any) => ({
+    ...(typeof game.playUrl === 'string' ? { playUrl: absolute(game.playUrl) } : {}),
+    ...(typeof game.roomInviteUrlPattern === 'string' ? { roomInviteUrlPattern: absolute(game.roomInviteUrlPattern) } : {}),
+  });
+  return { ...value, ...fields(value), ...(value.game && typeof value.game === 'object'
+    ? { game: { ...value.game, ...fields(value.game) } } : {}) };
+}
+
 async function invokeRpc(message: any, store: WorkspaceStore, registry: ReturnType<typeof mcpRegistry>, connection?: { selection: Selection }, host: HostContext = unknownHost, trackingContext?: string, clientState?: McpClientState, options?: McpRpcOptions) {
   if (!message || message.jsonrpc !== '2.0' || typeof message.method !== 'string') return { jsonrpc: '2.0', id: message?.id ?? null, error: { code: -32600, message: 'Invalid request' } };
   if (message.id === undefined) return null;
   const result = (value: unknown) => ({ jsonrpc: '2.0', id: message.id, result: value });
   if (message.method === 'initialize') {
-    negotiateTemplatePresentation(clientState, registry.profile, message.params?.capabilities);
-    const client = clientState ?? connection ?? store;
-    videoAppClients.delete(client);
-    const mimeTypes = message.params?.capabilities?.extensions?.['io.modelcontextprotocol/ui']?.mimeTypes;
-    if (registry.profile === 'phase1' && Array.isArray(mimeTypes) && mimeTypes.includes('text/html;profile=mcp-app')) videoAppClients.add(client);
+    configureClient(clientState ?? connection ?? store, registry.profile, message.params?.capabilities, clientState);
     const protocolVersion = ['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'].includes(message.params?.protocolVersion) ? message.params.protocolVersion : '2025-11-25';
-    return result({ protocolVersion, capabilities: { tools: {}, ...(registry.profile === 'phase1' ? { resources: {} } : {}) }, serverInfo: { name: 'openmotion', title: 'OpenMotion', version: VERSION, ...(protocolVersion === '2025-11-25' ? { icons: serverIcons } : {}) }, instructions: registry.instructions ?? workflowEntryGuide + ' Load only references needed by the current task and reuse already loaded documentId/contentHash. Reuse saved decisions for small edits. OpenMotion wraps Hyperframes Studio and its renderer. Only for tasks that require working in the editor or authoring a project, call openmotion_open_preview, read its pinned authoringGuide and open previewUrl with the host built-in browser before reporting it opened. Author native HTML compositions with seekable GSAP timelines, never custom shot JSON or canvas recording. Read openmotion_get_project before source edits and pass its revision as expectedRevision; inspect lint/timeline afterwards. Only when the user scope includes export/final delivery, query any applicable existing export to avoid duplicate jobs and export the inspected revision in the background, wait for completed, then call openmotion_verify_export with that job ID/revision and the brief audio policy. Separately inspect final visuals, sound and actual player playback before claiming full verification. MCP previewUrl defaults to embed=1; preserve its query and hash. Use sessionUrl or embedded=false only for the full OpenMotion workspace. Do not restart the host Agent or ask users to start a terminal server.' });
+    return result({ protocolVersion, capabilities: { tools: {}, ...(registry.profile === 'phase1' ? { resources: {} } : {}) }, serverInfo: { ...baseServerInfo, ...(protocolVersion === '2025-11-25' ? { icons: serverIcons } : {}) }, instructions: registry.instructions ?? workflowEntryGuide + ' Load only references needed by the current task and reuse already loaded documentId/contentHash. Reuse saved decisions for small edits. OpenMotion wraps Hyperframes Studio and its renderer. Only for tasks that require working in the editor or authoring a project, call openmotion_open_preview, read its pinned authoringGuide and open previewUrl with the host built-in browser before reporting it opened. Author native HTML compositions with seekable GSAP timelines, never custom shot JSON or canvas recording. Read openmotion_get_project before source edits and pass its revision as expectedRevision; inspect lint/timeline afterwards. Only when the user scope includes export/final delivery, query any applicable existing export to avoid duplicate jobs and export the inspected revision in the background, wait for completed, then call openmotion_verify_export with that job ID/revision and the brief audio policy. Separately inspect final visuals, sound and actual player playback before claiming full verification. MCP previewUrl defaults to embed=1; preserve its query and hash. Use sessionUrl or embedded=false only for the full OpenMotion workspace. Do not restart the host Agent or ask users to start a terminal server.' });
   }
   const effectiveRegistry = registry.profile === 'phase1'
     ? createToolRegistry(registry.tools, registry.profile, [
@@ -175,7 +218,7 @@ async function invokeRpc(message: any, store: WorkspaceStore, registry: ReturnTy
     }
     try {
       const uri = message.params?.uri;
-      if (typeof uri === 'string' && uri.startsWith('ui://openmotion/template-recommendations/')) {
+      if (typeof uri === 'string' && uri.startsWith(templatePresentationUriPrefix)) {
         if (!clientState?.presentation || uri !== clientState.presentation.uri) throw new Error('Unknown or unnegotiated UI resource');
         return result({ contents: [clientState.presentation.content] });
       }
@@ -216,7 +259,7 @@ async function invokeRpc(message: any, store: WorkspaceStore, registry: ReturnTy
         const input = normalizeToolInput(definition.inputSchema, rawInput);
         validateInput(definition.inputSchema, input);
         const args = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : input;
-        if (internalName === 'motion_open_preview' && args.target !== 'explore' && args.target !== 'templates' && args.target !== 'providers' && !args.projectId && !args.sessionId && args.action !== 'record_review') args.sessionId = selections.get(store)?.sessionId;
+        if (!options?.stateless && internalName === 'motion_open_preview' && args.target !== 'explore' && args.target !== 'templates' && args.target !== 'providers' && !args.projectId && !args.sessionId && args.action !== 'record_review') args.sessionId = selections.get(store)?.sessionId;
         if (args.sessionId === undefined) delete args.sessionId;
         if (['repository', 'hosted'].includes(templateConfig().source) && ['motion_list_templates', 'motion_get_template', 'motion_list_skills', 'motion_get_skill'].includes(internalName)) {
           const catalog = templateCatalogFor(store.directory);
@@ -226,12 +269,26 @@ async function invokeRpc(message: any, store: WorkspaceStore, registry: ReturnTy
         }
         const transportName = finalVideo ? 'openmotion_get_project' : name;
         const transportArgs = finalVideo ? { projectId: args.projectId, workId: args.workId, includeVideo: true } : args;
+        let runtimeUpdate: RuntimeUpdateNotice | undefined;
+        if (shouldAutoUpdateForToolCall(transportName, transportArgs)) {
+          const restartBackend = !options?.callPhase1 && options?.transport !== 'http';
+          const updateRunner = options?.autoUpdate ?? (!options?.callPhase1 || options?.transport === 'http' ? maybeAutoUpdateBeforeCreation : undefined);
+          if (updateRunner) {
+            const updateOutcome = await updateRunner({ repoRoot: runtimeRoot, dataDirectory: store.directory, restartBackend }).catch(() => undefined);
+            runtimeUpdate = compactRuntimeUpdateNotice(updateOutcome);
+            if (runtimeUpdate && options?.transport === 'http' && !runtimeUpdate.restarted) {
+              runtimeUpdate = { ...runtimeUpdate, restartDeferred: true };
+            }
+          }
+        }
         let raw: any;
         let responseOk = true;
+        let previewOrigin = options?.previewOrigin;
         if (options?.callPhase1) {
           raw = await options.callPhase1({ name: transportName, arguments: transportArgs, trackingHost: host, trackingContext });
         } else {
           const service = await ensureService(store, undefined, transportName), origin = new URL(service.previewUrl).origin;
+          previewOrigin ??= resolvePublicOrigin(origin);
           const response = await fetch(origin + '/motion-api/phase1/call', { method: 'POST', headers: await editorHeaders(store, origin),
             body: JSON.stringify({ name: phase1TransportTool(service, transportName) ?? transportName, arguments: transportArgs,
               trackingHost: host, trackingContext }), signal: AbortSignal.timeout(600_000) });
@@ -239,13 +296,14 @@ async function invokeRpc(message: any, store: WorkspaceStore, registry: ReturnTy
           responseOk = response.ok;
         }
         const normalized = responseOk && transportName === 'openmotion_get_project' && transportArgs.workId ? normalizeInlineResult(raw) : undefined;
-        const value = publicToolResult(normalized?.structuredContent ?? raw);
+        const resultValue = publicToolResult(normalized?.structuredContent ?? raw);
+        const value = responseOk && transportName.startsWith('openmotion_game_') ? withPlayableUrl(resultValue, previewOrigin) : resultValue;
         if (!responseOk) throw Object.assign(new Error(value.error || 'Tool failed'), {
           code: value.code, details: value.runtime, invalid_field: value.invalid_field, validation_rule: value.validation_rule, ...(value.applied === false ? { applied: false } : {}),
         });
         if (finalVideo && (!value.inlineWork?.playable || value.inlineWork.state !== 'completed' || !normalized?._meta?.inlineVideo?.video))
           throw new Error('FINAL_VIDEO_NOT_READY: Display only after the MP4 export completes and passes verification');
-        if (value.projectId && value.sessionId) selections.set(store, { projectId: value.projectId, sessionId: value.sessionId });
+        if (!options?.stateless && value.projectId && value.sessionId) selections.set(store, { projectId: value.projectId, sessionId: value.sessionId });
         if ((internalName === 'motion_assets' || internalName === 'motion_asset_manage') && args.action === 'read') return result(assetReadToolResult(value));
         const { _inlineMedia: legacyMedia, ...visible } = value;
         if (finalVideo) {
@@ -255,8 +313,9 @@ async function invokeRpc(message: any, store: WorkspaceStore, registry: ReturnTy
           return result({ content: [{ type: 'text', text: JSON.stringify(presentation) }], structuredContent: presentation,
             _meta: { ui: { resourceUri: inlineVideoUri } } });
         }
+        const output = runtimeUpdate ? { ...visible, runtimeUpdate } : visible;
         const _inlineMedia = normalized?._meta?.inlineVideo ?? legacyMedia;
-        return result({ content: [{ type: 'text', text: JSON.stringify(visible) }], structuredContent: visible,
+        return result({ content: [{ type: 'text', text: JSON.stringify(output) }], structuredContent: output,
           ...(_inlineMedia ? { _meta: { inlineVideo: _inlineMedia } } : {}) });
       }
       let value;
@@ -295,13 +354,33 @@ if (isMain(import.meta.url)) {
   void syncActiveCodexThreads(store.directory).catch(() => {});
   const connection = sharedEditorEnabled ? { selection: {} } : undefined;
   const clientState = createMcpClientState();
+  const modernTransport: Transport = {
+    async start() {},
+    async close() {},
+    async send(response) { process.stdout.write(JSON.stringify(response) + '\n'); },
+  };
+  let modern: ReturnType<ModernMcpSdk['serveStdio']> | undefined;
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
   for await (const line of lines) {
     if (!line.trim()) continue;
     let response;
-    try { response = await rpc(JSON.parse(line), store, releaseRegistry, connection, clientState); }
+    try {
+      const message: JSONRPCMessage = JSON.parse(line);
+      if (hasMcpEnvelope(message)) {
+        if (!modern) {
+          const sdk = await loadModernMcpSdk();
+          modern = sdk.serveStdio(() => modernMcpServer(sdk, store), {
+            transport: modernTransport, legacy: 'reject', maxSubscriptions: 0,
+          });
+        }
+        modernTransport.onmessage?.(message);
+        continue;
+      }
+      response = await rpc(message, store, releaseRegistry, connection, clientState);
+    }
     catch { response = { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }; }
     if (response) process.stdout.write(JSON.stringify(response) + '\n');
   }
+  await modern?.close();
   await Promise.allSettled([closeTracking(await trackingByStore.get(store)), flushCodexSessionTracking(store.directory)]);
 }

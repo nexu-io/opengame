@@ -200,6 +200,11 @@
   color: var(--motion-success);
 }
 
+.om-mg-status[data-tone="danger"] {
+  background: color-mix(in srgb, var(--motion-danger) 12%, var(--motion-inset));
+  color: var(--motion-danger);
+}
+
 .om-mg-inline-btn {
   margin-left: auto;
   height: auto;

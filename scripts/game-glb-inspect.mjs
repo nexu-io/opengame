@@ -149,10 +149,16 @@ export function inspectGlb(bytes) {
     advisories.push('Uses KHR_draco_mesh_compression; Game Studio sandbox CSP blocks Web Workers (worker-src none), so avoid worker-based Draco decoders.');
   }
 
+  const jointIndices = [...new Set((doc.skins ?? []).flatMap(s => s.joints ?? []))];
+  const boneNames = jointIndices
+    .map(index => doc.nodes?.[index]?.name)
+    .filter(name => typeof name === 'string' && name.trim().length > 0);
+
   return {
     meshes,
     skins: (doc.skins ?? []).map((skin, i) => ({ name: skin.name ?? `skin-${i}`, bones: skin.joints.length })),
-    boneCount: new Set((doc.skins ?? []).flatMap(s => s.joints)).size,
+    boneCount: jointIndices.length,
+    ...(boneNames.length > 0 ? { boneNames } : {}),
     animations: (doc.animations ?? []).map((clip, i) => {
       let minTime = Infinity, maxTime = -Infinity;
       for (const sampler of clip.samplers) for (const time of times(sampler.input)) { minTime = Math.min(minTime, time); maxTime = Math.max(maxTime, time); }
