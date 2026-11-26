@@ -2,7 +2,7 @@
 
 > Repository installation defaults to the [source guide](install.md). Published npm installation is an explicit alternative through the [application guide](install.md). Candidate builds, publication and snapshot recovery use the manual [release workflow](release-workflows.md); merging changes does not publish a package or update hosted guides.
 
-This is the maintainer and tester manual for the application npm format. It defines required checks, not a claim that all platforms or a published registry version have passed. [Installation](npm-installation.md) supplies macOS/PowerShell commands, DEV template setup, host adapters and recovery boundaries. Ordinary CI retains candidate installation instructions for review; npm, R2 and Release publication remain separate controlled actions.
+This is the maintainer and tester manual for the application npm format. It defines required checks, not a claim that all platforms or a published registry version have passed. [Installation](npm-installation.md) supplies macOS/PowerShell commands, DEV template setup, host adapters and recovery boundaries. OpenMotion's manual `prepublish` workflow builds and retains the verified candidate archive (including its candidate-only installation guide) for review; npm, R2 and Release publication remain separate controlled actions.
 
 Stable release owners prepare the exact-version English/Chinese descriptions using the [changelog authoring guide](https://github.com/nexu-io/openmotion/blob/main/docs/CHANGELOG/README.md) before candidate construction. Unreleased copy is a draft; only descriptions at the frozen source SHA for that exact version enter authored stable Notes. Inspect the sealed Notes with the package and record actual acceptance privately. Existing candidates keep their original copy.
 
@@ -75,7 +75,7 @@ Each defect needs exact package/source/OS/host/environment/catalog identity, pro
 
 [docs/install.md](install.md) is the public Agent-facing installation guide and the release generator's source. It contains source setup, the main Skill installation, npm setup and the shared onboarding contract. The generator omits marked source-only instructions, reads the complete npm tgz and its embedded manifest, pins the npm name/version and built source SHA, and records the guide and package hashes. It does not build or publish the application. Root `install.md` only forwards to this maintained guide.
 
-Ordinary npm/DEV CI builds generate a **candidate-only** guide and retain it as an Actions artifact for 14 days. The publisher rejects candidate previews. Public guides require test/DEV or stable/prod identity; private builds cannot produce them.
+OpenMotion's `prepublish` workflow seals the candidate package with its **candidate-only** guide inside the `verified-candidate-*` Actions artifact (retained for 30 days). The publisher rejects candidate previews. Public guides require test/DEV or stable/prod identity; private builds cannot produce them.
 
 Use [Motion package and release](release-workflows.md) from `main`. Start with `prepublish`, select test/DEV or stable/prod, and retain the exact candidate for optional local testing. To publish that candidate, select `publish` and supply its run ID and version. A publishing run without a candidate ID builds and validates once before publication. Snapshot-only recovery remains a separate maintenance entry.
 

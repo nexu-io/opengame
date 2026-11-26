@@ -36,11 +36,9 @@ export function preparedMergeStatus(pr: any, expectedSHA: string): 'ready' | 'wa
   const failed = checks.find((check: any) => check.state === 'FAILURE' || check.state === 'ERROR'
     || ['FAILURE', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE', 'STALE'].includes(check.conclusion));
   assert(!failed, 'CI failed: ' + (failed?.name || failed?.context));
-  // Both trusted CI summaries must register on the new head before it can merge.
-  for (const name of ['standalone', 'controls']) {
-    const check = checks.find((check: any) => (check.name || check.context) === name);
-    if (!check || (check.context ? check.state !== 'SUCCESS' : check.status !== 'COMPLETED' || check.conclusion !== 'SUCCESS')) return 'waiting';
-  }
+  const standalone = checks.find((check: any) => (check.name || check.context) === 'standalone');
+  if (!standalone || (standalone.context ? standalone.state !== 'SUCCESS'
+    : standalone.status !== 'COMPLETED' || standalone.conclusion !== 'SUCCESS')) return 'waiting';
   if (checks.some((check: any) => check.context ? check.state !== 'SUCCESS'
     : check.status !== 'COMPLETED' || !['SUCCESS', 'SKIPPED', 'NEUTRAL'].includes(check.conclusion))) return 'waiting';
   if (pr.reviewDecision === 'CHANGES_REQUESTED') throw new Error('A reviewer requested changes');

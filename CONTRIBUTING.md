@@ -36,11 +36,10 @@ The storage check names any Skill cover media awaiting preparation. If replacing
 previously prepared media, stage the new bytes with `git add -f`. Include media
 attribution with the source.
 
-The distribution job reports the actual compressed default npm package and the
-largest file and directory changes. Growth of 1 MiB raises a warning. The default
-package has a 26 MiB budget. If a feature needs new offline media, list its
-runtime purpose beside its path in `scripts/distribution.ts` and review any
-necessary budget change in the same PR.
+The [OpenMotion release workflow](https://github.com/nexu-io/openmotion/actions/workflows/motion-publish-test.yml)
+owns validation of the published `@openmotion/app` package. If a feature needs
+new offline media in that package, list its runtime purpose beside its path in
+`scripts/distribution.ts` and review any necessary budget change in the same PR.
 
 ## PR workflow
 
@@ -139,7 +138,7 @@ Keep PRs focused and describe the user-visible behavior and actual validation. D
 
 For an agent contribution: read the entry and sources, make the requested change, update the affected guide and [change record](docs/product/changes.md), run the applicable checks, and report the exact result and remaining gaps. Do not treat successful installation, technical rendering and human content acceptance as interchangeable.
 
-Use the PR Actions summary to review new duplicate fragments and unused code or dependencies. The report is advisory. When a confirmed issue needs a separate change, link its source PR from a GitHub issue labeled `maintainability`, describe the impact, and assign an owner. Review open follow-ups in the existing engineering review. Promote repeat findings to a required check only after the rule is explicit and historical PRs show that the check detects it reliably.
+Run `node .github/maintainability/report.mjs` locally when reviewing duplicate fragments or unused code/dependencies. The report is advisory and is not scheduled as a PR CI job. When a confirmed issue needs a separate change, link its source PR from a GitHub issue labeled `maintainability`, describe the impact, and assign an owner. Review open follow-ups in the existing engineering review. Promote repeat findings to a required check only after the rule is explicit and historical PRs show that the check detects it reliably.
 
 Only deliberately public documentation belongs here. Do not commit credentials, internal links, private plans, workstation paths or user projects. Distribution uses the positive list in `scripts/distribution.ts`; newly shipped files require an explicit decision. Preserve all upstream attribution and license notices. Do not add telemetry or publish a package without a separate decision.
 
