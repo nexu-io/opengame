@@ -2,27 +2,27 @@
 
 # Game Review Rubric
 
-Run this before setting `status: "ready"` or publishing. Automated checks raise the floor; headless captures do not replace human play, physical GPU/touch performance, or audible review.
+Run this before setting `status: "ready"` or publishing. Automated checks raise the floor; headless captures do not replace human play, real GPU/touch performance, or audible review.
 
 ## 1. Mechanical & Functional Gate (Fix Every Failure Before `ready`)
 
 1. **Zero starter residue:** No leftover starter copy/titles (`TODO`, `lorem`, empty `src=""`, or default placeholder theme).
-2. **Entry & viewport fit (`100dvh`):** Full-viewport playfield with no landing-page layout beside a boxed canvas. Lightweight 2D/arcade games play from frame one; heavy-asset/atmospheric 3D builds using a loading cover must show real progress, block gameplay inputs while loading, enter cleanly via `#start`, and completely remove/hide the cover overlay on entry.
-3. **Readability & style cohesion:** Clear figure-ground separation (environment < obstacles < hero & hazards/objectives), consistent rendering medium (no live-action DSLR photos pasted onto 2D/anime canvases), and no glaring visual fidelity cliff between hero anchors and primary-sightline neighbors.
-4. **Assets complete & clean:** Every used asset in `design/assets.csv` loads with zero 404/network errors in playtest; generated/imported library assets use complete literal `/motion-api/assets/<assetId>/versions/<versionId>/media` URLs (never dynamic concatenation); 3D `.glb` assets checked with `scripts/game-glb-inspect.mjs` (scale, grounding, `alphaMode: BLEND`, payload share).
-5. **Multimodal-first honoured:** When fitting models are available and approved, real generated/imported assets appear inside active gameplay/character scenes (not title-only); any fallback records the concrete blocker in `design/plan.md`.
+2. **Entry & viewport fit (`100dvh`):** Full-viewport playfield with no landing-page layout beside a boxed canvas. Lightweight 2D/arcade games play from frame one; heavy-asset 3D builds using a loading cover must show real progress, block gameplay inputs while loading, enter via `#start`, and remove/hide the cover completely on entry.
+3. **Readability & style cohesion:** Clear figure-ground separation (`ground < obstacles < hero & signals`), consistent rendering medium, and no glaring fidelity cliff between hero anchors and primary-sightline neighbors.
+4. **Assets complete & clean:** Zero 404/network errors in playtest; library assets use literal `/motion-api/assets/<assetId>/versions/<versionId>/media` URLs; 3D `.glb` assets inspected via `version.result.glb` / `scripts/game-glb-inspect.mjs`.
+5. **Multimodal-first honoured:** When fitting models are available and approved, real generated/imported assets appear inside active gameplay (not title-only); record any fallback reason in `design/assets.csv`.
 6. **Verification matched to architecture:**
-   - `openmotion_game_validate` passes with zero blocking diagnostics.
-   - Rule/score/puzzle/card games using `logic.js`: 3-tier `openmotion_game_simulate` passes (`reference` wins, degraded struggles, `idle` loses cleanly).
-   - All games (and primary for `realtime-3d` / `sandbox-explore`): `openmotion_game_playtest` passes all assertions including **`window.__omGame.runSelfTests()`** invariants, multi-point `{ type: "screenshot", label }` visual inspection, **multi-frame motion stability sampling** on 3D action games (bounded per-frame camera/yaw step with zero spin-jitter or 120 Hz micro-stutter), and zero horizontal overflow at `390×844` under peak HUD density.
-7. **Visual Critique & Focused Polish Pass (`Full Track` / `realtime-3d`):** Never ship a high-craft `realtime-3d` game on the first working capture alone. Inspect the playtest contact sheet against `design/style.md` across 5 universal pillars — if any pillar visibly underperforms, run one focused polish pass and re-verify:
-   - *Lighting, Atmosphere & Post-Processing:* Lighting, fog, skybox/IBL, and selective HDR bloom (when atmospheric/emissive) match `design/style.md` with clear figure-ground depth and zero GLSL `NaN` artifacts (never flat washed-out raw lighting when moody or cinematic mood is called for).
-   - *Pose, Animation & Readability:* Characters/vehicles read clearly from gameplay camera (including rear-view contrast in third-person games) with smooth `Quaternion.slerp` / clip blending and grounded stances — never upright A-pose puppets or detached floating weapons beside hanging arms (see [game-3d-animation.md](game-3d-animation.md)).
-   - *Material & Landmark Parity:* Held gear, vehicles, and primary-sightline landmarks match hero PBR fidelity via 3D GLBs or textured metallic/roughness PBR maps (never giant flat single-color primitive extrusions next to sculpted PBR characters).
-   - *Action Feedback & Juice:* Core interactions read unmistakably in live frames (trails, circular radial sparks with `fog: false`, impact hit-stop/decals, or genre-appropriate kinetic feedback).
-   - *Multi-Frame Motion Stability:* Bounded per-frame yaw/camera deltas during movement/turning with zero spin-jitter or 120 Hz stutter.
-8. **Audio, fallbacks & accessibility:** User-gesture AudioContext unlock, responsive SFX **and** a looping BGM bed (generated via OpenMotion media when usable, or synthesized WebAudio fallback — unless silence was explicitly requested), mute toggle controlling both SFX and BGM, playable muted, graceful asset-load fallbacks (never blanking gameplay), `prefers-reduced-motion` respect (no > 3 Hz full-screen flashes), and touch controls (≥ 48–56 px targets).
-9. **Metadata, cover & licenses:** Game-only 1280×720 cover captured via `openmotion_game_capture_cover` (never user's visible browser/desktop; never stuck on a loading frame), concise English + `zh-CN` metadata via `openmotion_game_update_meta`, and preserved `vendor/` / `characters/` licenses.
+   - `openmotion_game_validate` passes with zero blocking diagnostics (and resolve any 3D kinematics static warnings).
+   - Games using `logic.js`: 3-tier `openmotion_game_simulate` passes (`reference` wins, degraded struggles, `idle` loses cleanly).
+   - All games (primary for `realtime-3d` / `sandbox-explore`): `openmotion_game_playtest` passes all assertions — `window.__omGame.runSelfTests()`, `stats.kinematics` stability assertions on 3D humanoid builds, multi-point `{ type: "screenshot" }` + `{ type: "burst" }` motion inspection, and zero horizontal overflow at `390×844` under peak HUD density.
+7. **Visual Critique & Focused Polish Pass (`Full Track` / `realtime-3d`):** Inspect the first passing contact sheet against `design/style.md` across 5 pillars and run one focused polish pass if any underperforms:
+   - *Lighting & Atmosphere:* Style-matched key/fill/fog/IBL, selective bloom where fitting, zero GLSL `NaN` artifacts.
+   - *Pose, Rig & Smooth Motion:* Native Mixamo clips and/or `vendor/HumanoidRigController.js` driving grounded stances, real hand-socket weapons, smooth `Quaternion.slerp`, and clean `burst` motion continuity — no upright A-pose puppets, 30 Hz leg flicker, or 1-frame limb snaps ([game-3d-animation.md](game-3d-animation.md)).
+   - *Material & Landmark Parity:* Held gear and primary-sightline props match hero PBR fidelity (no flat single-color extrusions beside sculpted PBR characters).
+   - *Action Feedback:* Crisp trails, radial sparks (`fog: false`), hit-stop/recoil, and reciprocal hit reactions.
+   - *Camera Stability:* Smooth follow/lookAt damping, bounded yaw deltas, unobstructed sightlines in close quarters.
+8. **Audio & accessibility:** User-gesture AudioContext unlock, responsive SFX **and** a looping BGM bed (generated or WebAudio fallback unless silence was requested), mute toggle for both, playable muted, graceful asset-load fallbacks, `prefers-reduced-motion` respect (no > 3 Hz full-screen flashes), and touch controls (≥ 48–56 px targets).
+9. **Metadata, cover & licenses:** Game-only 1280×720 cover via `openmotion_game_capture_cover`, concise English + `zh-CN` metadata via `openmotion_game_update_meta`, and preserved `vendor/` / `characters/` licenses.
 
 ## 2. Playable-Ad Addendum
 

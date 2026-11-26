@@ -7,7 +7,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { deflateSync } from 'node:zlib';
 import { browserExecutable } from '../browser.ts';
-import { GameProjects, buildPlaytestContactSheet, gamePlaytestAssertions, normalizeSelfTestAssertions, validateGameScript } from '../game-projects.ts';
+import { GameProjects, buildPlaytestContactSheet, gamePlaytestAssertions, inspect3dKinematicsWarnings, normalizeKinematicsAssertions, normalizeSelfTestAssertions, validateGameScript } from '../game-projects.ts';
 import { AssetLibrary } from '../gateway/asset-library.ts';
 import { assetOperation } from '../gateway/asset-operations.ts';
 import { readLibraryAsset } from '../gateway/asset-read.ts';
@@ -281,7 +281,7 @@ btn.addEventListener('click', () => { phase = 'explore'; cover.remove(); });
 addEventListener('keydown', e => { if (phase === 'explore' && (e.key === 'd' || e.key === 'D')) px += 2; });
 window.__omGame = {
   getState: () => ({ selfId: 'p1', phase, diagnosticStage, players: { p1: { connected: true, x: px, z: 0 } } }),
-  getStats: () => ({ drawCalls: 1, triangles: 240, entities: 1 }),
+  getStats: () => ({ drawCalls: 1, triangles: 240, entities: 1, kinematics: { hero: { frames: 20, walkZeroFlips: 0, maxBoneStepRad: 0.12, maxYawStepRad: 0.08 } } }),
   sendAction: (action) => {
     if (action?.type === 'setStage' && typeof action.stage === 'string') {
       diagnosticStage = action.stage;
@@ -306,14 +306,17 @@ window.__omGame = {
         { type: 'key', key: 'd', event: 'press' },
         { type: 'wait', ms: 80 },
         { type: 'screenshot', label: 'boss_phase2' },
+        { type: 'burst', count: 2, intervalMs: 60, label: 'motion' },
       ]],
     });
     const client = result.clients[0];
     assert.deepEqual(client.consoleErrors, []);
     assert.deepEqual(client.failedRequests, []);
-    assert.equal(client.screenshots?.length, 2);
+    assert.equal(client.screenshots?.length, 4);
     assert.equal(client.screenshots?.[0].label, 'after_entry');
     assert.equal(client.screenshots?.[1].label, 'boss_phase2');
+    assert.equal(client.screenshots?.[2].label, 'motion_1');
+    assert.equal(client.screenshots?.[3].label, 'motion_2');
     assert.equal(client.authoritative?.state?.diagnosticStage, 'boss_phase2');
     assert.equal(client.authoritative?.stats?.drawCalls, 1);
     if (client.contactSheetPath) {
@@ -321,6 +324,8 @@ window.__omGame = {
       assert.ok(sheetBytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])), 'contactSheetPath should be a valid PNG');
       assert.match(client.contactSheetLegend ?? '', /r1c1=after_entry/);
       assert.match(client.contactSheetLegend ?? '', /r1c2=boss_phase2/);
+      assert.match(client.contactSheetLegend ?? '', /r2c1=motion_1/);
+      assert.match(client.contactSheetLegend ?? '', /r2c2=motion_2/);
     }
     const missingSheet = await buildPlaytestContactSheet(client.screenshots!, path.join(service.root, 'missing-sheet.png'), {
       ffmpeg: '/nonexistent/ffmpeg-binary',
@@ -328,6 +333,9 @@ window.__omGame = {
     assert.equal(missingSheet, null, 'buildPlaytestContactSheet should degrade gracefully when ffmpeg is unavailable');
     assert.equal(client.assertions.find((a: any) => a.name === 'phase')?.passed, true);
     assert.equal(client.assertions.find((a: any) => a.name === 'scriptedMovement')?.passed, true);
+    assert.equal(client.assertions.find((a: any) => a.name === 'kinematics:hero:noWalkFlicker')?.passed, true);
+    assert.equal(client.assertions.find((a: any) => a.name === 'kinematics:hero:smoothBoneMotion')?.passed, true);
+    assert.equal(client.assertions.find((a: any) => a.name === 'kinematics:hero:smoothYaw')?.passed, true);
     assert.equal(client.assertions.find((a: any) => a.name === 'selfTest:coverUnmounted')?.passed, true);
     assert.equal(client.assertions.find((a: any) => a.name === 'selfTest:finitePos')?.passed, true);
   });
@@ -495,4 +503,282 @@ test('Option B + H4: AssetLibrary imports/reads local .glb, buildPublishBundle o
       if (prevCwebp === undefined) delete process.env.CWEBP_PATH; else process.env.CWEBP_PATH = prevCwebp;
       if (prevFfmpeg === undefined) delete process.env.HYPERFRAMES_FFMPEG_PATH; else process.env.HYPERFRAMES_FFMPEG_PATH = prevFfmpeg;
     }
+  }));
+
+test('H5: HumanoidRigController eliminates 30Hz leg flicker, 1-frame joint snaps, over-extended IK and hand-socket scale drift', async () => {
+  const T = await import('../templates/game-kits/vendor/three.module.min.js');
+  const { createHumanoidRig, sampleActionCurve, shortestAngleDelta } = await import('../templates/game-kits/vendor/HumanoidRigController.js');
+
+  // Build a synthetic Mixamo-style humanoid skeleton with rotated rest quaternions (like Tripo Mixamo GLBs).
+  const scene = new T.Group();
+  const rootBone = new T.Bone(); rootBone.name = 'Root'; rootBone.quaternion.set(-0.5, 0.5, 0.5, 0.5);
+  const hips = new T.Bone(); hips.name = 'mixamorig:Hips'; hips.position.set(0, 0, 0.54); hips.quaternion.set(0.493, -0.493, -0.456, 0.554).normalize();
+  const spine = new T.Bone(); spine.name = 'mixamorig:Spine'; spine.position.set(0, 0.05, 0); spine.quaternion.set(0, 0.671, 0, 0.742).normalize();
+  const spine1 = new T.Bone(); spine1.name = 'mixamorig:Spine1'; spine1.position.set(0, 0.07, 0);
+  const spine2 = new T.Bone(); spine2.name = 'mixamorig:Spine2'; spine2.position.set(0, 0.07, 0);
+  const head = new T.Bone(); head.name = 'mixamorig:Head'; head.position.set(0, 0.11, 0);
+  const lSh = new T.Bone(); lSh.name = 'mixamorig:LeftShoulder'; lSh.position.set(0.06, 0.06, 0);
+  const lArm = new T.Bone(); lArm.name = 'mixamorig:LeftArm'; lArm.position.set(0.08, 0, 0);
+  const lFore = new T.Bone(); lFore.name = 'mixamorig:LeftForeArm'; lFore.position.set(0.06, -0.14, 0);
+  const lHand = new T.Bone(); lHand.name = 'mixamorig:LeftHand'; lHand.position.set(0.05, -0.13, 0);
+  const rSh = new T.Bone(); rSh.name = 'mixamorig:RightShoulder'; rSh.position.set(-0.06, 0.06, 0);
+  const rArm = new T.Bone(); rArm.name = 'mixamorig:RightArm'; rArm.position.set(-0.08, 0, 0);
+  const rFore = new T.Bone(); rFore.name = 'mixamorig:RightForeArm'; rFore.position.set(-0.06, -0.14, 0);
+  const rHand = new T.Bone(); rHand.name = 'mixamorig:RightHand'; rHand.position.set(-0.05, -0.13, 0);
+  const lUp = new T.Bone(); lUp.name = 'mixamorig:LeftUpLeg'; lUp.position.set(0.05, 0, -0.05); lUp.quaternion.set(0.648, -0.186, 0.738, 0.005).normalize();
+  const lLeg = new T.Bone(); lLeg.name = 'mixamorig:LeftLeg'; lLeg.position.set(0, 0.27, 0);
+  const lFoot = new T.Bone(); lFoot.name = 'mixamorig:LeftFoot'; lFoot.position.set(0, 0.25, 0);
+  const rUp = new T.Bone(); rUp.name = 'mixamorig:RightUpLeg'; rUp.position.set(-0.05, 0, 0.05); rUp.quaternion.set(0.672, -0.058, 0.725, 0.14).normalize();
+  const rLeg = new T.Bone(); rLeg.name = 'mixamorig:RightLeg'; rLeg.position.set(0, 0.27, 0);
+  const rFoot = new T.Bone(); rFoot.name = 'mixamorig:RightFoot'; rFoot.position.set(0, 0.25, 0);
+
+  rootBone.add(hips);
+  hips.add(spine, lUp, rUp);
+  spine.add(spine1); spine1.add(spine2); spine2.add(head, lSh, rSh);
+  lSh.add(lArm); lArm.add(lFore); lFore.add(lHand);
+  rSh.add(rArm); rArm.add(rFore); rFore.add(rHand);
+  lUp.add(lLeg); lLeg.add(lFoot);
+  rUp.add(rLeg); rLeg.add(rFoot);
+  scene.add(rootBone);
+
+  // Include an opaque mesh mistakenly flagged transparent=true (GLB alphaMode: BLEND trap).
+  const bodyMat = new T.MeshStandardMaterial({ transparent: true, opacity: 1, depthWrite: false });
+  const bodyMesh = new T.Mesh(new T.BoxGeometry(0.4, 1.0, 0.2), bodyMat);
+  bodyMesh.name = 'HeroRobe';
+  bodyMesh.position.y = 0.5;
+  scene.add(bodyMesh);
+
+  // Track uses sanitized/variant Mixamo name (`mixamorigSpine`) against colon-named bone (`mixamorig:Spine`).
+  const idleTrack = new T.QuaternionKeyframeTrack('mixamorigSpine.quaternion', [0, 0.5, 1], [0, 0.671, 0, 0.742, 0.12, 0.665, 0, 0.737, 0, 0.671, 0, 0.742]);
+  const idleClip = new T.AnimationClip('preset:idle', 1, [idleTrack]);
+  const slashClip = new T.AnimationClip('preset:slash', 0.6, [idleTrack]);
+
+  const rig = createHumanoidRig({ scene, animations: [idleClip] }, { height: 2.0, name: 'boss' });
+  assert.equal(rig.metrics.boneCount, 20);
+  assert.ok(rig.bones.RightHand && rig.bones.Spine && rig.bones.LeftUpLeg);
+  assert.equal(rig.hasNativeClips, true);
+  assert.deepEqual(rig.addClips([slashClip], { 0: 'slash' }), ['slash']);
+  assert.ok(rig.playClip('idle'));
+  const spineBeforeClip = rig.bones.Spine.quaternion.clone();
+  rig.update(0.25);
+  assert.ok(rig.bones.Spine.quaternion.angleTo(spineBeforeClip) > 0.01, 'Cross-named Mixamo track must animate target bone');
+  assert.ok(rig.playClip('slash', { loop: false, fade: 0.1 }));
+
+  // Opaque BLEND material trap is hardened automatically.
+  let hardenedOpaque = false;
+  rig.model.traverse((obj: any) => {
+    if (obj.name === 'HeroRobe') hardenedOpaque = obj.material.transparent === false && obj.material.depthWrite === true;
+  });
+  assert.equal(hardenedOpaque, true);
+
+  // Real bone-socket mounting preserves real-world 1.0m weapon scale despite 2.0x model scale.
+  const dao = new T.Group();
+  const tip = new T.Object3D();
+  tip.position.set(0, 1.0, 0);
+  dao.add(tip);
+  assert.ok(rig.attachToBone('RightHand', dao));
+  const handPos = rig.getSocketWorldPosition('RightHand');
+  const tipPos = tip.getWorldPosition(new T.Vector3());
+  assert.ok(Math.abs(handPos.distanceTo(tipPos) - 1.0) < 0.02, `Expected ~1.0m weapon length, got ${handPos.distanceTo(tipPos)}`);
+
+  // Stop clips to stress-test procedural IK + 30Hz logic stepping under 120Hz rendering + abrupt pose/yaw snaps.
+  rig.stopClips(0);
+  rig.syncTransform(0, 0, 0, 0, 0, { immediate: true });
+  rig.update(0, { immediate: true, spineX: 0.15, crouch: 0.08, rightHand: [-0.4, 1.15, 0.3] });
+  rig.resetTelemetry();
+
+  let logicX = 0;
+  let acc = 0;
+  for (let frame = 0; frame < 120; frame++) {
+    const dt = 1 / 120;
+    acc += dt;
+    while (acc >= 1 / 30) {
+      logicX += 0.11;
+      acc -= 1 / 30;
+    }
+    rig.syncTransform(logicX, 0, 0, frame >= 60 ? Math.PI : 0, dt);
+    const pose = frame < 40
+      ? { spineX: 0.16, spineY: -0.2, crouch: 0.08, rightHand: [-0.4, 1.15, 0.3] }
+      : frame < 80
+        ? { spineX: -0.2, spineY: 0.35, crouch: 0.03, rightHand: [-0.1, 2.5, 1.2] } // intentionally far beyond reach
+        : { spineX: 0.35, spineY: -0.3, crouch: 0.14, rightHand: [0.5, 0.9, 1.0] };
+    rig.update(dt, pose);
+  }
+
+  const telemetry = rig.getTelemetry();
+  assert.equal(telemetry.walkZeroFlips, 0, '30Hz logic at 120Hz render must never flicker walk01 to zero');
+  assert.ok(telemetry.maxBoneStepRad <= 0.65, `Bone step ${telemetry.maxBoneStepRad} exceeded 0.65 rad/frame`);
+  assert.ok(telemetry.maxYawStepRad <= 0.45, `Yaw step ${telemetry.maxYawStepRad} exceeded 0.45 rad/frame`);
+  assert.ok(telemetry.overExtendedIkCount > 0, 'Expected over-extended IK targets to be counted and clamped');
+  assert.ok(Number.isFinite(rig.getSocketWorldPosition('RightHand').x));
+
+  // Verify shortestAngleDelta wrap-around and asymmetric 3-beat action curve.
+  assert.ok(Math.abs(shortestAngleDelta(Math.PI * 0.95, -Math.PI * 0.95) - Math.PI * 0.1) < 1e-6);
+  assert.equal(sampleActionCurve(0.15).phase, 'anticipation');
+  assert.equal(sampleActionCurve(0.36).phase, 'strike');
+  assert.equal(sampleActionCurve(0.75).phase, 'followThrough');
+
+  // Regression: angular velocity clamp must advance by ~maxStepRad instead of freezing at 0 when stepAngle > maxStepRad.
+  rig.stopClips(0);
+  rig.update(0, { immediate: true, spineX: 0 });
+  const spineBeforeClamp = rig.bones.Spine.quaternion.clone();
+  const clampResult = rig.update(1 / 30, { spineX: 1.5, rate: 80, maxStepRad: 0.12 });
+  const spineMoved = spineBeforeClamp.angleTo(rig.bones.Spine.quaternion);
+  assert.ok(spineMoved > 0.08 && spineMoved <= 0.125, `Expected clamped bone to advance ~0.12 rad, moved ${spineMoved}`);
+  assert.ok(clampResult.frameMaxBoneStep > 0.08 && clampResult.frameMaxBoneStep <= 0.125);
+
+  // Regression: playOnce auto-returns to prior looping clip, and holdEnd keeps clamped end pose without resetting to rest.
+  const qIdle = new T.Quaternion().setFromEuler(new T.Euler(0.05, 0, 0));
+  const qAttack = new T.Quaternion().setFromEuler(new T.Euler(0.6, 0, 0));
+  const qFall = new T.Quaternion().setFromEuler(new T.Euler(1.1, 0, 0));
+  const makeTrack = (q: any) => new T.QuaternionKeyframeTrack('mixamorig:Spine.quaternion', [0, 0.2], [
+    q.x, q.y, q.z, q.w, q.x, q.y, q.z, q.w,
+  ]);
+  rig.addClips([
+    new T.AnimationClip('preset:idle', 0.2, [makeTrack(qIdle)]),
+    new T.AnimationClip('preset:attack', 0.2, [makeTrack(qAttack)]),
+    new T.AnimationClip('preset:fall', 0.2, [makeTrack(qFall)]),
+  ]);
+  assert.ok(rig.playClip('idle', { fade: 0 }), 'resolveClipName should match preset:idle via "idle"');
+  rig.update(0.05);
+  assert.ok(rig.playOnce('attack', { fade: 0, returnFade: 0 }));
+  for (let i = 0; i < 10; i++) rig.update(0.05);
+  assert.equal(rig.activeClip, 'preset:idle', 'playOnce should automatically return to prior looping clip');
+
+  assert.ok(rig.playOnce('fall', { fade: 0, holdEnd: true }));
+  for (let i = 0; i < 12; i++) rig.update(0.05);
+  assert.equal(rig.activeClip, 'preset:fall');
+  assert.ok(rig.bones.Spine.quaternion.angleTo(qFall) < 0.05, 'holdEnd clip must stay clamped at end pose instead of resetting to rest');
+  assert.ok(rig.getTelemetry().clipPlayedFrames >= 20);
+
+  // Cross-skeleton retargeting: transfer real bundled CC0 Knight.glb clips (KayKit T-pose) onto synthetic Mixamo rig.
+  const { GLTFLoader } = await import('../templates/game-kits/vendor/GLTFLoader.js');
+  (globalThis as any).self ??= globalThis;
+  const knightBuf = await readFile(new URL('../templates/game-kits/characters/Knight.glb', import.meta.url));
+  const knightAb = knightBuf.buffer.slice(knightBuf.byteOffset, knightBuf.byteOffset + knightBuf.byteLength);
+  const knightGltf: any = await new Promise((resolve, reject) => new GLTFLoader().parse(knightAb, '', resolve, reject));
+  const retargetedNames = rig.retargetClipsFrom(knightGltf, { names: ['Running_A', 'Death_A'], fps: 20 });
+  assert.deepEqual(retargetedNames.sort(), ['Death_A', 'Running_A']);
+  assert.ok(rig.playClip('Running_A', { fade: 0 }));
+  for (let i = 0; i < 8; i++) rig.update(1 / 30);
+  assert.ok(Number.isFinite(rig.bones.RightUpLeg.quaternion.x));
+  rig.dispose();
+});
+
+test('H6: validate detects 3D kinematics anti-patterns, scaffolds HumanoidRigController.js, and playtest validates burst + kinematics assertions', () =>
+  withWorkspace(async (_workspace, service) => {
+    const { game } = await service.create({
+      prompt: '3D third-person wuxia sword boss duel',
+      genre: 'casual',
+      style: '3d',
+      setting: null,
+      multiplayer: false,
+    });
+    // style: '3d' automatically scaffolds vendor/HumanoidRigController.js alongside Three.js.
+    const rigController = await readFile(path.join(service.root, game.id, 'vendor/HumanoidRigController.js'), 'utf8');
+    assert.match(rigController, /export function createHumanoidRig/);
+
+    // Broken manual IK actor (rest-pose reset without slerp + raw frame-delta walking on 30Hz logic) triggers warnings.
+    await service.write(game.id, [
+      { path: 'index.html', content: '<!doctype html><canvas id="game"></canvas><script type="module" src="./client.js"></script>' },
+      { path: 'client.js', content: 'import { animateActor } from "./actors.js"; import * as L from "./logic.js"; export { animateActor, L };' },
+      {
+        path: 'actors.js',
+        content: `
+import * as T from './vendor/three.module.min.js';
+let previous = null;
+export function animateActor(sk, rest, s) {
+  const delta = previous ? Math.hypot(s.x - previous.x, s.z - previous.z) : 0;
+  previous = { x: s.x, z: s.z };
+  const walking = delta > 0.001;
+  for (const k in sk) sk[k].quaternion.copy(rest[k]);
+  return walking ? T.MathUtils.clamp(delta, 0, 1) : 0;
+}`,
+      },
+    ]);
+    const badValidation = await service.validate(game.id);
+    assert.equal(badValidation.passed, true);
+    assert.ok(badValidation.warnings.some(w => /quaternion\.copy.*HumanoidRigController/i.test(w)), JSON.stringify(badValidation.warnings));
+    assert.ok(badValidation.warnings.some(w => /30 Hz leg flicker/i.test(w)), JSON.stringify(badValidation.warnings));
+
+    // DIY bounding-box humanoid skinning also triggers a clear warning.
+    const diyWarnings = inspect3dKinematicsWarnings(
+      new Map([['actors.js', `import { GLTFLoader } from './vendor/GLTFLoader.js'; geo.setAttribute('skinWeight', weights); const b = 'mixamorig:RightArm';`]]),
+      { hasFixedLogicTick: false },
+    );
+    assert.ok(diyWarnings.some(w => /DIY bounding-box skinning/i.test(w)));
+
+    // Clean actor using vendor/HumanoidRigController.js emits zero kinematics warnings.
+    await service.write(game.id, [
+      {
+        path: 'actors.js',
+        content: `
+import { createHumanoidRig } from './vendor/HumanoidRigController.js';
+export function mountActor(gltf) { const rig = createHumanoidRig(gltf, { height: 1.8 }); rig.playClip('idle'); return rig; }`,
+      },
+    ]);
+    const cleanValidation = await service.validate(game.id);
+    assert.equal(cleanValidation.warnings.some(w => /3D kinematics|3D rigging|3D motion/i.test(w)), false, JSON.stringify(cleanValidation.warnings));
+
+    // Manual arm-IK-only HumanoidRigController with zero clip playback emits a clear motion advisory warning.
+    const ikOnlyWarnings = inspect3dKinematicsWarnings(
+      new Map([['actors.js', `import { createHumanoidRig } from './vendor/HumanoidRigController.js'; export function f(g, dt) { const r = createHumanoidRig(g); r.update(dt, { rightHand: [0, 1, 0.5] }); }`]]),
+      { hasFixedLogicTick: true },
+    );
+    assert.ok(ikOnlyWarnings.some(w => /3D motion advisory.*playClip\/playOnce/i.test(w)), JSON.stringify(ikOnlyWarnings));
+    const clipPlusIkWarnings = inspect3dKinematicsWarnings(
+      new Map([['actors.js', `import { createHumanoidRig } from './vendor/HumanoidRigController.js'; export function f(g, dt) { const r = createHumanoidRig(g); r.playOnce('slash'); r.update(dt, { rightHand: [0, 1, 0.5] }); }`]]),
+      { hasFixedLogicTick: true },
+    );
+    assert.equal(clipPlusIkWarnings.length, 0);
+
+    // validateGameScript validates burst action bounds and total 8-screenshot budget.
+    const burstScript = validateGameScript([
+      { type: 'screenshot', label: 'entry' },
+      { type: 'burst', count: 4, intervalMs: 100, label: 'strike' },
+      { type: 'screenshot', label: 'victory' },
+    ]);
+    assert.equal(burstScript.length, 3);
+    assert.throws(() => validateGameScript([{ type: 'burst', count: 1 }]), /Burst count/);
+    assert.throws(() => validateGameScript([{ type: 'burst', count: 4, intervalMs: 10 }]), /Burst intervalMs/);
+    assert.throws(
+      () => validateGameScript([
+        { type: 'burst', count: 5, label: 'a' },
+        { type: 'burst', count: 4, label: 'b' },
+      ]),
+      /at most 8 screenshot/,
+    );
+
+    // normalizeKinematicsAssertions passes clean telemetry and fails flickery/snapping/over-extended rigs.
+    const goodChecks = normalizeKinematicsAssertions({
+      hero: { frames: 60, walkZeroFlips: 0, maxBoneStepRad: 0.14, maxYawStepRad: 0.18, overExtendedIkCount: 4 },
+      boss: { frames: 60, walkZeroFlips: 0, maxBoneStepRad: 0.22, maxYawStepRad: 0.12, overExtendedIkCount: 0 },
+    });
+    assert.equal(goodChecks.length, 8);
+    assert.ok(goodChecks.every(c => c.passed));
+
+    const badChecks = normalizeKinematicsAssertions({
+      frames: 60,
+      walkZeroFlips: 14,
+      maxBoneStepRad: 1.92,
+      maxYawStepRad: 1.15,
+      overExtendedIkCount: 106,
+    });
+    assert.equal(badChecks.length, 4);
+    assert.ok(badChecks.every(c => !c.passed));
+    assert.equal(badChecks.find(c => c.name === 'kinematics:ikReach')?.passed, false);
+
+    // gamePlaytestAssertions integrates stats.kinematics automatically and stays silent when absent.
+    const assertionsWithKinematics = gamePlaytestAssertions({
+      before: { state: { selfId: 'p1', players: { p1: { x: 0, z: 0 } } } },
+      after: {
+        state: { selfId: 'p1', phase: 'playing', players: { p1: { connected: true, x: 2, z: 0 } } },
+        stats: { kinematics: { hero: { frames: 40, walkZeroFlips: 9, maxBoneStepRad: 0.2, maxYawStepRad: 0.1 } } },
+      },
+      clients: 1,
+      script: [{ type: 'key', key: 'd', event: 'press' }],
+      mobile: { width: 390, height: 844, scrollWidth: 390, overflowElements: [] },
+    });
+    assert.equal(assertionsWithKinematics.find(a => a.name === 'kinematics:hero:noWalkFlicker')?.passed, false);
+    assert.equal(assertionsWithKinematics.find(a => a.name === 'kinematics:hero:smoothBoneMotion')?.passed, true);
   }));

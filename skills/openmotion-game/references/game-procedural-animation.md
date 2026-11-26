@@ -1,15 +1,10 @@
 > See [source and execution notes](../PROVENANCE.md).
 
-# Procedural animation — non-humanoid branch (Three.js)
+# Procedural Animation — Non-Humanoid Branch (Three.js)
 
-Use this for creatures and machines the bundled humanoid characters cannot
-cover: dragons, quadrupeds, snakes, spiders, fish, slimes, drones, mechs.
-No 3D generation or rigging model is listed at review and no Blender helper
-ships with this Skill, so build the creature as a **hierarchy of meshes in
-Three.js and animate it in code**. This is deterministic, needs no external
-tools and runs inside the performance budget.
+Use for non-humanoid creatures and machines where Mixamo humanoid rigging does not apply: dragons, quadrupeds, snakes, spiders, fish, slimes, drones, mechs. Build the creature as a **hierarchy of pivoted Three.js groups** and drive motion analytically in code. (For articulated humanoids, always use real Mixamo rigging + `vendor/HumanoidRigController.js` per [game-3d-animation.md](game-3d-animation.md).)
 
-## Build the rig in code
+## 1. Hierarchy & Optional Soft-Body Skinning
 
 ```
 root (Group)          ← world position, facing, bob
@@ -19,67 +14,27 @@ root (Group)          ← world position, facing, bob
  └ leg_LF_upper → leg_LF_lower   (×4)
 ```
 
-- Each segment is a `Group` pivoted at its joint, holding one mesh (capsule,
-  lathe, extruded silhouette or tapered cylinder) offset so it rotates about
-  the joint, not its center.
-- Proportions are fractions of one body length so the same code scales to any
-  size; keep them in a config object next to the motion constants.
-- Share geometry and materials across instances; for swarms, animate an
-  `InstancedMesh` per segment type and write matrices per instance.
-- Optional runtime skinning (strictly for **non-humanoid soft or ribbon-like bodies** such as serpents, tails, tentacles, wings, or banners — **never** use coordinate/bounding-box runtime skinning on an unrigged static humanoid GLB when real auto-rigging via `3d-asset` `operation:"rig"` / `"rig_retarget"` is available, because box-cut weights tear cloaks/robes and misalign hands):
-  - Build a `SkinnedMesh` + bone chain and **always call `skinnedMesh.bind(skeleton, new THREE.Matrix4())` in clean unparented local space before attaching to the world hierarchy** (binding after world transforms misaligns `boneInverses` and throws vertices off-screen).
-  - Blend bone weights across joint boundaries with C1-continuous `smoothstep` transitions (never hard `if` cutoffs that tear spikes at armpits/seams), and damp state transitions/envelopes rather than low-pass filtering periodic flap/walk waveforms.
-  - Count weighted vertices > 0 before relying on the rig. *(Note: for articulated humanoids or when auto-rigged GLBs are available from 3D generation, always use real native skeletons and clips instead of manual runtime skinning.)*
+- Pivot every segment `Group` at its joint (offset the child mesh so it rotates around the joint, not its center) and express dimensions as fractions of one body length in `config`.
+- Share geometries/materials across instances; use `InstancedMesh` per segment type for swarms.
+- **Optional runtime `SkinnedMesh`** (strictly for soft/ribbon non-humanoids like serpents, tails, tentacles, banners — **never** for unrigged humanoid GLBs): call `skinnedMesh.bind(skeleton, new THREE.Matrix4())` in clean unparented local space before attaching to the scene, blend weights with C1 `smoothstep` across joints, and verify weighted vertices > 0.
 
-## Motion recipes per creature type
+## 2. Locomotion Recipes (`angle(t) = A * sin(2π * t / T + φ)`)
 
-All motion is a sum of sinusoids evaluated per frame.
-Core idiom: `angle(t) = A * sin(2π * t/T + φ)` per bone, with phase offsets φ
-creating wave propagation and gait patterns.
+Evaluate from game time (so pauses/slow-mo work) and scale gait amplitude smoothly by continuous speed rather than snapping between states. Keep gameplay authority in rules/physics — animation is presentation only.
 
 | Creature | Skeleton | Locomotion formula |
 |---|---|---|
-| Winged (dragon, bird) | spine chain + 2-segment wings + tail | fly: wings ±35–45°, outer segment lags inner by 0.15–0.25 of the cycle (flex illusion); body bobs in COUNTER-phase to the downstroke; legs tucked (constant); tail wave |
-| Quadruped (wolf, dog) | spine + neck/head + 4 legs (2 segments) + tail | walk: diagonal pairs in counter-phase — LF+RH at φ=0, RF+LH at φ=π; spine sways laterally at half amplitude; head bob small |
-| Hexapod (insect) | thorax + 6 legs | alternating tripod: legs {L1,R2,L3} φ=0, {R1,L2,R3} φ=π |
-| Octopod (spider) | cephalothorax + 8 legs | two tetrapod groups in counter-phase; adjacent legs offset by π/4 for ripple |
-| Serpentine (snake) | 8–12 segment spine chain | traveling wave: segment i gets φ = i * 2π/N, lateral rotation ±20–30°; amplitude grows toward tail |
-| Aquatic (fish) | spine chain + fins | same traveling wave but amplitude concentrated in rear third; fins counter-flap at 2× frequency, small amplitude |
-| Slime / blob (no skeleton) | none — or 1 root bone | squash & stretch on scale: `sz = 1 + A*sin(ωt)`, `sx = sy = 1/sqrt(sz)` (volume preservation); add small location bounce synced to squash |
+| Winged (dragon, bird) | spine + 2-segment wings + tail | Wings ±35–45°, outer lags inner by 0.15–0.25 cycle; body bobs counter-phase to downstroke; tail wave |
+| Quadruped (wolf, dog) | spine + neck/head + 4× 2-seg legs + tail | Diagonal pairs in counter-phase (LF+RH φ=0, RF+LH φ=π); half-amplitude lateral spine sway |
+| Hexapod (insect) | thorax + 6 legs | Alternating tripod: {L1,R2,L3} φ=0, {R1,L2,R3} φ=π |
+| Octopod (spider) | cephalothorax + 8 legs | Two counter-phase tetrapod groups; adjacent legs offset by π/4 |
+| Serpentine (snake) | 8–12 spine segments | Traveling wave `φ = i * 2π/N`, lateral ±20–30°, amplitude grows toward tail |
+| Aquatic (fish) | spine + fins | Rear-weighted traveling wave; fins counter-flap at 2× frequency |
+| Slime / blob | none or 1 root | Volume-preserving squash/stretch: `sz = 1 + A*sin(ωt)`, `sx = sy = 1/sqrt(sz)` + synced bounce |
 
-Idle for any creature: breathing (chest scale or rotation ±2–4°, 4 s cycle),
-slow head sway, tail/appendage micro-wave, wing micro-adjust.
+Idle for any creature: subtle breathing (`±2–4°`, ~4 s cycle), slow head sway, gentle tail/wing micro-wave.
 
-Implementation: `angle(t) = A * Math.sin(2 * Math.PI * t / T + phi)` evaluated in
-the render loop from game time (not wall-clock, so pauses and slow-motion
-work), applied to `rotation` of each segment group. Blend gait amplitude by
-speed (idle → walk → run) instead of switching clips abruptly. For slime-class
-creatures skip the hierarchy and animate `mesh.scale`/`position` directly.
-Keep gameplay state in `logic.js`; animation is presentation only and never
-decides hits or positions.
+## 3. Visual QC & Rigged Non-Humanoid GLBs
 
-## Visual QC (headless)
-
-1. Add a debug key (active only under `?debug` or a dev constant) that
-   freezes the creature and steps it to the next sample phase. Drive it with
-   `openmotion_game_playtest` key scripts, review the returned screenshots at
-   several phases (one short run per phase when the report holds one
-   screenshot per client), and inspect them. Remove or disable the key before cover
-   capture.
-2. Check that phases differ, the motion logic is right (wing area shrinks on
-   the upstroke and opens on the downstroke; diagonal legs move together), and
-   joints do not separate visibly.
-3. **Phase-sampling pitfall:** sampling at uniform steps that alias with the
-   cycle period makes every capture look identical. Sample at non-uniform
-   fractions, e.g. 0.0, 0.23, 0.41, 0.68, 0.87 of the period.
-4. Acceptable defects: slight gaps at segment joints (hide them with joint
-   spheres or overlapping caps), no per-toe detail.
-
-## Supplied or future rigged models
-
-If the user supplies a rigged non-humanoid GLB, or a later media catalogue
-lists a rigging model (see the discovery contract in
-`game-3d-animation.md`), consume it exactly like a humanoid GLB:
-`GLTFLoader` + `AnimationMixer`, clips by name, inspected first with
-`node scripts/game-glb-inspect.mjs`. Keep the procedural version as the
-fallback until the supplied model passes inspection and an in-game check.
+- Verify motion in `openmotion_game_playtest` using `{ type: "burst", count: 4, intervalMs: 110, label: "gait" }` (or non-uniform phase samples `0.0, 0.23, 0.41, 0.68, 0.87` so captures do not alias the period) to confirm phases differ and joints stay connected.
+- If a rigged non-humanoid `.glb` is supplied or generated, inspect it with `scripts/game-glb-inspect.mjs` and drive it with `GLTFLoader` + `AnimationMixer` like any rigged GLB.

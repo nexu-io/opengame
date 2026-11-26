@@ -11,7 +11,7 @@ A game is a local HTML/ESM project under workspace `games/<id>/`. HTTP and MCP o
 ```
 
 - Supported `genre` values (`shared/game-contract.ts`): `shooter`, `platformer`, `story` (visual novel), `casual`, `racing`, `horror` (defaults to `casual`). Preserve the exact sub-genre/concept in `prompt`.
-- Leave `style` omitted or `null` unless the user requested one of `pixel`, `minimal`, `ascii`, `voxel`, `anime`, `3d`. **Always pass `style: "3d"` on 3D briefs** so vendored Three.js (`vendor/`) is scaffolded.
+- Leave `style` omitted or `null` unless the user requested one of `pixel`, `minimal`, `ascii`, `voxel`, `anime`, `3d`. **Always pass `style: "3d"` on 3D briefs** so vendored Three.js and `vendor/HumanoidRigController.js` are scaffolded.
 - Replace the neutral starter (`templates/game-kits/arcade-2d/`) palette, copy, and rules completely.
 
 | Path | Responsibility | Editable via `write_files`? |
@@ -41,7 +41,7 @@ A game is a local HTML/ESM project under workspace `games/<id>/`. HTTP and MCP o
 ```js
 window.__omGame = {
   getState() { /* cloned snapshot: { selfId, players: { [id]: { connected: true, x, z } }, phase, result } */ },
-  getStats() { /* { fps, drawCalls, triangles, entities, tick } */ },
+  getStats() { /* { fps, drawCalls, triangles, entities, tick, kinematics? } */ },
   sendAction(action) { /* optional validated input helper */ },
   runSelfTests() { /* optional deterministic invariants: { [checkName]: { pass: true, detail: '...' } } */ },
 };
@@ -49,8 +49,8 @@ window.__omGame = {
 
 - `phase` should be `'loading' | 'ready' | 'playing' | 'explore' | 'sandbox' | 'win' | 'loss'`.
 - When `phase === 'loading'` (or `#start` is disabled during async GLB/media loading), `playtest` and `capture_cover` wait up to `waitForReadyMs` (0–30000 ms, default 10000 ms) before clicking `#start`.
-- **`openmotion_game_playtest` scripts** support `key`, `mouse`, `wait`, and **`{ "type": "screenshot", "label": "midgame" }`** (up to 8 labeled captures per client under `assets/playtests/`). Always pass explicit `scripts` matching real bindings (pass `movementThreshold: 0` for non-moving puzzle/card games).
-- If `window.__omGame.runSelfTests()` exists, `playtest` automatically runs it (10 s cap, 64 KiB JSON cap) and merges every check into `assertions` alongside `playerCount`, `phase`, `scriptedMovement`, `mobileHorizontalOverflow` (`390×844`), and multiplayer `autoJoin`.
+- **`openmotion_game_playtest` scripts** support `key`, `mouse`, `wait`, `action`, **`{ "type": "screenshot", "label": "midgame" }`**, and **`{ "type": "burst", "count": 4, "intervalMs": 100, "label": "strike" }`** (up to 8 total captures per client under `assets/playtests/`, automatically tiled into `contactSheetPath`). Always pass explicit `scripts` matching real bindings (pass `movementThreshold: 0` for non-moving puzzle/card games).
+- If `window.__omGame.runSelfTests()` or `getStats().kinematics` exists, `playtest` automatically runs/checks them and merges assertions alongside `playerCount`, `phase`, `scriptedMovement`, `mobileHorizontalOverflow` (`390×844`), and multiplayer `autoJoin`.
 - **`openmotion_game_capture_cover`** captures only the game canvas/`#game` at 1280×720 to `assets/cover.png` and sets metadata. `openmotion_game_update_meta` enforces ≥ 960×540 and 16:9 ±5% covers, plus concise `title`, `description`, `controls`, and `zh-CN` `i18n`.
 
 ## 4. Local Publish, Cloud Share (`web_publish`) & Offline ZIP (`exportZip`)

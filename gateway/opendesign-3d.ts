@@ -818,19 +818,23 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
   const originalTaskIdParam = typeof params.original_model_task_id === 'string' && params.original_model_task_id.trim()
     ? params.original_model_task_id.trim()
     : undefined;
-  const rigPresetMap: Record<string, string> = {
+  const rigPresetMap: Record<string, string | readonly string[]> = {
     'mixamo-idle': 'preset:idle',
     'mixamo-walk': 'preset:walk',
     'mixamo-run': 'preset:run',
     'mixamo-slash': 'preset:slash',
+    'mixamo-locomotion': ['preset:idle', 'preset:walk', 'preset:run', 'preset:jump'],
+    'mixamo-combat': ['preset:idle', 'preset:run', 'preset:slash', 'preset:hurt', 'preset:fall'],
   };
   const rigPresetOpt = typeof ctx.options.rigPreset === 'string' ? ctx.options.rigPreset : undefined;
   const rigOnlyPreset = rigPresetOpt === 'mixamo-only';
-  const rigPresetAnimation = rigPresetOpt ? rigPresetMap[rigPresetOpt] : undefined;
+  const rigPresetSpec = rigPresetOpt ? rigPresetMap[rigPresetOpt] : undefined;
+  const rigPresetAnimation = typeof rigPresetSpec === 'string' ? rigPresetSpec : undefined;
+  const rigPresetAnimations = Array.isArray(rigPresetSpec) ? [...rigPresetSpec] : [];
   const rawAnimationsList = Array.isArray(params.animations)
     ? params.animations.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
     : [];
-  const animationsList = rawAnimationsList.map(normalizeTripoAnimation);
+  const animationsList = (rawAnimationsList.length > 0 ? rawAnimationsList : rigPresetAnimations).map(normalizeTripoAnimation);
   const rawAnimation = (typeof params.animation === 'string' && params.animation.trim())
     || rigPresetAnimation
     || (typeof ctx.options.animation === 'string' && ctx.options.animation !== 'none' ? ctx.options.animation : undefined);
@@ -867,7 +871,7 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
   }
   if (effectiveOp === 'rig_retarget' && !hasRetargetAnimation) {
     throw new Error(
-      '3d-asset operation=rig_retarget requires an animation (pass options.rigPreset such as mixamo-idle/mixamo-walk/mixamo-run/mixamo-slash, or parameters.animation / parameters.animations; use operation="rig" for skeleton-only rigging)',
+      '3d-asset operation=rig_retarget requires an animation (pass options.rigPreset such as mixamo-locomotion/mixamo-combat/mixamo-idle/mixamo-walk/mixamo-run/mixamo-slash, or parameters.animation / parameters.animations; use operation="rig" for skeleton-only rigging)',
     );
   }
 
@@ -1034,6 +1038,9 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
         );
       }
       retargetRan = true;
+      if (passthrough.animate_in_place === undefined) {
+        passthrough.animate_in_place = true;
+      }
       // Tripo v3 treats `animation` and `animations` as mutually exclusive; normalize and send only one.
       if (animationsList.length > 0) {
         passthrough.animations = animationsList;

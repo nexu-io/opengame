@@ -181,11 +181,13 @@ async function inspectLocalModuleGraph(
   entryScripts: string[],
   inlineScripts: string[],
   allowedHosts: string[],
-): Promise<{ diagnostics: { path: string; message: string }[]; importsLogic: boolean; visitedModules: string[] }> {
+): Promise<{ diagnostics: { path: string; message: string }[]; importsLogic: boolean; visitedModules: string[]; moduleSources: Map<string, string>; importsThree: boolean }> {
   const diagnostics: { path: string; message: string }[] = [];
   const visited = new Set<string>();
+  const moduleSources = new Map<string, string>();
   const queue: string[] = [];
   let importsLogic = false;
+  let importsThree = false;
 
   const enqueueSpecifier = async (fromPath: string, specifier: string) => {
     const clean = specifier.replace(/[?#].*$/, '');
@@ -202,6 +204,7 @@ async function inspectLocalModuleGraph(
     const baseDir = fromPath === 'index.html' ? '' : path.posix.dirname(fromPath);
     const resolved = path.posix.normalize(baseDir && baseDir !== '.' ? `${baseDir}/${clean}` : clean);
     if (resolved === 'logic.js') importsLogic = true;
+    if (/^vendor\/(?:three\.module(?:\.min)?|GLTFLoader|SkeletonUtils|HumanoidRigController)\.js$/i.test(resolved)) importsThree = true;
     try {
       const target = await safeFile(dir, resolved);
       if (!(await lstat(target)).isFile()) {
@@ -237,6 +240,7 @@ async function inspectLocalModuleGraph(
     } catch {
       continue;
     }
+    moduleSources.set(relative, source);
     if (relative !== 'client.js') {
       diagnostics.push(...findDisallowedHostDiagnostics(relative, source, allowedHosts));
     }
@@ -247,7 +251,70 @@ async function inspectLocalModuleGraph(
     }
     for (const specifier of specifiers) await enqueueSpecifier(relative, specifier);
   }
-  return { diagnostics, importsLogic, visitedModules: [...visited] };
+  return { diagnostics, importsLogic, visitedModules: [...visited], moduleSources, importsThree };
+}
+
+function stripJsComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/[^\n]*/g, '$1');
+}
+
+/** Advisory static audit for high-frequency 3D humanoid kinematics anti-patterns. */
+export function inspect3dKinematicsWarnings(
+  moduleSources: Map<string, string>,
+  options: { hasFixedLogicTick: boolean },
+): string[] {
+  const warnings: string[] = [];
+  const allNonVendorCode = [...moduleSources.entries()]
+    .filter(([rel]) => rel !== 'logic.js' && !rel.startsWith('vendor/'))
+    .map(([, raw]) => stripJsComments(raw))
+    .join('\n');
+  const usesAnyClipPlayback = /\.(?:playClip|playOnce|addClips|retargetClipsFrom)\s*\(|\bAnimationMixer\b/.test(allNonVendorCode);
+
+  for (const [relative, raw] of moduleSources.entries()) {
+    if (relative === 'logic.js' || relative.startsWith('vendor/')) continue;
+    const code = stripJsComments(raw);
+    const usesSharedRig = /HumanoidRigController|createHumanoidRig/.test(code);
+    if (usesSharedRig) {
+      const drivesManualArmIk = /\b(?:rightHand|leftHand)\s*:/.test(code);
+      if (drivesManualArmIk && !usesAnyClipPlayback) {
+        warnings.push(
+          `3D motion advisory in ${relative}: HumanoidRigController drives manual arm IK without any skeletal clip playback (playClip/playOnce/retargetClipsFrom). Attach native Mixamo clips via 3d-asset (rig_retarget or 1-step retarget on an existing rigTaskId with multi-clip rigPreset "mixamo-combat"/"mixamo-locomotion") or rig.retargetClipsFrom(...) for full-body locomotion, attacks, hit reactions, and defeat poses.`,
+        );
+      }
+      continue;
+    }
+
+    const touchesBones = /\bisBone\b|mixamorig|\bsk\s*\[|\bbones\s*\[/.test(code);
+    const copiesRestQuat = /\.quaternion\.copy\s*\(/.test(code);
+    const hasSmoothing = /\.slerp\s*\(|\bAnimationMixer\b/.test(code);
+    if (touchesBones && copiesRestQuat && !hasSmoothing) {
+      warnings.push(
+        `3D kinematics risk in ${relative}: bone quaternions are reset via .quaternion.copy() without Quaternion.slerp, AnimationMixer, or vendor/HumanoidRigController.js — state switches will snap in 1 frame. Use vendor/HumanoidRigController.js or slerp persistent per-bone quaternions.`,
+      );
+    }
+
+    const usesFrameDeltaGait =
+      options.hasFixedLogicTick
+      && /Math\.hypot\s*\([^)]*-[^)]*,[^)]*-[^)]*\)/.test(code)
+      && /\b(?:walking|moving|isWalking|isMoving)\s*=\s*[a-zA-Z_$][\w$]*\s*>/.test(code)
+      && !/Math\.exp\s*\(|smoothWalk|walkBlend/.test(code);
+    if (usesFrameDeltaGait) {
+      warnings.push(
+        `3D kinematics risk in ${relative}: walking/gait state is derived from raw render-frame displacement against a fixed-tick simulation without exponential smoothing — non-tick frames on 60/120 Hz displays drop delta to 0 and cause 30 Hz leg flicker. Use vendor/HumanoidRigController.js (syncTransform) or low-pass filter continuous velocity.`,
+      );
+    }
+
+    const diyHumanoidSkinning =
+      /(?:GLTFLoader|loadModel)/.test(code)
+      && /setAttribute\s*\(\s*['"]skin(?:Index|Weight)['"]/.test(code)
+      && /mixamorig|RightArm|LeftArm|RightUpLeg|LeftUpLeg|Spine/.test(code);
+    if (diyHumanoidSkinning) {
+      warnings.push(
+        `3D rigging risk in ${relative}: manual runtime skinIndex/skinWeight synthesis detected on humanoid geometry. Use real Mixamo auto-rigging (3d-asset operation="rig_retarget") and vendor/HumanoidRigController.js instead of DIY bounding-box skinning.`,
+      );
+    }
+  }
+  return warnings;
 }
 async function inventory(root: string, prefix = ''): Promise<{ path: string; bytes: number }[]> {
   const result: { path: string; bytes: number }[] = [];
@@ -387,6 +454,7 @@ export type GameBrowserAction =
   | { type: 'mouse'; event: 'move' | 'down' | 'up' | 'click'; x?: number; y?: number; selector?: string; button?: 'left' | 'middle' | 'right' }
   | { type: 'wait'; ms: number }
   | { type: 'screenshot'; label?: string }
+  | { type: 'burst'; count: number; intervalMs?: number; label?: string }
   | { type: 'action'; action: Record<string, unknown> };
 
 export function validateGameScript(value: unknown): GameBrowserAction[] {
@@ -407,12 +475,20 @@ export function validateGameScript(value: unknown): GameBrowserAction[] {
     } else if (a.type === 'screenshot') {
       if (a.label !== undefined && (typeof a.label !== 'string' || !/^[a-zA-Z0-9_-]{1,40}$/.test(a.label))) throw new GameError('Screenshot labels must be 1–40 ASCII alphanumeric/dash/underscore characters');
       if (++screenshots > 8) throw new GameError('Use at most 8 screenshot actions per client');
+    } else if (a.type === 'burst') {
+      if (!Number.isInteger(a.count) || a.count < 2 || a.count > 6) throw new GameError('Burst count must be an integer 2–6');
+      const intervalMs = a.intervalMs ?? 100;
+      if (!Number.isInteger(intervalMs) || intervalMs < 50 || intervalMs > 500) throw new GameError('Burst intervalMs must be an integer 50–500');
+      if (a.label !== undefined && (typeof a.label !== 'string' || !/^[a-zA-Z0-9_-]{1,32}$/.test(a.label))) throw new GameError('Burst labels must be 1–32 ASCII alphanumeric/dash/underscore characters');
+      screenshots += a.count;
+      if (screenshots > 8) throw new GameError('Use at most 8 screenshot actions per client');
+      waits += (a.count - 1) * intervalMs;
     } else if (a.type === 'action') {
       if (!a.action || typeof a.action !== 'object' || Array.isArray(a.action)) throw new GameError('Action payload must be a JSON object');
       let serialized = '';
       try { serialized = JSON.stringify(a.action); } catch { throw new GameError('Action payload must be JSON-serializable'); }
       if (!serialized || serialized.length > 16384) throw new GameError('Action payload must be at most 16 KiB');
-    } else throw new GameError('Only key, mouse, wait, screenshot and action actions are supported');
+    } else throw new GameError('Only key, mouse, wait, screenshot, burst and action actions are supported');
   }
   if (waits > 60000) throw new GameError('Script waits must total at most 60000 ms');
   return value;
@@ -573,6 +649,66 @@ export function normalizeSelfTestAssertions(raw: unknown): Array<{ name: string;
   return rows.slice(0, 50);
 }
 
+export function normalizeKinematicsAssertions(raw: unknown): Array<{ name: string; passed: boolean; expected: string; actual: unknown; reason?: string }> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+  const obj = raw as Record<string, unknown>;
+  const isSingleTelemetry = typeof obj.frames === 'number' || typeof obj.maxBoneStepRad === 'number' || typeof obj.walkZeroFlips === 'number';
+  const entries: Array<[string, Record<string, unknown>]> = isSingleTelemetry
+    ? [['', obj]]
+    : Object.entries(obj)
+      .filter(([, value]) => value && typeof value === 'object' && !Array.isArray(value))
+      .map(([key, value]) => [key, value as Record<string, unknown>]);
+
+  const rows: Array<{ name: string; passed: boolean; expected: string; actual: unknown; reason?: string }> = [];
+  for (const [label, metrics] of entries.slice(0, 8)) {
+    const frames = typeof metrics.frames === 'number' ? metrics.frames : 10;
+    if (frames < 5) continue;
+    const prefix = label ? `kinematics:${label}:` : 'kinematics:';
+    if (typeof metrics.walkZeroFlips === 'number' && Number.isFinite(metrics.walkZeroFlips)) {
+      const passed = metrics.walkZeroFlips <= 1;
+      rows.push({
+        name: `${prefix}noWalkFlicker`,
+        passed,
+        expected: 'walkZeroFlips <= 1 (no 30 Hz square-wave gait flicker)',
+        actual: metrics.walkZeroFlips,
+        ...(passed ? {} : { reason: `Detected ${metrics.walkZeroFlips} adjacent-frame walk-blend drop-to-zero oscillations` }),
+      });
+    }
+    if (typeof metrics.maxBoneStepRad === 'number' && Number.isFinite(metrics.maxBoneStepRad)) {
+      const passed = metrics.maxBoneStepRad <= 0.65;
+      rows.push({
+        name: `${prefix}smoothBoneMotion`,
+        passed,
+        expected: 'maxBoneStepRad <= 0.65 rad/frame (no 1-frame joint snaps)',
+        actual: +metrics.maxBoneStepRad.toFixed(3),
+        ...(passed ? {} : { reason: `Peak single-frame bone step ${metrics.maxBoneStepRad.toFixed(3)} rad exceeds 0.65 rad` }),
+      });
+    }
+    if (typeof metrics.maxYawStepRad === 'number' && Number.isFinite(metrics.maxYawStepRad)) {
+      const passed = metrics.maxYawStepRad <= 0.45;
+      rows.push({
+        name: `${prefix}smoothYaw`,
+        passed,
+        expected: 'maxYawStepRad <= 0.45 rad/frame (no yaw spin-jitter)',
+        actual: +metrics.maxYawStepRad.toFixed(3),
+        ...(passed ? {} : { reason: `Peak single-frame yaw step ${metrics.maxYawStepRad.toFixed(3)} rad exceeds 0.45 rad` }),
+      });
+    }
+    if (frames >= 10 && typeof metrics.overExtendedIkCount === 'number' && Number.isFinite(metrics.overExtendedIkCount)) {
+      const ratio = metrics.overExtendedIkCount / frames;
+      const passed = ratio <= 0.35;
+      rows.push({
+        name: `${prefix}ikReach`,
+        passed,
+        expected: 'overExtendedIkCount / frames <= 0.35 (IK hand targets within real arm reach)',
+        actual: { overExtendedIkCount: metrics.overExtendedIkCount, frames, ratio: +ratio.toFixed(2) },
+        ...(passed ? {} : { reason: `Arm IK targets exceeded real reach ${metrics.overExtendedIkCount} times across ${frames} frames (${(ratio * 100).toFixed(0)}%) — drive actions with native clips (playClip/playOnce) or keep IK targets inside rig.metrics arm maxReach` }),
+      });
+    }
+  }
+  return rows;
+}
+
 export function gamePlaytestAssertions(input: {before:any;after:any;clients:number;script:GameBrowserAction[];mobile:{width:number;height:number;scrollWidth:number;overflowElements?:string[]};movementThreshold?:number;expectedPhase?:string;autoJoin?:{joined:boolean;elapsedMs:number|null};selfTests?:unknown}) {
   const state=input.after?.state,players=state?.players;
   const count=players&&typeof players==='object'?Object.values(players).filter((p:any)=>p?.connected!==false).length:0;
@@ -590,6 +726,7 @@ export function gamePlaytestAssertions(input: {before:any;after:any;clients:numb
       ?{name:'scriptedMovement',passed:Boolean(state&&self),skipped:true,expected:'movement not asserted (threshold 0)',actual:distance,reason:state&&self?undefined:'Missing authoritative __omGame state or selfId'}
       :{name:'scriptedMovement',passed:scripted&&distance!==null&&distance>(input.movementThreshold??.5),expected:`net displacement > ${input.movementThreshold??.5} world units`,actual:distance,reason:scripted?(distance===null?'Missing selfId or authoritative coordinates':undefined):'No directional key input was scripted'},
     {name:'mobileHorizontalOverflow',passed:input.mobile.width===390&&input.mobile.height===844&&input.mobile.scrollWidth<=391&&!(input.mobile.overflowElements?.length),expected:'390x844 viewport without horizontal overflow',actual:input.mobile},
+    ...normalizeKinematicsAssertions(input.after?.stats?.kinematics),
     ...normalizeSelfTestAssertions(input.selfTests),
   ];
 }
@@ -1190,6 +1327,11 @@ server.listen(port, '127.0.0.1', () => {
       runtime.setup(players);
       for (let tick = 0; tick < 50; tick++) { runtime.tick(tick); for (const player of players) { runtime.apply(player, { type: 'noop' }, game.multiplayer); runtime.view(player); } if (runtime.over().over) break; }
     } catch (e) { diagnostics.push({ path: 'logic.js', message: (e as Error).message }); }
+    if (game.style === '3d' || moduleGraph.importsThree) {
+      const hasFixedLogicTick = (logic !== null && !isUnusedStarterLogic)
+        || [...moduleGraph.moduleSources.values()].some(src => /\btickRate\b|1\s*\/\s*(?:20|30)\b/.test(src));
+      warnings.push(...inspect3dKinematicsWarnings(moduleGraph.moduleSources, { hasFixedLogicTick }));
+    }
     return { id, passed: diagnostics.length === 0, diagnostics, warnings };
   }
   async status(id: string, status: unknown) { return this.mutate(async () => {
@@ -1544,6 +1686,20 @@ server.listen(port, '127.0.0.1', () => {
             await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
             await page.screenshot({ path: shotPath as `${string}.png`, type: 'png' });
             clientScreenshots[clientIndex].push({ label, path: shotPath });
+          }
+          else if(a.type==='burst'){
+            const baseLabel = a.label ?? 'burst';
+            const intervalMs = a.intervalMs ?? 100;
+            for (let frameIdx = 0; frameIdx < a.count; frameIdx++) {
+              if (frameIdx > 0) await new Promise(resolve => setTimeout(resolve, intervalMs));
+              const label = `${baseLabel}_${frameIdx + 1}`;
+              const relative = `assets/playtests/${room}-${clientIndex+1}-${label}-${randomUUID().slice(0,8)}.png`;
+              const shotPath = await safeFile(dir, relative, true);
+              await mkdir(path.dirname(shotPath), { recursive: true });
+              await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
+              await page.screenshot({ path: shotPath as `${string}.png`, type: 'png' });
+              clientScreenshots[clientIndex].push({ label, path: shotPath });
+            }
           }
           else if(a.type==='key'){const key=(a.key==='Space'?'Space':a.key) as KeyInput;if(a.event==='down')await page.keyboard.down(key);else if(a.event==='up')await page.keyboard.up(key);else await page.keyboard.press(key);}
           else if(a.selector)await page.click(a.selector,{button:a.button??'left'});

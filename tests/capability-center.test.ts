@@ -1319,6 +1319,51 @@ test('3d-asset capability gates honestly on AMR 3d_generations and executes Trip
       assert.equal(rigPromoted.result.operation, 'rig_retarget');
       assert.equal(rigPromoted.result.animation, 'preset:walk');
 
+      // Multi-clip rigPreset ("mixamo-combat") packs 5 presets into one retarget step, and 1-step operation="retarget" supports multi-clip presets ("mixamo-locomotion") with animate_in_place=true.
+      const beforeCombatPack = submitted3dTasks.length;
+      const combatPack = await api.call('openmotion_capability_run', {
+        action: 'run',
+        requestId: 'tripo-rig-combat-pack',
+        capabilityId: '3d-asset',
+        model: 'opendesign:tripo-3.0',
+        options: { operation: 'rig_retarget', rigPreset: 'mixamo-combat' },
+        parameters: { slim: false, original_model_task_id: rigOnly.result.baseTaskId },
+        name: 'Knight Combat Pack',
+      });
+      assert.equal(submitted3dTasks.length - beforeCombatPack, 2);
+      assert.equal(submitted3dTasks[beforeCombatPack + 1].operation, 'retarget');
+      assert.deepEqual(
+        submitted3dTasks[beforeCombatPack + 1].parameters.animations,
+        ['preset:idle', 'preset:run', 'preset:slash', 'preset:hurt', 'preset:fall'],
+      );
+      assert.equal(submitted3dTasks[beforeCombatPack + 1].parameters.animate_in_place, true);
+      assert.deepEqual(
+        combatPack.result.requestedAnimations,
+        ['preset:idle', 'preset:run', 'preset:slash', 'preset:hurt', 'preset:fall'],
+      );
+
+      const beforeLocoRetarget = submitted3dTasks.length;
+      const locoRetarget = await api.call('openmotion_capability_run', {
+        action: 'run',
+        requestId: 'tripo-retarget-locomotion-pack',
+        capabilityId: '3d-asset',
+        model: 'opendesign:tripo-3.0',
+        options: { operation: 'retarget', rigPreset: 'mixamo-locomotion' },
+        parameters: { slim: false, original_model_task_id: rigOnly.result.rigTaskId },
+        name: 'Knight Locomotion Pack',
+      });
+      assert.equal(submitted3dTasks.length - beforeLocoRetarget, 1);
+      assert.equal(submitted3dTasks[beforeLocoRetarget].operation, 'retarget');
+      assert.deepEqual(
+        submitted3dTasks[beforeLocoRetarget].parameters.animations,
+        ['preset:idle', 'preset:walk', 'preset:run', 'preset:jump'],
+      );
+      assert.equal(submitted3dTasks[beforeLocoRetarget].parameters.animate_in_place, true);
+      assert.deepEqual(
+        locoRetarget.result.requestedAnimations,
+        ['preset:idle', 'preset:walk', 'preset:run', 'preset:jump'],
+      );
+
       // Explicit operation="rig_retarget" with default rigPreset="none" and no animation fails fast with 0 paid submissions.
       const beforeInvalidRigRetarget = submitted3dTasks.length;
       await assert.rejects(

@@ -1,8 +1,8 @@
 ---
 name: openmotion-media
 description: >-
-  Discover and run atomic media capabilities (remove-background, relight, character, camera-control, multi-shot,
-  native-audio, speech, music, asr-transcribe) and standalone image, video, speech or music generation through the Unified
+  Discover and run atomic media capabilities (remove-background, relight, image-blend, camera-control, multi-shot,
+  native-audio, speech, music, sound-effects, 3d-asset, 3d-world, asr-transcribe) and standalone image, video, audio or 3D generation through the Unified
   Capability Center (openmotion_capability_discover, openmotion_capability_run, openmotion_job_manage, openmotion_asset_manage,
   with openmotion_media_use and openmotion_assets_use retained for compatibility) across configured BYOK providers or a signed-in
   OpenDesign account. Prefer dedicated capabilityId execution over simulating atomic edits with generic model prompts. Native-only tasks with no new speech or music stay outside generation unless explicitly requested. Not a whole-film entry point: creating, recreating, templating, editing or exporting a whole video
@@ -23,7 +23,7 @@ Keep credentials strictly isolated: the shared local media service reads saved w
 
 ## Provider preference and authorization
 
-Prefer dedicated atomic capabilities from the Unified Capability Center (`openmotion_capability_discover` → `openmotion_capability_run` with `capabilityId`, such as `remove-background`, `relight`, `character`, `camera-control`, `multi-shot`, `native-audio`, `speech`, `music`, or `asr-transcribe`) whenever a registered capability matches the user's intent—never simulate background removal or relighting with ad-hoc generic image prompts when a dedicated capability is live. Track jobs through `openmotion_job_manage` and inspect pinned versions and capability provenance through `openmotion_asset_manage` (existing `openmotion_media_use` and `openmotion_assets_use` remain compatible).
+Prefer dedicated atomic capabilities from the Unified Capability Center (`openmotion_capability_discover` → `openmotion_capability_run` with `capabilityId`, such as `remove-background`, `relight`, `image-blend`, `camera-control`, `multi-shot`, `native-audio`, `speech`, `music`, `sound-effects`, `3d-asset`, `3d-world`, or `asr-transcribe`) whenever a registered capability matches the user's intent—never simulate background removal or relighting with ad-hoc generic image prompts when a dedicated capability is live. Track jobs through `openmotion_job_manage` and inspect pinned versions and capability provenance through `openmotion_asset_manage` (existing `openmotion_media_use` and `openmotion_assets_use` remain compatible).
 
 Run read-only discovery and obtain consent before submitting any paid generation request:
 

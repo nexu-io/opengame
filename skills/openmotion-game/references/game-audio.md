@@ -2,125 +2,37 @@
 
 # Game Audio
 
-Use this reference for music, voice, SFX and ambience. A playable game that is silent or ships only click-beeps with no background music (unless the brief explicitly asks for silence) is below the quality floor. Generate music, spoken lines and signature SFX through OpenMotion capabilities (`music`, `speech`, `sound-effects`) whenever fitting live models are usable; synthesize fast UI/micro-SFX (and a looping BGM / SFX fallback when a model is unavailable or declined) with the Web Audio API in game code. Normalize and mix in code for predictable in-game loudness.
+Every playable game needs responsive SFX **and** a looping BGM bed (unless silence is explicitly requested). Generate music, voice, and signature SFX through live OpenMotion capabilities (`music`, `speech`, `sound-effects`) when usable; synthesize instant UI/micro-SFX (and offline BGM/SFX fallbacks) in Web Audio.
 
-## Discover the live contracts
+## 1. Live Discovery & Routing
 
-Follow the `openmotion-media` provider order and consent rules (`openmotion://workflow/media/start`). Prefer `openmotion_capability_discover` (`action:"list"`, `modality:"audio"`) when exposed to see live `music`, `sound-effects`, and `speech` availability; otherwise inspect raw models:
+Discover live audio capabilities first (`openmotion_capability_discover` `modality:"audio"`, or `openmotion_media_use` `{"action":"inspect","modality":"audio"}` + `models` `refresh:true` + `reference`), using only live-returned model IDs and options (prefer `account` → `opendesign` → BYOK; check `mode` `"text-to-audio"` vs `"text-to-speech"`, never guess from vendor names):
 
-```json
-{"tool":"openmotion_media_use","arguments":{"action":"inspect","modality":"audio"}}
-```
-
-```json
-{"tool":"openmotion_media_use","arguments":{"action":"models","provider":"account","modality":"audio","refresh":true}}
-```
-
-Use provider `opendesign` when the account is unavailable, then any other configured provider. Read `action:"reference"` for the chosen provider before mapping parameters. Audio entries carry `mode:"text-to-speech"` (voice) or `mode:"text-to-audio"` (music); use the discovered mode, never the vendor name, to decide what a model makes. Built-in entries (`source:"builtin"`) are discoverable but do not prove plan entitlement; only a completed job does.
-
-## Routing
-
-| Need | Model when listed (OpenDesign) | Notes |
+| Need | Capability / Model (When Live) | Key Rules |
 |---|---|---|
-| Background music, menu loop, boss theme | `elevenlabs-music-v2` | `mode:"text-to-audio"`. Prompt instrumental with `no vocals`. Length via the provider-native option (`music_length_ms` on Cloud, whole-second `duration` on the account). |
-| Character lines, narration, announcer (English and multilingual) | `elevenlabs-v3` | `mode:"text-to-speech"`, `parameters.voice` from the model's listed voices. |
-| Chinese character lines and narration | `byteplus-tts-2` | Example voice `zh_female_vv_uranus_bigtts`; pick from the listed voices for tone. |
-| Signature SFX & ambience loops (weapon impact, explosion, magic cast, boss roar, rain/wind bed) | `elevenlabs-sound-v3` (capability `sound-effects`) | `mode:"text-to-audio"` (`audioKind:"sfx"`). Only when live discovery lists `sound-effects` / `elevenlabs-sound-v3`; keep prompt concise (**≤ 400 chars**, hard cap 450); supports `duration_seconds` (`0.5–30`), `loop`, `prompt_influence` (`0–1`). Budget ~3–6 signature clips per game. |
-| Instant UI/micro-SFX (clicks, ticks, coin blips, combo chimes) & fallback | Web Audio synthesis | Zero-latency procedural synthesis below; also used whenever `sound-effects` is unavailable or declined. |
-| Ambience bed | `elevenlabs-sound-v3` with `loop:true` (when live), `elevenlabs-music-v2` soft pad, or Web Audio noise layers | Keep under music level. |
+| Looping BGM / boss theme | `music` (`elevenlabs-music-v2`) | Prompt mood, tempo, instruments, `instrumental, no vocals`, clean loop ending; use provider-native length option (`duration` on account, `music_length_ms` on Cloud) |
+| Signature SFX & ambience loops | `sound-effects` (`elevenlabs-sound-v3`) | Only when active in live discovery; keep prompt concise (`≤ 400 chars`, hard cap `450`); supports `duration_seconds` (`0.5–30`), `loop`, `prompt_influence` (`0–1`). Budget ~3–6 signature clips |
+| Voice lines / announcer | `speech` (`elevenlabs-v3`, `byteplus-tts-2`) | Exact spoken line only in prompt; pick `parameters.voice` from live listed voices; reuse one voice per speaker and show subtitles |
+| Instant UI/micro-SFX & fallbacks | Web Audio synthesis | Zero-latency procedural SFX (and fallback whenever a live model is unavailable/declined) |
 
-Never use a model name that discovery did not return. When `sound-effects` is inactive or unavailable, synthesize in Web Audio instead of searching for unlisted names.
+Poll jobs with `action:"status"` until `completed`, never auto-retry failed paid jobs, and wire completed audio by literal `/motion-api/assets/<assetId>/versions/<versionId>/media` URLs via `fetch` + `ctx.decodeAudioData` (with silent fallback to Web Audio on load failure so audio never blocks gameplay).
 
-## Requests
+## 2. Web Audio SFX & BGM Fallback
 
-These are `openmotion_assets_use` arguments, submitted only after the user approved the planned list. Each new intended job needs a unique `requestId`.
+- **Layered SFX:** Build a compact helper routed to `sfxBus` using filtered noise bursts, resonant sine/triangle envelopes, and `±5%` pitch variation (avoid harsh raw square beeps). Rate-limit rapid stacked impacts.
+- **Dynamic coupling:** Couple audio to gameplay state (duck ambience/ordinary hits `-3` to `-6 dB` on critical cues/boss telegraphs, shift intensity or filter cutoff across phases).
 
-Music:
+## Web Audio BGM fallback
 
-```json
-{"action":"generate","requestId":"game-bgm-01","model":"opendesign:elevenlabs-music-v2","modality":"audio","mode":"text-to-audio","prompt":"Instrumental synthwave racing loop, 128 BPM, driving bass, bright arpeggios, no vocals, seamless loop ending","parameters":{"music_length_ms":30000}}
-```
+When no live music model is usable or generation is declined, do **not** drop BGM — schedule a lightweight 8–16 bar looping groove on `musicBus` after the first user gesture:
 
-Sound effects (when live `sound-effects` capability is available):
+- Use a look-ahead scheduler anchored to `ctx.currentTime` (never raw `setInterval`, which drifts or throttles in background tabs) with 2–3 soft voices (warm bassline, filtered chord pad/pluck, optional subtle pulse).
+- Keep `musicBus` around `-18` to `-20 dBFS`, react to danger/phase shifts, and pause/suspend cleanly on mute, `visibilitychange`, end-card, or container pause without stacking duplicate loops on restart.
 
-```json
-{"tool":"openmotion_capability_run","arguments":{"capabilityId":"sound-effects","requestId":"game-sfx-explosion-01","prompt":"Heavy sci-fi plasma explosion with sub-bass punch and metallic debris, clean tail","parameters":{"duration_seconds":1.8,"prompt_influence":0.5}}}
-```
+## 3. Mix, Loudness & Verification
 
-Speech:
+Route `voiceBus` (`-6 dBFS`), `sfxBus` (`-10` to `-12 dBFS`), and `musicBus` (`-18` to `-20 dBFS`, duck ~6 dB under voice) into one master compressor (`true peak <= -3 dBFS`). Loop BGM with `AudioBufferSourceNode.loop` and short fades; never stack raw model outputs at full gain.
 
-```json
-{"action":"generate","requestId":"game-vo-hero-01","model":"account:elevenlabs-v3","modality":"audio","mode":"text-to-speech","prompt":"The gate is open. Move!","parameters":{"voice":"<voice id listed by models>"}}
-```
-
-Poll the returned `job.id` with `{"action":"status","jobId":"<job.id>"}` until `state:"completed"`, read the saved `{assetId, versionId}` from `job.libraryAssets[]`, and call `{"action":"read","assetId":"...","versionId":"..."}` (or `action:"get"`) to inspect `version` metadata (duration, format, mimeType). Speech results may include timing metadata (ElevenLabs `alignment`, BytePlus `sentences`) in `job.result`; use it to sync subtitles or mouth flaps. Never auto-retry a failed paid job; follow the media job procedure.
-
-## Wiring generated audio
-
-Reference completed audio by its library URL; no binary copy into the game is needed:
-
-```js
-const ctx = new AudioContext();
-async function loadClip(url) {
-  const res = await fetch(url);
-  return ctx.decodeAudioData(await res.arrayBuffer());
-}
-const bgm = await loadClip('/motion-api/assets/<assetId>/versions/<versionId>/media');
-```
-
-Playtest, cover capture and trailer recording serve these URLs from the same local service; `openmotion_assets_use action=web_publish` rewrites them to bundled relative paths. Record asset id, version id, model, license and approved cost in `design/assets.csv`. Handle load failure by continuing silently with synthesized fallbacks, never by blocking play.
-
-## Web Audio SFX synthesis
-
-Build a tiny sound kit in `client.js` with oscillators, noise buffers and envelopes. Every SFX is a function that schedules nodes on the shared context:
-
-```js
-function blip(freq = 660, dur = 0.08, type = 'square', gain = 0.25) {
-  const t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain();
-  o.type = type; o.frequency.setValueAtTime(freq, t);
-  o.frequency.exponentialRampToValueAtTime(freq * 1.6, t + dur);
-  g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  o.connect(g).connect(sfxBus); o.start(t); o.stop(t + dur);
-}
-```
-
-Recipes: pickup = rising square blip; jump = short sine sweep up; hit = 40–80 ms filtered noise burst plus low sine thump; explosion = 0.4 s low-passed noise with falling cutoff; UI click = 15 ms triangle tick; engine = sawtooth with frequency mapped to speed through a low-pass filter. Vary pitch ±5% per play so repeats do not fatigue.
-
-## Web Audio BGM fallback (offline / no music model)
-
-When live discovery returns no usable music model, the user declines paid generation, or an explicit single-file offline export forbids external audio files, do **not** drop BGM — schedule a lightweight 8–16 bar looping Web Audio groove on `musicBus` after the first user gesture:
-
-- Drive the loop with a look-ahead scheduler anchored to `ctx.currentTime` (avoid raw `setInterval` timers that drift or throttle in background tabs), layering 2–3 soft voices: a warm triangle/sine bassline, a gentle filtered chord pad or pluck, and optional subtle pulse percussion.
-- Keep `musicBus` around -18 to -20 dBFS so SFX stays crisp on top, tighten energy or open a low-pass filter on high danger/fever states, and pause/suspend cleanly on mute, `visibilitychange`, end-card, or container pause (`setPaused('container')`) without stacking duplicate loops on replay.
-
-## Scope
-
-- Music: scale track count to the game's pacing (one clean loop suffices for small games; multi-phase boss fights or distinct zones may cross-fade across phases), and couple audio dynamically to core game states (e.g. low-pass filtering during slow-motion/danger, intensity shifts on phase change) rather than playing a static wallpaper loop.
-- SFX: prioritize the primary verb, damage/feedback, pickup/reward, important environment, then one ambience layer. Keep small games to roughly five essential effects.
-- Voice: lock one voice per speaking entity and reuse it. Keep lines short enough not to block gameplay; always show subtitles.
-- Submit independent approved clips together, but wait for every job and wire only completed versions.
-
-## Prompt rules
-
-- Music prompts specify mood, tempo, instrumentation and `instrumental, no vocals` when lyrics are unwanted; ask for a clean loop ending.
-- Voice prompts contain the exact line only; choose tone through `parameters.voice` (OpenDesign `account` speech currently accepts `parameters.voice` only; OpenDesign Cloud `opendesign` also exposes provider-native options such as `voice_settings` and `audio_params.speech_rate` when listed by discovery), never undocumented flags.
-- Preserve the game's STYLE FORMULA conceptually through material, era, energy and tonal language.
-
-## Mix and ear safety
-
-Route through `musicBus`, `sfxBus` and `voiceBus` gain nodes into one master compressor:
-
-- Voice around -6 dBFS.
-- SFX around -10 to -12 dBFS.
-- Music around -18 to -20 dBFS; duck by ~6 dB under voice.
-- Final true peak at or below -3 dBFS.
-
-Voice stays above SFX; SFX stays above music. Loop music with `AudioBufferSourceNode.loop` and short fades at boundaries. Never stack raw model outputs at full gain.
-
-## Verification
-
-- Every audio URL in `design/assets.csv` loads without a 404 in playtest's failed-request list.
-- Autoplay restrictions are handled: create or resume the audio context from a user gesture.
-- A mute toggle exists; audio pauses when the page loses focus if that matches the game profile.
-- The game remains playable with sound disabled.
-- Headless playtest does not establish audible quality; report it as unverified.
+- Zero 404s on audio URLs in `openmotion_game_playtest`.
+- Unlock/resume `AudioContext` on first user gesture; provide a mute toggle controlling both BGM and SFX; stay playable muted.
+- Headless playtest does not verify audible quality — report audio listening as unverified in the final summary.
