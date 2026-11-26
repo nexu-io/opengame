@@ -611,9 +611,13 @@ async function submitAndWaitTask(
 
 function selectGlbArtifact(artifacts: TripoArtifact[]): TripoArtifact {
   const chosen =
+    artifacts.find(a => a.name === 'pbr_model') ??
     artifacts.find(a => a.name === 'model') ??
+    artifacts.find(a => a.name === 'base_model') ??
     artifacts.find(a => a.name === 'colliderMesh') ??
+    artifacts.find(a => a.name === 'mesh') ??
     artifacts.find(a => typeof a.format === 'string' && a.format.toLowerCase() === 'glb') ??
+    artifacts.find(a => typeof a.content_path === 'string' && a.content_path.includes('artifact=pbr_model')) ??
     artifacts.find(a => typeof a.content_path === 'string' && a.content_path.includes('artifact=model')) ??
     artifacts.find(a => a.content_type === 'model/gltf-binary') ??
     artifacts.find(a => typeof a.content_path === 'string' && a.content_path.endsWith('.glb')) ??
@@ -715,11 +719,50 @@ function sanitizeMeshParameters(raw: Record<string, unknown>, defaultFaceLimit: 
     texture: raw.texture !== undefined ? Boolean(raw.texture) : true,
     face_limit: faceLimit,
   };
-  for (const key of ['texture_quality', 'geometry_quality', 'style', 'negative_prompt', 'auto_size', 'orientation']) {
+  for (const key of ['texture_quality', 'geometry_quality', 'style', 'negative_prompt', 'auto_size', 'orientation', 'model_seed', 'texture_seed']) {
     if (raw[key] !== undefined) params[key] = raw[key];
   }
   // Never forward quad=true because Tripo returns FBX instead of GLB.
   return { params, faceLimit };
+}
+
+const TRIPO_BIPED_ANIMATION_SHORT_NAMES = new Set([
+  'idle', 'walk', 'run', 'dive', 'climb', 'jump', 'slash', 'shoot', 'hurt', 'fall', 'turn',
+]);
+const TRIPO_CREATURE_ANIMATION_SHORT_NAMES = new Set([
+  'quadruped:walk', 'hexapod:walk', 'octopod:walk', 'serpentine:march', 'aquatic:march',
+]);
+const TRIPO_RIG_V3_MODEL_VERSION = 'v3.0-20260909';
+const TRIPO_RIG_V3_ONLY_SPECS = new Set(['actorcore', 'unity', 'unreal', 'vrm']);
+const TRIPO_TASK_CHAIN_OPERATIONS = new Set([
+  'decimate', 'retarget', 'texture', 'convert',
+  'segment', 'smartsegment', 'complete', 'uv', 'edit', 'rig-check',
+]);
+const TRIPO_MEDIA_PASSTHROUGH_OPERATIONS = new Set([
+  'multiview_to_model', 'image_to_splat', 'text_to_image', 'image_to_image',
+  'image_to_multiview', 'edit_multiview', 'import',
+]);
+
+/** Normalize Tripo v3 animation identifiers to the required `preset:*` format and fail fast on invalid names. */
+export function normalizeTripoAnimation(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new Error('Tripo retarget animation name must be non-empty (e.g. "preset:idle", "preset:run", "preset:slash")');
+  }
+  if (/^preset:[a-z0-9_:-]+$/i.test(trimmed)) {
+    return trimmed;
+  }
+  const lower = trimmed.toLowerCase();
+  const withoutMixamo = lower.startsWith('mixamo-') ? lower.slice('mixamo-'.length) : lower;
+  if (TRIPO_BIPED_ANIMATION_SHORT_NAMES.has(withoutMixamo)) {
+    return `preset:${withoutMixamo}`;
+  }
+  if (TRIPO_CREATURE_ANIMATION_SHORT_NAMES.has(lower)) {
+    return `preset:${lower}`;
+  }
+  throw new Error(
+    `Invalid Tripo animation "${trimmed}": Tripo v3 retarget requires "preset:*" identifiers (for example ["preset:idle", "preset:run", "preset:slash"]).`,
+  );
 }
 
 /** Re-encode embedded PNG/JPEG textures inside a GLB 2 file to EXT_texture_webp via pure-Node glb-optimize.ts (preserving resolution, alpha, geometry, skins, and animations). */
@@ -785,12 +828,14 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
   const rigPresetOpt = typeof ctx.options.rigPreset === 'string' ? ctx.options.rigPreset : undefined;
   const rigOnlyPreset = rigPresetOpt === 'mixamo-only';
   const rigPresetAnimation = rigPresetOpt ? rigPresetMap[rigPresetOpt] : undefined;
-  const animationsList = Array.isArray(params.animations)
-    ? params.animations.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0).map(entry => entry.trim())
+  const rawAnimationsList = Array.isArray(params.animations)
+    ? params.animations.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
     : [];
-  const animation = (typeof params.animation === 'string' && params.animation.trim())
+  const animationsList = rawAnimationsList.map(normalizeTripoAnimation);
+  const rawAnimation = (typeof params.animation === 'string' && params.animation.trim())
     || rigPresetAnimation
     || (typeof ctx.options.animation === 'string' && ctx.options.animation !== 'none' ? ctx.options.animation : undefined);
+  const animation = rawAnimation ? normalizeTripoAnimation(rawAnimation) : undefined;
   const hasRetargetAnimation = Boolean(animation || animationsList.length > 0);
 
   let effectiveOp = explicitParamOp ?? optionOp;
@@ -909,6 +954,11 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
         throw new Error('3d-asset rig_retarget requires parameters.original_model_task_id, a prompt, or 1 reference image');
       }
     }
+    const rigType = typeof params.rig_type === 'string' && params.rig_type.trim() ? params.rig_type.trim() : 'biped';
+    const rigSpec = typeof params.spec === 'string' && params.spec.trim() ? params.spec.trim() : 'mixamo';
+    const defaultRigVersion = rigType !== 'biped' || TRIPO_RIG_V3_ONLY_SPECS.has(rigSpec)
+      ? TRIPO_RIG_V3_MODEL_VERSION
+      : DEFAULT_RIG_MODEL_VERSION;
     const rigTask = await submitAndWaitTask(fetcher, config, {
       model: modelId,
       operation: 'rig',
@@ -916,9 +966,9 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
         original_model_task_id: baseTaskId,
         model_version: typeof params.model_version === 'string' && params.model_version.trim()
           ? params.model_version.trim()
-          : DEFAULT_RIG_MODEL_VERSION,
-        rig_type: typeof params.rig_type === 'string' ? params.rig_type : 'biped',
-        spec: typeof params.spec === 'string' ? params.spec : 'mixamo',
+          : defaultRigVersion,
+        rig_type: rigType,
+        spec: rigSpec,
         out_format: 'glb',
       },
     }, `${ctx.requestId}-rig`, pollMs, {
@@ -944,7 +994,7 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
     } else {
       finalTask = rigTask;
     }
-  } else if (['decimate', 'retarget', 'texture', 'convert'].includes(effectiveOp)) {
+  } else if (TRIPO_TASK_CHAIN_OPERATIONS.has(effectiveOp)) {
     if (!originalTaskIdParam) {
       throw new Error(`3d-asset operation=${effectiveOp} requires parameters.original_model_task_id`);
     }
@@ -959,10 +1009,20 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
       passthrough.out_format ??= 'glb';
     }
     if (effectiveOp === 'retarget') {
+      if (!hasRetargetAnimation) {
+        throw new Error(
+          '3d-asset operation=retarget requires an animation (pass parameters.animation="preset:idle" or parameters.animations=["preset:idle","preset:run","preset:slash"], or options.rigPreset)',
+        );
+      }
       retargetRan = true;
-    }
-    if (effectiveOp === 'retarget' && animation && !passthrough.animation) {
-      passthrough.animation = animation;
+      // Tripo v3 treats `animation` and `animations` as mutually exclusive; normalize and send only one.
+      if (animationsList.length > 0) {
+        passthrough.animations = animationsList;
+        delete passthrough.animation;
+      } else if (animation) {
+        passthrough.animation = animation;
+        delete passthrough.animations;
+      }
     }
     finalTask = await submitAndWaitTask(fetcher, config, {
       model: modelId,
@@ -973,6 +1033,35 @@ export async function runOpenDesign3dScript(ctx: CapabilityScriptContext): Promi
       existingTaskId: checkpoint.retargetTaskId,
       onSubmitted: async id => { checkpoint.retargetTaskId = id; await saveCheckpoint(checkpointPath, checkpoint); },
     });
+  } else if (TRIPO_MEDIA_PASSTHROUGH_OPERATIONS.has(effectiveOp) || effectiveOp.startsWith('/v3/')) {
+    const passthrough: Record<string, unknown> = { ...params };
+    delete passthrough.model;
+    delete passthrough.operation;
+    delete passthrough.slim;
+    delete passthrough.max_texture_size;
+    delete passthrough.jpeg_quality;
+    delete passthrough.quad;
+    let uploadedIds: string[] | undefined = checkpoint.uploadAssetIds;
+    if (!uploadedIds && ctx.references.length > 0) {
+      uploadedIds = [];
+      for (const [idx, ref] of ctx.references.entries()) {
+        const uploadId = await uploadReferenceImage(fetcher, config, ref.filename, `${ctx.requestId}-ref-${idx}`);
+        uploadedIds.push(uploadId);
+      }
+      checkpoint.uploadAssetIds = uploadedIds;
+      await saveCheckpoint(checkpointPath, checkpoint);
+    }
+    finalTask = await submitAndWaitTask(fetcher, config, {
+      model: modelId,
+      operation: effectiveOp,
+      ...(ctx.prompt.trim() ? { prompt: ctx.prompt.trim() } : {}),
+      ...(uploadedIds?.length ? { image_asset_ids: uploadedIds } : {}),
+      ...(Object.keys(passthrough).length ? { parameters: passthrough } : {}),
+    }, `${ctx.requestId}-${effectiveOp.replace(/[^a-zA-Z0-9_-]/g, '_')}`, pollMs, {
+      existingTaskId: checkpoint.baseTaskId,
+      onSubmitted: async id => { checkpoint.baseTaskId = id; await saveCheckpoint(checkpointPath, checkpoint); },
+    });
+    baseTaskId = finalTask.taskId;
   } else {
     throw new Error(`Unsupported 3d-asset operation: ${effectiveOp}`);
   }
@@ -1203,11 +1292,24 @@ export async function runOpenDesignWorldScript(ctx: CapabilityScriptContext): Pr
       throw new Error('3d-world operation=atlasTextToImage requires a non-empty prompt');
     }
   } else if (operation === 'atlasGenerate') {
-    const hasContextFrames = Array.isArray(passthrough.contextFrames) && passthrough.contextFrames.length > 0;
-    const hasTargetCameras = Array.isArray(passthrough.targetCameras) && passthrough.targetCameras.length > 0;
-    if (!hasContextFrames || !hasTargetCameras) {
+    const contextFrames = Array.isArray(passthrough.contextFrames) ? passthrough.contextFrames : [];
+    const targetCameras = Array.isArray(passthrough.targetCameras) ? passthrough.targetCameras : [];
+    if (contextFrames.length === 0 || targetCameras.length === 0) {
       throw new Error(
         '3d-world operation=atlasGenerate requires non-empty parameters.contextFrames and parameters.targetCameras (for text-only scene generation use operation="atlasTextToImage")',
+      );
+    }
+    const validFrame = contextFrames.every(frame =>
+      Boolean(frame) && typeof frame === 'object' && !Array.isArray(frame)
+      && Boolean((frame as Record<string, unknown>).imageAsset) && Boolean((frame as Record<string, unknown>).camera),
+    );
+    const validCam = targetCameras.every(cam =>
+      Boolean(cam) && typeof cam === 'object' && !Array.isArray(cam)
+      && Boolean((cam as Record<string, unknown>).extrinsics) && Boolean((cam as Record<string, unknown>).intrinsics),
+    );
+    if (!validFrame || !validCam) {
+      throw new Error(
+        '3d-world operation=atlasGenerate expects contextFrames items with { imageAsset, camera, depth? } and targetCameras items with { extrinsics, intrinsics } (from images2PosedRGBD or aligned RGB-D assets).',
       );
     }
   } else if (operation === 'images2PosedRGBD') {

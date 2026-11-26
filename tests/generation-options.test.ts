@@ -990,3 +990,65 @@ test('OpenDesign image models fail fast locally on unsupported geometry/output p
     assert.equal((await gateway.listJobs()).length, 0);
   } finally { await gateway.close(); }
 }));
+
+test('OpenDesign Cloud API doc alignment: BytePlus 10 voices, music duration->music_length_ms, wan-2.7 audio guard, and dynamic 5552/5519 capabilities', async () => {
+  const tts: Model = { id: 'opendesign:byteplus-tts-2', provider: 'opendesign', modelId: 'byteplus-tts-2', label: 'BytePlus TTS', modality: 'audio', mode: 'text-to-speech', source: 'live' };
+  const ttsVoices = generationOptions(tts)!.fields[0].choices!.map(c => c.value);
+  assert.equal(ttsVoices.length, 10);
+  assert.equal(ttsVoices[0], 'zh_female_vv_uranus_bigtts');
+  assert.ok(ttsVoices.includes('zh_male_m191_uranus_bigtts'));
+  assert.ok(ttsVoices.includes('en_male_tim_uranus_bigtts'));
+
+  // wan-2.7 permanently generates native audio; disallow explicit generate_audio=false locally.
+  const wan: Model = {
+    id: 'opendesign:wan-2.7', provider: 'opendesign', modelId: 'wan-2.7', label: 'Wan 2.7', modality: 'video', mode: 'text-to-video', source: 'live',
+    nativeOptions: { durations: { values: [5, 10], default: 5 }, resolutions: { values: ['720p', '1080p'], default: '720p' } },
+  };
+  assert.throws(() => validateGenerationOptions(wan, { duration: 5, generate_audio: false }), /does not support generate_audio=false/);
+  assert.doesNotThrow(() => validateGenerationOptions(wan, { duration: 5 }));
+
+  // OPEND-5519 readiness: allow duration=-1 when backend advertises supports_auto_duration.
+  const seedanceAuto: Model = {
+    id: 'opendesign:doubao-seedance-2-5-260628', provider: 'opendesign', modelId: 'doubao-seedance-2-5-260628', label: 'Seedance 2.5', modality: 'video', mode: 'text-to-video', source: 'live',
+    nativeOptions: { supports_auto_duration: true, durations: { values: [4, 5, 10], default: 5 } },
+  };
+  assert.doesNotThrow(() => validateGenerationOptions(seedanceAuto, { duration: -1 }));
+
+  // OPEND-5552 readiness: once live catalogue publishes multi-ratio profiles for gpt-image-2.6-* / seedream-5.5, honor them instead of hardcoded rejection.
+  const flareMultiRatio: Model = {
+    id: 'opendesign:gpt-image-2.6-flare', provider: 'opendesign', modelId: 'gpt-image-2.6-flare', label: 'GPT Image 2.6 Flare', modality: 'image', mode: 'text-to-image', source: 'live',
+    nativeOptions: {
+      quality: { values: ['low', 'medium', 'high'], default: 'medium' },
+      profiles: {
+        generations: {
+          profiles: [{ aspect_ratio: '1:1', resolution: '1K' }, { aspect_ratio: '16:9', resolution: '2K' }],
+          default: { aspect_ratio: '16:9', resolution: '2K' },
+        },
+      },
+    },
+  };
+  const flareFields = generationOptions(flareMultiRatio)!.fields.map(f => f.key);
+  assert.deepEqual(flareFields, ['aspect_ratio', 'resolution', 'quality', 'background']);
+  assert.doesNotThrow(() => validateGenerationOptions(flareMultiRatio, { aspect_ratio: '16:9', resolution: '2K', quality: 'high' }));
+
+  // OpenDesign Cloud music converts duration (seconds) to music_length_ms and rejects empty prompt locally.
+  const music: Model = { id: 'opendesign:elevenlabs-music-v2', provider: 'opendesign', modelId: 'elevenlabs-music-v2', label: 'Eleven Music v2', modality: 'audio', mode: 'text-to-audio', source: 'live' };
+  const musicBodies: Record<string, unknown>[] = [];
+  const runMusic = (prompt: string, parameters: Record<string, unknown>) => providerAdapters.opendesign.generate(
+    { id: fixtureJobId, model: music, modality: 'audio', prompt, parameters } as GenerationJob,
+    {
+      key: 'fixture-only', baseUrl: 'https://cloud.example', signal: new AbortController().signal, progress: async () => {}, pollMs: 0,
+      fetcher: async (_url, init) => {
+        if (init?.method === 'POST') {
+          musicBodies.push(JSON.parse(String(init.body)));
+          return Response.json({ task_id: 'mat_1' });
+        }
+        return Response.json({ status: 'succeeded', assets: [{ url: 'https://cdn.example/out.mp3' }] });
+      },
+    },
+  );
+  await assert.rejects(runMusic('   ', { duration: 15 }), /non-empty prompt/i);
+  assert.equal(musicBodies.length, 0);
+  await runMusic('Upbeat synth loop', { duration: 15 });
+  assert.deepEqual(musicBodies[0], { model: 'elevenlabs-music-v2', parameters: { music_length_ms: 15000, prompt: 'Upbeat synth loop' } });
+});

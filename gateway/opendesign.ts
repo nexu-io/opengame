@@ -141,13 +141,21 @@ export const opendesign: ProviderAdapter = {
       const parameters = resolveGenerationParameters(job.model, job.parameters, !!ctx.references?.length);
       const { voice, ...audioOptions } = parameters;
       if (speech && (typeof voice !== 'string' || !voice.trim())) throw new Error('Choose a provider voice ID in parameters.voice');
+      if (audio && !speech && !soundEffects && !job.prompt.trim()) throw new Error('Music generation requires a non-empty prompt');
       if (soundEffects && job.prompt.trim().length > 450) throw new Error('Sound effects prompt must be at most 450 characters');
       const wireParameters = job.modality === 'image' ? cloudImageParameters(parameters) : parameters;
+      const musicParameters = (() => {
+        const { duration, ...rest } = parameters;
+        if (typeof duration === 'number' && Number.isFinite(duration) && duration > 0 && rest.music_length_ms === undefined) {
+          return { ...rest, music_length_ms: Math.round(duration * 1000) };
+        }
+        return parameters;
+      })();
       const audioBody = speech
         ? { voice, parameters: { ...audioOptions, text: job.prompt } }
         : soundEffects
           ? { parameters: { ...audioOptions, text: job.prompt } }
-          : { parameters: { ...parameters, prompt: job.prompt } };
+          : { parameters: { ...musicParameters, prompt: job.prompt } };
       const inputs = audio ? [] : await uploadInputs(fetcher, api, headers, job.id, ctx);
       const images = inputs.length ? { images: job.modality === 'video' ? [{ asset_id: inputs[0], role: 'first_frame' }] : inputs } : {};
       const payload = audio ? { model: job.model.modelId, ...audioBody }

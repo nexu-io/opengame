@@ -58,11 +58,22 @@ const number = (key: string, label: string, value?: number, min?: number, max?: 
 const toggle = (key: string, label: string, value = false): GenerationOption => ({ key, label, kind: 'boolean', default: value });
 const text = (key: string, label: string, required = false): GenerationOption => ({ key, label, kind: 'text', required });
 
-/** OpenDesign speech voices that produced audio through the media API on 2026-11-16; the first is the default.
- * Other voice IDs pass through unchecked: the media API publishes no voice list. Seed TTS 2.0 accepts only its
- * 2.0 (`*_uranus_bigtts`) speakers; 1.0 speakers fail upstream with a resource mismatch. */
+/** OpenDesign speech voices published in the OpenDesign Cloud API docs (https://open-design.ai/help/cloud-api);
+ * the first entry is the default. Other voice IDs pass through unchecked: the media API publishes no voice list.
+ * Seed TTS 2.0 accepts only its 2.0 (`*_uranus_bigtts`) speakers; 1.0 speakers fail upstream with a resource mismatch. */
 const cloudSpeechVoices: Record<string, { value: string; label: string; previewUrl?: string }[]> = {
-  'byteplus-tts-2': [{ value: 'zh_female_vv_uranus_bigtts', label: 'Vivi · Chinese female' }],
+  'byteplus-tts-2': [
+    { value: 'zh_female_vv_uranus_bigtts', label: 'Vivi · Chinese female' },
+    { value: 'zh_male_m191_uranus_bigtts', label: 'Kian · Chinese male' },
+    { value: 'zh_female_xiaohe_uranus_bigtts', label: 'Mindy · Chinese female' },
+    { value: 'zh_female_xiaoxue_uranus_bigtts', label: 'Lyla · Chinese female' },
+    { value: 'zh_female_liuchangnv_uranus_bigtts', label: 'Pearl · Chinese female' },
+    { value: 'zh_female_tianmeitaozi_uranus_bigtts', label: 'Freya · Chinese female' },
+    { value: 'zh_female_yuanqi_uranus_bigtts', label: 'Daisy · Chinese female' },
+    { value: 'en_female_stokie_uranus_bigtts', label: 'Stokie · English female' },
+    { value: 'en_male_tim_uranus_bigtts', label: 'Tim · English male' },
+    { value: 'en_female_jenny_uranus_bigtts', label: 'Jenny · English female' },
+  ],
   'elevenlabs-v3': [
     ['21m00Tcm4TlvDq8ikWAM', 'Rachel · Female', 'https://storage.googleapis.com/eleven-public-prod/premade/voices/21m00Tcm4TlvDq8ikWAM/df6788f9-5c96-470d-8312-aab3b3d8f50a.mp3'],
     ['JBFqnCBsd6RMkjVDRZzb', 'George · Male', 'https://storage.googleapis.com/eleven-public-prod/premade/voices/JBFqnCBsd6RMkjVDRZzb/e6206d1a-0721-4787-aafb-06a6e705cac5.mp3'],
@@ -179,23 +190,30 @@ export function compatibleImageResolutions(model: Model, aspectRatio: unknown, h
   return [...new Set(envelope.profiles.filter(p => p.aspect_ratio === aspectRatio).map(p => p.resolution))];
 }
 
-/** Fail-fast check for unsupported geometry/output fields on OpenDesign image models before queueing remote jobs. */
+function hasMultiRatioProfiles(imageProfiles: PublishedImageProfiles | undefined): boolean {
+  return Boolean(imageProfiles && new Set(imageProfiles.profiles.map(p => p.aspect_ratio)).size > 1);
+}
+
+/** Fail-fast check for unsupported geometry/output fields on OpenDesign image models before queueing remote jobs.
+ * Defers to live catalogue `profiles` once the backend publishes multi-ratio output profiles for a model. */
 function assertOpenDesignImageParameters(model: Model, resolved: Record<string, unknown>, imageProfiles: PublishedImageProfiles | undefined) {
   if (!isOpenDesignMedia(model) || model.modality !== 'image') return;
-  if (/^gpt-image-2\.6-/.test(model.modelId)) {
-    const unsupported = ['output', 'aspect_ratio', 'resolution', 'size', 'image_size'].filter(key => resolved[key] !== undefined);
-    if (unsupported.length) {
-      throw new Error(`Model ${model.id} does not support ${unsupported.join(', ')}. Supported parameters: quality (low|medium|high) and optional background ("transparent").`);
+  if (!hasMultiRatioProfiles(imageProfiles)) {
+    if (/^gpt-image-2\.6-/.test(model.modelId)) {
+      const unsupported = ['output', 'aspect_ratio', 'resolution', 'size', 'image_size'].filter(key => resolved[key] !== undefined);
+      if (unsupported.length) {
+        throw new Error(`Model ${model.id} does not support ${unsupported.join(', ')}. Supported parameters: quality (low|medium|high) and optional background ("transparent").`);
+      }
+      return;
     }
-    return;
-  }
-  if (model.modelId === 'seedream-5.0-flash' || model.modelId === 'seedream-5.5') {
-    const unsupported = ['output', 'aspect_ratio', 'resolution', 'background', 'image_size'].filter(key => resolved[key] !== undefined);
-    if (unsupported.length) {
-      const sizes = model.modelId === 'seedream-5.0-flash' ? '1K|1.5K|2K' : '1K|2K';
-      throw new Error(`Model ${model.id} does not support ${unsupported.join(', ')}. Supported parameters: size (${sizes}).`);
+    if (model.modelId === 'seedream-5.0-flash' || model.modelId === 'seedream-5.5') {
+      const unsupported = ['output', 'aspect_ratio', 'resolution', 'background', 'image_size'].filter(key => resolved[key] !== undefined);
+      if (unsupported.length) {
+        const sizes = model.modelId === 'seedream-5.0-flash' ? '1K|1.5K|2K' : '1K|2K';
+        throw new Error(`Model ${model.id} does not support ${unsupported.join(', ')}. Supported parameters: size (${sizes}).`);
+      }
+      return;
     }
-    return;
   }
   if (resolved.output !== undefined) {
     const out = resolved.output;
@@ -386,12 +404,15 @@ export function generationOptions(model: Model, hasInputImage = false): Generati
     toggle('loop', 'Seamless loop'),
     number('prompt_influence', 'Prompt influence', 0.3, 0, 1, 0.05),
   ];
-  const fixedImageFields = isOpenDesignMedia(model) && model.modality === 'image' ? openDesignImageFields(model) : undefined;
+  const publishedForFixed = isOpenDesignMedia(model) && model.modality === 'image' ? publishedImageProfiles(model, hasInputImage) : undefined;
+  const fixedImageFields = isOpenDesignMedia(model) && model.modality === 'image' && !hasMultiRatioProfiles(publishedForFixed)
+    ? openDesignImageFields(model)
+    : undefined;
   if (fixedImageFields) fields = fixedImageFields;
   // Cloud and account image models publish output profile pairs (`profiles`), legacy `sizes`, and optional `quality`.
   else if (isOpenDesignMedia(model) && model.modality === 'image') {
     const imageFields: GenerationOption[] = [];
-    const profiles = publishedImageProfiles(model, hasInputImage);
+    const profiles = publishedForFixed;
     if (profiles) {
       const ratios = [...new Set(profiles.profiles.map(p => p.aspect_ratio))];
       const resolutions = [...new Set(profiles.profiles.map(p => p.resolution))];
@@ -406,6 +427,9 @@ export function generationOptions(model: Model, hasInputImage = false): Generati
     }
     const quality = publishedStrings(model.nativeOptions?.quality);
     if (quality) imageFields.push(choice('quality', 'Quality', quality.values, quality.default));
+    if (/^gpt-image-2\.6-/.test(model.modelId)) {
+      imageFields.push({ ...choice('background', 'Background', []), choices: [{ value: 'transparent', label: 'Transparent' }] });
+    }
     if (imageFields.length) fields = imageFields;
   }
   // Cloud and account video models publish allowed ratios, resolutions and integer durations via `capabilities`.
@@ -429,9 +453,9 @@ export function generationOptions(model: Model, hasInputImage = false): Generati
   }
   // Speech models without checked voices keep a free voice ID: the API publishes no voice list.
   if (cloudSpeech(model)) { const voices = checkedVoices(model); fields = [voices ? { key: 'voice', label: 'Speech voice', kind: 'choice', choices: voices, default: voices[0].value, allowCustom: true } : text('voice', 'Voice ID', true)]; }
-  // The connector's `audio music --duration` takes whole seconds; music models publish no duration range.
+  // Both account (`--duration`) and Cloud API (`duration` -> `music_length_ms`) accept whole-second music durations.
   // Dedicated sound-effects models (e.g. elevenlabs-sound-v3) use /audio/sound-effects with duration_seconds/loop/prompt_influence instead.
-  if (model.provider === 'account' && model.modality === 'audio' && model.mode === 'text-to-audio' && !isSfxModel(model)) {
+  if (isOpenDesignMedia(model) && model.modality === 'audio' && model.mode === 'text-to-audio' && !isSfxModel(model)) {
     fields = [number('duration', 'Duration (seconds)', undefined, 1)];
   }
   return fields ? enrichGenerationOptionsWithSSOT(model.modality, { delivery: 'provider', fields }) : undefined;
@@ -455,6 +479,15 @@ export function validateGenerationOptions(
       if ([width, height].every(n => typeof n === 'number' && Number.isInteger(n) && n > 0)) continue;
     }
     if (field.allowCustom && typeof value === 'string' && value.trim() && !field.choices?.some(c => c.value === value)) continue;
+    // Allow auto duration (-1) when the backend explicitly advertises supports_auto_duration or includes -1 in durations.
+    if (
+      field.key === 'duration' && value === -1 && model.modality === 'video'
+      && (model.nativeOptions?.supports_auto_duration === true
+        || (Array.isArray((model.nativeOptions?.durations as { values?: unknown[] } | undefined)?.values)
+          && (model.nativeOptions!.durations as { values: unknown[] }).values.includes(-1)))
+    ) {
+      continue;
+    }
     const valid = field.kind === 'choice' ? field.choices?.some(c => c.value === value)
       : field.kind === 'boolean' ? typeof value === 'boolean'
       : field.kind === 'text' ? typeof value === 'string' && (!field.required || !!value.trim())
@@ -464,6 +497,9 @@ export function validateGenerationOptions(
     if (requires) for (const [key, required] of Object.entries(requires)) {
       if (parameters[key] !== required) throw new Error(`${field.label} ${value} requires ${key} ${required}`);
     }
+  }
+  if (videoAudioAlwaysOn(model) && parameters.generate_audio === false) {
+    throw new Error(`Model ${model.id} permanently generates native audio and does not support generate_audio=false.`);
   }
   const imageProfiles = publishedImageProfiles(model, isEdit);
   assertOpenDesignImageParameters(model, parameters, imageProfiles);

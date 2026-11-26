@@ -11,7 +11,7 @@ import { OpenDesignAccount } from '../gateway/account.ts';
 import { readCappedBytes } from '../gateway/network.ts';
 import { productionApi } from '../gateway/opendesign.ts';
 import { gatewayFor } from '../gateway/service.ts';
-import { clearOpenDesign3dDiscoveryCache } from '../gateway/opendesign-3d.ts';
+import { clearOpenDesign3dDiscoveryCache, normalizeTripoAnimation } from '../gateway/opendesign-3d.ts';
 import {
   capabilityRun,
   registerCapabilityQuoteEstimator,
@@ -1607,15 +1607,38 @@ test('3d-world capability gates honestly on AMR world_generations and follows Wo
       assert.deepEqual(worldPosts[beforeAutoRgbd].image_asset_ids, ['world_upload_ref_1']);
       assert.equal(autoRgbd.result.operation, 'images2PosedRGBD');
 
-      //    (b) contextFrames + targetCameras alone auto-infers atlasGenerate
+      //    (b) contextFrames + targetCameras alone auto-infers atlasGenerate (following OD Cloud API schema)
+      await assert.rejects(
+        api.call('openmotion_capability_run', {
+          action: 'run',
+          requestId: 'world-atlas-malformed-frames',
+          capabilityId: '3d-world',
+          parameters: {
+            contextFrames: [{ frameId: 'f0' }],
+            targetCameras: [{ pose: [0, 0, 1] }],
+          },
+        }),
+        /imageAsset.*camera.*extrinsics.*intrinsics/i,
+      );
       const beforeAutoGen = worldPosts.length;
       const autoGen = await api.call('openmotion_capability_run', {
         action: 'run',
         requestId: 'world-atlas-auto-gen',
         capabilityId: '3d-world',
         parameters: {
-          contextFrames: [{ frameId: 'f0' }],
-          targetCameras: [{ pose: [0, 0, 1] }],
+          contextFrames: [{
+            imageAsset: { assetId: 'asset_frame_0' },
+            depth: { depthAsset: { assetId: 'asset_depth_0' } },
+            camera: {
+              extrinsics: { position: [0, 0, 0], quaternion: [0, 0, 0, 1] },
+              intrinsics: { fx: 900, fy: 900, cx: 640, cy: 360, width: 1280, height: 720 },
+            },
+          }],
+          targetCameras: [{
+            extrinsics: { position: [0.5, 0, 0], quaternion: [0, 0, 0, 1] },
+            intrinsics: { fx: 900, fy: 900, cx: 640, cy: 360, width: 1280, height: 720 },
+          }],
+          returnDepth: false,
         },
         name: 'Auto Atlas Generate',
       });
@@ -1974,3 +1997,122 @@ test('direct account sound-effects discovers via control-key probe, enforces 450
       await gateway.close();
     }
   }, false));
+
+test('3d-asset aligns with OpenDesign Cloud API + Tripo v3 contract: preset normalization, mutual exclusion, v3 rig defaults, seeds, and extended ops', () =>
+  fixture(async store => {
+    clearOpenDesign3dDiscoveryCache();
+    assert.equal(normalizeTripoAnimation('idle'), 'preset:idle');
+    assert.equal(normalizeTripoAnimation('mixamo-slash'), 'preset:slash');
+    assert.equal(normalizeTripoAnimation('preset:run'), 'preset:run');
+    assert.equal(normalizeTripoAnimation('quadruped:walk'), 'preset:quadruped:walk');
+    assert.throws(() => normalizeTripoAnimation('custom_unrecognized_flip'), /preset:\*/);
+
+    const api = service(store);
+    const gateway = gatewayFor(store);
+    const glbBytes = makeTinyGlb();
+    const submitted: any[] = [];
+    const downloadedArtifacts: string[] = [];
+
+    gateway.options.pollMs = 10;
+    gateway.options.fetcher = (async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/v1/media/models')) {
+        return Response.json({ models: [{ model: 'tripo-3.0', kind: '3d_generations', capabilities: {} }] });
+      }
+      if (url.endsWith('/api/v1/media/3d/tasks') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body ?? '{}'));
+        submitted.push(body);
+        return Response.json({ task_id: `tripo_${submitted.length}`, status: 'queued' }, { status: 202 });
+      }
+      if (url.includes('/api/v1/media/3d/tasks/') && url.includes('/content')) {
+        downloadedArtifacts.push(url);
+        return new Response(glbBytes, { status: 200, headers: { 'Content-Type': 'model/gltf-binary' } });
+      }
+      if (url.includes('/api/v1/media/3d/tasks/tripo_')) {
+        const id = url.split('/').pop()!;
+        return Response.json({
+          task_id: id,
+          status: 'succeeded',
+          artifacts: [
+            { name: 'base_model', format: 'glb', content_path: `/api/v1/media/3d/tasks/${id}/content?artifact=base_model` },
+            { name: 'pbr_model', format: 'glb', content_path: `/api/v1/media/3d/tasks/${id}/content?artifact=pbr_model` },
+          ],
+        });
+      }
+      return Response.json({ error: `unexpected ${url}` }, { status: 404 });
+    }) as typeof fetch;
+
+    await gateway.configureProvider('opendesign', { apiKey: 'sk-test-opendesign', baseUrl: 'https://amr-mock.example.com', enabled: true });
+
+    try {
+      // 1) Bare short names ["idle","run","slash"] normalize to preset:* AND omit conflicting `animation` even when rigPreset is set.
+      await api.call('openmotion_capability_run', {
+        action: 'run',
+        requestId: 'tripo-retarget-bare-names',
+        capabilityId: '3d-asset',
+        model: 'opendesign:tripo-3.0',
+        options: { operation: 'retarget', rigPreset: 'mixamo-idle' },
+        parameters: {
+          slim: false,
+          original_model_task_id: 'rig_task_prior',
+          animations: ['idle', 'run', 'slash'],
+        },
+      });
+      assert.equal(submitted.length, 1);
+      assert.deepEqual(submitted[0].parameters.animations, ['preset:idle', 'preset:run', 'preset:slash']);
+      assert.equal('animation' in submitted[0].parameters, false);
+      assert.match(downloadedArtifacts[0], /artifact=pbr_model/);
+
+      // 2) Missing animation or invalid animation on retarget fails fast locally with 0 submissions.
+      await assert.rejects(
+        api.call('openmotion_capability_run', {
+          action: 'run',
+          requestId: 'tripo-retarget-no-anim',
+          capabilityId: '3d-asset',
+          model: 'opendesign:tripo-3.0',
+          options: { operation: 'retarget' },
+          parameters: { original_model_task_id: 'rig_task_prior' },
+        }),
+        /requires an animation/,
+      );
+      await assert.rejects(
+        api.call('openmotion_capability_run', {
+          action: 'run',
+          requestId: 'tripo-retarget-bad-anim',
+          capabilityId: '3d-asset',
+          model: 'opendesign:tripo-3.0',
+          options: { operation: 'retarget' },
+          parameters: { original_model_task_id: 'rig_task_prior', animations: ['somersault_xyz'] },
+        }),
+        /preset:\*/,
+      );
+      assert.equal(submitted.length, 1);
+
+      // 3) Quadruped rig auto-selects Tripo v3 model_version; mesh forwards model_seed & texture_seed; OD-documented segment op works.
+      await api.call('openmotion_capability_run', {
+        action: 'run',
+        requestId: 'tripo-quadruped-seeds',
+        capabilityId: '3d-asset',
+        model: 'opendesign:tripo-3.0',
+        prompt: 'Armored battle wolf',
+        options: { operation: 'rig' },
+        parameters: { slim: false, rig_type: 'quadruped', model_seed: 123, texture_seed: 456 },
+      });
+      assert.equal(submitted[1].parameters.model_seed, 123);
+      assert.equal(submitted[1].parameters.texture_seed, 456);
+      assert.equal(submitted[2].operation, 'rig');
+      assert.equal(submitted[2].parameters.rig_type, 'quadruped');
+      assert.equal(submitted[2].parameters.model_version, 'v3.0-20260909');
+
+      await api.call('openmotion_capability_run', {
+        action: 'run',
+        requestId: 'tripo-segment-op',
+        capabilityId: '3d-asset',
+        model: 'opendesign:tripo-3.0',
+        parameters: { operation: 'segment', slim: false, original_model_task_id: 'tripo_2' },
+      });
+      assert.equal(submitted[3].operation, 'segment');
+    } finally {
+      await gateway.close();
+    }
+  }));
