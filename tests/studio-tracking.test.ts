@@ -8,6 +8,7 @@ import { studioUsageEvents, audioEffects, audioPresets, audioParams, audioJobs, 
 import { studioUsageProperties } from '../tracking/studio-properties.ts';
 import { createPosthogSender } from '../tracking/node.ts';
 import { identifyHost, validHostContext, previewTrackingContext } from '../tracking/host.ts';
+import { localAgents } from '../shared/local-agents.ts';
 import { studioTrackingFixtures } from './studio-tracking-fixtures.ts';
 import { fixture } from './fixtures.ts';
 import { transport } from './http.ts';
@@ -149,6 +150,22 @@ test('host identity uses declared clients, preserves unknown and scopes all hand
   assert.deepEqual(identifyHost({ name: 'openmotion-cli', version: '1' }, {}), {
     host_agent: 'other', host_agent_source: 'mcp_client_info', mcp_client_name: 'openmotion-cli', mcp_client_version: '1',
   });
+  assert.deepEqual(identifyHost({ name: 'openmotion-cli', version: '1' }, { OPENMOTION_HOST_AGENT: 'custom-unlisted-agent' }), {
+    host_agent: 'other', host_agent_source: 'mcp_client_info', mcp_client_name: 'openmotion-cli', mcp_client_version: '1',
+  });
+  // Every supported local Agent id must resolve to a named bucket directly and across the openmotion-cli bridge.
+  for (const agent of localAgents) {
+    const direct = identifyHost({ name: agent.id, version: '1.0.0' });
+    assert.notEqual(direct.host_agent, 'other', agent.id);
+    assert.notEqual(direct.host_agent, 'unknown', agent.id);
+    assert.equal(direct.host_agent_source, 'mcp_client_info', agent.id);
+    assert(validHostContext(direct), agent.id);
+    const bridged = identifyHost({ name: 'openmotion-cli', version: '1' }, { OPENMOTION_HOST_AGENT: agent.id });
+    assert.equal(bridged.host_agent, direct.host_agent, agent.id);
+    assert.equal(bridged.host_agent_source, 'launch_environment', agent.id);
+    assert.equal(bridged.mcp_client_name, 'openmotion-cli', agent.id);
+    assert(validHostContext(bridged), agent.id);
+  }
   const url = 'http://localhost:4173/?templates=1&embed=1', token = crypto.randomUUID();
   const value = previewTrackingContext({ previewUrl: url, sessionUrl: url, embeddedPreviewUrl: url, previewHandoff: { previewUrl: url,
     nextAction: { codex: { arguments: { target: { url } } } } }, requirements: { url } }, 'http://localhost:4173', token);

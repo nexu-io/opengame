@@ -244,10 +244,12 @@ audio/geometry measurements; non-finite or out-of-range values are rejected.
 
 ### Host Agent attribution
 
-Every event has `host_agent` and `host_agent_source`. Known declared clients map
-to `codex`, `deepseek` (DeepSeek Harness/DSH), `claude`, `cursor`, `opencode`,
-`gemini`, `workbuddy`, `chatgpt`, `antigravity`, `hermes`, `qoder`, `trae` or
-`copilot`; another declared client maps to `other`.
+Every event has `host_agent` and `host_agent_source`. Known declared clients and
+supported local Agents map to a closed `hostAgents` enum (`codex`, `deepseek`
+(DeepSeek Harness/DSH), `claude`, `cursor`, `opencode`, `gemini`, `workbuddy`,
+`chatgpt`, `antigravity`, `hermes`, `qoder`, `trae`, `copilot`, plus the
+supported local Agents in `shared/local-agents.ts`); any other declared client
+maps to `other`.
 Missing evidence is `unknown`, never inferred from an installed executable,
 model provider, browser user agent or the last caller of a shared backend.
 Declared client names are trimmed, lowercased and whitespace-collapsed to `-`
@@ -260,12 +262,15 @@ host-application version. DSH currently declares its MCP adapter version.
 The stdio runtime captures `initialize.params.clientInfo` per connection and also
 recognizes standard per-request `io.modelcontextprotocol/clientInfo` metadata.
 An absent declaration—or the bundled `openmotion-cli` direct-access bridge when
-invoked with `--host` (`OPENMOTION_HOST_AGENT`) or inside a known host shell—can
-fall back to `OPENMOTION_HOST_AGENT`, `CODEX_THREAD_ID` or `CLAUDECODE=1` in
-that MCP process, labeled `launch_environment` (retaining `mcp_client_name:
-openmotion-cli` when bridged). Environment values and thread IDs themselves are
-never reported. Client metadata is self-declared analytics context, not
-authenticated identity or an entitlement.
+invoked with a recognized `--host` (`OPENMOTION_HOST_AGENT`) or inside a known
+host shell—can fall back to `OPENMOTION_HOST_AGENT`, `CODEX_THREAD_ID` or
+`CLAUDECODE=1` in that MCP process, labeled `launch_environment` (retaining
+`mcp_client_name: openmotion-cli` when bridged). If `OPENMOTION_HOST_AGENT` is
+omitted or holds a custom name outside the closed `hostAgents` enum, the
+`openmotion-cli` bridge intentionally falls back to `host_agent: other` with
+`host_agent_source: mcp_client_info` and `mcp_client_name: openmotion-cli` so
+arbitrary environment values and thread IDs are never reported. Client metadata
+is self-declared analytics context, not authenticated identity or an entitlement.
 
 The calling context follows domain operations and is persisted on export jobs
 for the worker. Editor handoffs receive an opaque `tracking_context` query token;

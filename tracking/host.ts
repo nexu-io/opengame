@@ -1,6 +1,9 @@
 export const hostAgents = [
   'codex', 'claude', 'deepseek', 'cursor', 'opencode', 'gemini', 'workbuddy', 'chatgpt',
-  'antigravity', 'hermes', 'qoder', 'trae', 'copilot', 'other', 'unknown',
+  'antigravity', 'hermes', 'qoder', 'trae', 'copilot',
+  'kimi', 'qwen', 'pi', 'kiro', 'kilo', 'vibe', 'amp', 'devin', 'grok-build',
+  'codebuddy', 'mimo', 'aider', 'atomcode', 'reasonix', 'openclaude', 'cline', 'bob',
+  'other', 'unknown',
 ] as const;
 export type HostContext = { host_agent: typeof hostAgents[number]; host_agent_source: 'mcp_client_info' | 'launch_environment' | 'unknown'; mcp_client_name?: string; mcp_client_version?: string };
 export const unknownHost: HostContext = { host_agent: 'unknown', host_agent_source: 'unknown' };
@@ -8,17 +11,34 @@ const clientNames = /^[A-Za-z0-9_.-]{1,64}$/;
 const versions = /^\d{1,6}(?:\.\d{1,6}){0,3}(?:[-+][A-Za-z0-9.-]{1,48})?$/;
 const names: Record<string, HostContext['host_agent']> = {
   codex: 'codex', 'codex-mcp-client': 'codex', codex_cli_rs: 'codex', 'codex-local-openmotion': 'codex', 'codex-openmotion-local': 'codex',
-  'dsh-mcp-client': 'deepseek', 'dsh-mcp-probe': 'deepseek', dsh: 'deepseek', 'deepseek-harness': 'deepseek', 'dsh-probe': 'deepseek', 'dsh-agent': 'deepseek', 'dsh-export': 'deepseek', 'dsh-lead-mcp-bridge': 'deepseek',
+  'dsh-mcp-client': 'deepseek', 'dsh-mcp-probe': 'deepseek', dsh: 'deepseek', deepseek: 'deepseek', codewhale: 'deepseek', 'deepseek-harness': 'deepseek', 'dsh-probe': 'deepseek', 'dsh-agent': 'deepseek', 'dsh-export': 'deepseek', 'dsh-lead-mcp-bridge': 'deepseek',
   claude: 'claude', 'claude-code': 'claude', 'claude-ai': 'claude', 'claude-desktop': 'claude', 'claude-code-direct': 'claude', 'claude-code-stdio': 'claude',
   cursor: 'cursor', 'cursor-vscode': 'cursor', 'cursor-agent': 'cursor', opencode: 'opencode',
-  'gemini-cli': 'gemini', 'google-gemini-cli': 'gemini',
+  gemini: 'gemini', 'gemini-cli': 'gemini', 'google-gemini-cli': 'gemini',
   workbuddy: 'workbuddy', 'workbuddy-desktop': 'workbuddy', 'workbuddy-cli': 'workbuddy', 'workbuddy-direct': 'workbuddy', 'workbuddy-verify': 'workbuddy',
   chatgpt: 'chatgpt',
-  antigravity: 'antigravity', 'antigravity-client': 'antigravity',
+  antigravity: 'antigravity', 'antigravity-client': 'antigravity', agy: 'antigravity',
   hermes: 'hermes', 'hermes-agent': 'hermes',
   qoder: 'qoder', qodercli: 'qoder', qoderclicn: 'qoder', 'qoder-desktop-mcp-host': 'qoder',
   trae: 'trae', 'trae-cli': 'trae', traecli: 'trae',
   copilot: 'copilot', 'copilot-cli': 'copilot', 'github-copilot': 'copilot', 'vscode-agent-host': 'copilot',
+  kimi: 'kimi', 'kimi-code': 'kimi', 'kimi-cli': 'kimi',
+  qwen: 'qwen', 'qwen-code': 'qwen', 'qwen-cli': 'qwen',
+  pi: 'pi',
+  kiro: 'kiro', 'kiro-cli': 'kiro',
+  kilo: 'kilo', 'kilo-code': 'kilo', kilocode: 'kilo',
+  vibe: 'vibe', 'mistral-vibe': 'vibe',
+  amp: 'amp',
+  devin: 'devin',
+  'grok-build': 'grok-build', grok: 'grok-build',
+  codebuddy: 'codebuddy', 'codebuddy-code': 'codebuddy', 'codebuddy-cli': 'codebuddy',
+  mimo: 'mimo', 'mimo-code': 'mimo',
+  aider: 'aider',
+  atomcode: 'atomcode',
+  reasonix: 'reasonix',
+  openclaude: 'openclaude',
+  cline: 'cline',
+  bob: 'bob',
 };
 const cliBridgeClients = new Set(['openmotion-cli', 'om-cli']);
 
