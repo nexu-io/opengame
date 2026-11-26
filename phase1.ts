@@ -357,7 +357,7 @@ export class Phase1Service {
     return display ? { ...display, isCurrentVersion: display.revision === version.revision && display.versionId === version.versionId,
       liveVisibilityVerified: false } : null;
   }
-  async recordDisplay(args: any, detail: any) {
+  async recordDisplay(args: any, detail: any, host?: HostContext) {
     const display = args.display;
     const target = new URL(this.context.origin() + sessionPath(detail.sessionId, detail.projectId, { embedded: true }));
     let observed: URL;
@@ -383,21 +383,21 @@ export class Phase1Service {
     if (args.workId && this.context.tracking) {
       const round = await this.workRounds.get(detail.projectId, args.workId).catch(() => null);
       this.context.tracking.track('host_preview_observed', { run_id: args.workId, project_id: detail.projectId, revision: detail.revision,
-        version_id: detail.currentVersionId, visibility: display.visibility, content_verified: display.contentVerified, observation_source: 'host_reported' }, undefined, undefined, undefined);
+        version_id: detail.currentVersionId, visibility: display.visibility, content_verified: display.contentVerified, observation_source: 'host_reported' }, undefined, undefined, host);
       const checkId = crypto.randomUUID();
       this.context.tracking.track('check_required', { check_id: checkId, check_type: 'preview_observed', project_id: detail.projectId,
-        version_id: detail.currentVersionId, subject_id: checkId.slice(0, 32), checklist_version: 'preview-v1', checker_type: 'host', required: true });
+        version_id: detail.currentVersionId, subject_id: checkId.slice(0, 32), checklist_version: 'preview-v1', checker_type: 'host', required: true }, undefined, undefined, host);
       this.context.tracking.track('check_completed', { check_id: checkId, check_type: 'preview_observed', project_id: detail.projectId,
         version_id: detail.currentVersionId, subject_id: checkId.slice(0, 32), checklist_version: 'preview-v1', checker_type: 'host',
-        result: display.visibility === 'visible' && display.contentVerified ? 'pass' : 'unreviewed', evidence_ref: checkId.slice(0, 32) });
+        result: display.visibility === 'visible' && display.contentVerified ? 'pass' : 'unreviewed', evidence_ref: checkId.slice(0, 32) }, undefined, undefined, host);
       if (display.visibility === 'visible' && display.contentVerified && display.versionId === detail.currentVersionId
         && round?.versionId === detail.currentVersionId) this.context.tracking.track('host_run_delivered', {
-        run_id: args.workId, delivery_mode: 'preview', project_id: detail.projectId, revision: detail.revision, delivery_evidence_ref: checkId.slice(0, 32) });
+        run_id: args.workId, delivery_mode: 'preview', project_id: detail.projectId, revision: detail.revision, delivery_evidence_ref: checkId.slice(0, 32) }, undefined, undefined, host);
     }
     return { projectId: detail.projectId, changed: false, previewHandoff: previewHandoff(this.context.origin(), {
       projectId: detail.projectId, sessionId: detail.sessionId, revision: detail.revision, versionId: detail.currentVersionId }, args.presentation, record, true, display.previewUrl, record.hostTabId), display: record };
   }
-  async review(args: any, objectId?: string) {
+  async review(args: any, objectId?: string, host?: HostContext) {
     if (!args.review) throw new ToolInputError('review is required', 'review', 'missing');
     const review = args.review, index = await this.versions(args.projectId).index();
     if (!index.versions.some(version => version.versionId === review.versionId)) throw new Error('VERSION_NOT_FOUND');
@@ -410,10 +410,10 @@ export class Phase1Service {
     if (this.context.tracking) {
       const checkId = crypto.randomUUID(), versionId = review.versionId;
       this.context.tracking.track('check_required', { check_id: checkId, check_type: 'content_review', project_id: args.projectId,
-        version_id: versionId, subject_id: digest(review.objectId).slice(0, 32), checklist_version: 'review-v1', checker_type: review.source === 'user' ? 'user' : 'agent', required: true });
+        version_id: versionId, subject_id: digest(review.objectId).slice(0, 32), checklist_version: 'review-v1', checker_type: review.source === 'user' ? 'user' : 'agent', required: true }, undefined, undefined, host);
       this.context.tracking.track('check_completed', { check_id: checkId, check_type: 'content_review', project_id: args.projectId,
         version_id: versionId, subject_id: digest(review.objectId).slice(0, 32), checklist_version: 'review-v1', checker_type: review.source === 'user' ? 'user' : 'agent',
-        result: review.conclusion === 'passed' ? 'pass' : review.conclusion === 'failed' ? 'fail' : review.conclusion === 'unable_to_view' ? 'error' : 'unreviewed', evidence_ref: checkId.slice(0, 32) });
+        result: review.conclusion === 'passed' ? 'pass' : review.conclusion === 'failed' ? 'fail' : review.conclusion === 'unable_to_view' ? 'error' : 'unreviewed', evidence_ref: checkId.slice(0, 32) }, undefined, undefined, host);
     }
     return { projectId: args.projectId, review: record, changed: false };
   }
@@ -606,7 +606,7 @@ export class Phase1Service {
         if (args.display.revision !== detail.revision || args.display.versionId !== detail.currentVersionId) {
           throw versionConflictError(detail.revision, detail.currentVersionId, 'preview display 指向的不是当前内容版本。');
         }
-        return this.writeRequest(name, args, () => this.recordDisplay(args, detail));
+        return this.writeRequest(name, args, () => this.recordDisplay(args, detail, host));
       }
       if (args.action === 'begin') {
         if (!args.projectId || !args.mode) throw new ToolInputError('begin requires projectId and mode', !args.projectId ? 'projectId' : 'mode', 'missing');
@@ -629,7 +629,7 @@ export class Phase1Service {
       }
       if (args.action === 'record_review') {
         if (!args.projectId) throw new ToolInputError('projectId is required for review', 'projectId', 'missing');
-        return this.writeRequest(name, args, () => this.review(args));
+        return this.writeRequest(name, args, () => this.review(args, undefined, host));
       }
       const catalog = this.store.projectCatalog();
       const session = args.sessionId ? catalog.sessions!.find(item => item.id === args.sessionId) : null;
@@ -757,7 +757,7 @@ export class Phase1Service {
         const job = await this.store.job(args.jobId);
         if (!job || job.projectId !== args.projectId || job.state !== 'completed') throw new Error('EXPORT_NOT_COMPLETED');
         if (args.review?.versionId !== job.versionId) throw new Error('REVIEW_VERSION_MISMATCH');
-        return this.review(args, job.id);
+        return this.review(args, job.id, host);
       }
       if (!args.versionId || !args.expectedRevision) throw new ToolInputError('versionId and expectedRevision are required', !args.versionId ? 'versionId' : 'expectedRevision', 'missing');
       const detail = await this.detail(args.projectId);
@@ -769,10 +769,10 @@ export class Phase1Service {
       if (this.context.tracking) {
         this.context.tracking.track('task_accepted', { task_id: job.id, task_type: 'export', project_id: args.projectId,
           ...(args.workId ? { run_id: args.workId } : {}), ...(args.requestId && uuid.test(args.requestId) ? { operation_id: args.requestId } : {}),
-          accepted_at: new Date(job.acceptedAt ?? job.createdAt).toISOString(), deadline_at: new Date(job.deadlineAt ?? job.expiresAt).toISOString() });
+          accepted_at: new Date(job.acceptedAt ?? job.createdAt).toISOString(), deadline_at: new Date(job.deadlineAt ?? job.expiresAt).toISOString() }, undefined, undefined, host);
         const checkId = job.id;
         this.context.tracking.track('check_required', { check_id: checkId, check_type: 'technical_export', project_id: args.projectId,
-          version_id: args.versionId, subject_id: job.id, checklist_version: 'export-v1', checker_type: 'automated', required: true });
+          version_id: args.versionId, subject_id: job.id, checklist_version: 'export-v1', checker_type: 'automated', required: true }, undefined, undefined, host);
       }
       return { projectId: args.projectId, job: { ...job, token: undefined, workerPid: undefined, trackingHost: undefined }, technicalVerification: 'automatic_after_render', contentReview: 'pending' };
     });

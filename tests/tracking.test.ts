@@ -935,3 +935,43 @@ test('super_agent_turn_feedback keeps reason tags aligned with shared contract a
   assert.equal(validProperties(omEvents, 'super_agent_turn_feedback', { ...base, primary_reason: 'free_text_reason' }), false);
   assert.equal(validProperties(omEvents, 'super_agent_turn_feedback', { ...base, reason_tags: 'not valid spaces' }), false);
 });
+
+test('Phase1 export acceptance, display observation and review checks retain caller host_context', () => fixture(async store => {
+  const events: PendingEvent[] = [], tracking = core(async batch => { events.push(...batch); return 'accepted'; });
+  const service = new Phase1Service(store, pluginRoot, { tracking, origin: () => 'http://127.0.0.1:4173',
+    nativeUrl: () => undefined, openProject: async () => {}, mutation: async task => task(),
+    cancel: (projectId, jobId) => cancelExport(store, projectId, jobId, tracking) });
+  const host = identifyHost({ name: 'antigravity-client', version: '1.2.0' });
+  try {
+    const created = await service.call('openmotion_create_project', {
+      requestId: crypto.randomUUID(), projectType: 'natural_language', title: 'Host attribution test', requirements: 'Verify host attribution',
+    }, host);
+    const began = await service.call('openmotion_open_preview', {
+      action: 'begin', projectId: created.projectId, mode: 'create', requestId: crypto.randomUUID(),
+    }, host);
+    await service.call('openmotion_open_preview', {
+      action: 'record_display', projectId: created.projectId, workId: began.inlineWork.id, requestId: crypto.randomUUID(),
+      display: {
+        revision: created.revision, versionId: created.currentVersionId,
+        previewUrl: created.previewUrl, visibility: 'visible', contentVerified: true, evidence: 'Host reported a visible panel',
+      },
+    }, host);
+    await service.call('openmotion_open_preview', {
+      action: 'record_review', projectId: created.projectId, requestId: crypto.randomUUID(),
+      review: {
+        versionId: created.currentVersionId, objectId: 'composition-1', source: 'agent', conclusion: 'passed', evidence: 'Checked preview frame',
+      },
+    }, host);
+    await service.call('openmotion_export_request', {
+      projectId: created.projectId, versionId: created.currentVersionId, expectedRevision: created.revision,
+      workId: began.inlineWork.id, requestId: crypto.randomUUID(),
+    }, host);
+    await tracking.flush();
+    for (const eventName of ['task_accepted', 'host_preview_observed', 'check_required', 'check_completed']) {
+      const matched = events.filter(event => event.event === eventName);
+      assert(matched.length >= 1, `expected at least one ${eventName}`);
+      assert(matched.every(event => event.host_context?.host_agent === 'antigravity' && event.host_context?.mcp_client_name === 'antigravity-client'),
+        `${eventName} lost host_context: ${JSON.stringify(matched.map(e => e.host_context))}`);
+    }
+  } finally { tracking.close(); }
+}));

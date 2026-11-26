@@ -246,19 +246,26 @@ audio/geometry measurements; non-finite or out-of-range values are rejected.
 
 Every event has `host_agent` and `host_agent_source`. Known declared clients map
 to `codex`, `deepseek` (DeepSeek Harness/DSH), `claude`, `cursor`, `opencode`,
-`gemini`, `workbuddy` or `chatgpt`; another declared client maps to `other`.
+`gemini`, `workbuddy`, `chatgpt`, `antigravity`, `hermes`, `qoder`, `trae` or
+`copilot`; another declared client maps to `other`.
 Missing evidence is `unknown`, never inferred from an installed executable,
 model provider, browser user agent or the last caller of a shared backend.
+Declared client names are trimmed, lowercased and whitespace-collapsed to `-`
+before matching and bounded validation so clients like `"Claude Desktop"` or
+`"Cherry Studio"` retain `mcp_client_name`.
 `mcp_client_name` is included only for a bounded implementation identifier;
 `mcp_client_version` is the client's declared numeric version, not a verified
 host-application version. DSH currently declares its MCP adapter version.
 
 The stdio runtime captures `initialize.params.clientInfo` per connection and also
 recognizes standard per-request `io.modelcontextprotocol/clientInfo` metadata.
-An absent declaration can fall back to `OPENMOTION_HOST_AGENT`, `CODEX_THREAD_ID`
-or `CLAUDECODE=1` in that MCP process, labeled `launch_environment`. Environment
-values and thread IDs themselves are never reported. Client metadata is
-self-declared analytics context, not authenticated identity or an entitlement.
+An absent declaration—or the bundled `openmotion-cli` direct-access bridge when
+invoked with `--host` (`OPENMOTION_HOST_AGENT`) or inside a known host shell—can
+fall back to `OPENMOTION_HOST_AGENT`, `CODEX_THREAD_ID` or `CLAUDECODE=1` in
+that MCP process, labeled `launch_environment` (retaining `mcp_client_name:
+openmotion-cli` when bridged). Environment values and thread IDs themselves are
+never reported. Client metadata is self-declared analytics context, not
+authenticated identity or an entitlement.
 
 The calling context follows domain operations and is persisted on export jobs
 for the worker. Editor handoffs receive an opaque `tracking_context` query token;

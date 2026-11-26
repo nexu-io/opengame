@@ -30,14 +30,16 @@ function protocolClient(transport, env, timeout) {
 }
 
 // Use the installed transport and public contract; never a second implementation of project operations.
-export async function installedTool(state, connection, name, args = {}, timeout = 180_000) {
+export async function installedTool(state, connection, name, args = {}, timeout = 180_000, options = {}) {
   assert(args && typeof args === 'object' && !Array.isArray(args), 'Tool arguments must be a JSON object');
   const transport = validateTransport(connection);
   const allowed = tool => (!connection.enabled_tools || connection.enabled_tools.includes(tool)) && !connection.disabled_tools?.includes(tool);
   assert(allowed('openmotion_get_project') && (name === undefined || allowed(name)), 'MCP_TOOL_DISABLED: requested tool or workspace read is disabled in this host');
   const expected = JSON.parse(await readFile(path.join(state.appRoot, 'shared/mcp-profiles.json'), 'utf8')).phase1.tools;
   assert(name === undefined || expected.includes(name), 'MCP_TOOL_NOT_EXPOSED: ' + name);
-  const { child, rpc } = protocolClient(transport, { ...process.env, ...(transport.env || {}) }, timeout);
+  const host = typeof options?.host === 'string' && options.host.trim() ? options.host.trim().toLowerCase() : undefined;
+  const environment = { ...process.env, ...(transport.env || {}), ...(host ? { OPENMOTION_HOST_AGENT: host } : {}) };
+  const { child, rpc } = protocolClient(transport, environment, timeout);
   try {
     const hello = await rpc('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'openmotion-cli', version: '1' } });
     assert.equal(hello.serverInfo?.version, state.version, 'Installed MCP version mismatch');
@@ -50,7 +52,7 @@ export async function installedTool(state, connection, name, args = {}, timeout 
     if (name === undefined) return { serverInfo: hello.serverInfo, dataDirectory: state.dataDirectory, tools: tools.filter(tool => allowed(tool.name)) };
     return name === 'openmotion_get_project' && Object.keys(args).length === 0 ? read : await rpc('tools/call', { name, arguments: args });
   } catch (error) {
-    throw new Error(redact(error.message, { ...process.env, ...(transport.env || {}) }));
+    throw new Error(redact(error.message, environment));
   } finally {
     const timer = setTimeout(() => child.kill(), 2000);
     child.stdin.end();

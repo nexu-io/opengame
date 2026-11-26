@@ -87,3 +87,32 @@ test('registered cwd/env are used and startup secrets are redacted', async t => 
     return true;
   });
 });
+
+test('direct access forwards explicit host as OPENMOTION_HOST_AGENT without inventing one when omitted', async t => {
+  const { state, connection } = await fixture(t);
+  const envLog = path.join(state.appRoot, 'env.jsonl');
+  await writeFile(state.launcher, `
+    import { createInterface } from 'node:readline';
+    import { appendFileSync } from 'node:fs';
+    appendFileSync(${JSON.stringify(envLog)}, JSON.stringify({ host: process.env.OPENMOTION_HOST_AGENT ?? null }) + '\\n');
+    for await (const line of createInterface({ input: process.stdin })) {
+      const m = JSON.parse(line);
+      if (m.method === 'notifications/initialized') continue;
+      let result;
+      if (m.method === 'initialize') result = { serverInfo: { version: '1.2.3' } };
+      else if (m.method === 'tools/list') result = { tools: ['openmotion_get_project', 'openmotion_edit_project'].map(name => ({ name, inputSchema: { type: 'object' } })) };
+      else result = { structuredContent: { dataDirectory: ${JSON.stringify(state.dataDirectory)} } };
+      console.log(JSON.stringify({ jsonrpc: '2.0', id: m.id, result }));
+    }
+  `);
+  const prev = process.env.OPENMOTION_HOST_AGENT;
+  delete process.env.OPENMOTION_HOST_AGENT;
+  try {
+    await installedTool(state, connection, 'openmotion_get_project', {}, 15_000, { host: 'WorkBuddy' });
+    await installedTool(state, connection, 'openmotion_get_project', {}, 15_000);
+  } finally {
+    if (prev !== undefined) process.env.OPENMOTION_HOST_AGENT = prev;
+  }
+  const seen = (await readFile(envLog, 'utf8')).trim().split('\n').map(line => JSON.parse(line).host);
+  assert.deepEqual(seen, ['workbuddy', null]);
+});
