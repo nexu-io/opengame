@@ -6,16 +6,16 @@ import path from 'node:path';
 import { checkDocument } from '../../scripts/check-readme-resources.mjs';
 import { validateMediaManifest } from '../../shared/repository-media.ts';
 
-// Only presentation pages qualify; Skills, installation guides and examples are product inputs.
 const presentationDocs = new Set([
   'README.md', 'README.zh-CN.md', 'README.REVERSE-ENGINEERING.md',
   'docs/README.md', 'docs/README.zh-CN.md', 'docs/README.ja.md',
 ]);
 
 export function classifyChanges(files) {
+  const productFiles = files.filter(file => !file.startsWith('templates/games/'));
   return {
-    full: files.length === 0 || files.some(file => !presentationDocs.has(file)),
-    maintainability: files.length === 0 || files.some(file =>
+    full: files.length === 0 || productFiles.some(file => !presentationDocs.has(file)),
+    maintainability: files.length === 0 || productFiles.some(file =>
       /\.[cm]?[jt]sx?$/.test(file) || /(?:^|\/)tsconfig(?:\.[^/]+)?\.json$/.test(file)
       || ['package.json', 'package-lock.json'].includes(file) || file.startsWith('.github/maintainability/')
       || file === '.github/workflows/ci.yml'),
@@ -73,7 +73,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
           if (previous.status !== 0 || documentationContract(previous.stdout) !== documentationContract(current)) scope.full = true;
         }
       }
-      if (!scope.full) execFileSync('git', ['diff', '--check', base, 'HEAD'], { stdio: 'inherit' });
+      if (!scope.full && scope.documents.length) execFileSync('git', ['diff', '--check', base, 'HEAD', '--', ...scope.documents], { stdio: 'inherit' });
     }
     for (const [key, value] of Object.entries(scope)) {
       appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${JSON.stringify(value)}\n`);

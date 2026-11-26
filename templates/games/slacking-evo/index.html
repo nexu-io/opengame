@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Slacking Evolution</title>
+  <link rel="stylesheet" href="./tokens.css" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Top Arcade Header -->
+    <header class="top-bar">
+      <div class="top-left">
+        <button type="button" class="pill-btn" id="btnOpenRank">
+          <img class="ui-icon ui-icon-xs" src="./icons/trophy.svg" alt="" />
+          <span id="rankBtnText">摸鱼榜</span>
+        </button>
+        <button type="button" class="pill-btn" id="btnOpenDex">
+          <img class="ui-icon ui-icon-xs" src="./icons/dex.svg" alt="" />
+          <span id="dexBadgeText">图鉴 3/11</span>
+        </button>
+      </div>
+      <div class="top-right">
+        <button type="button" class="pill-btn boss-btn" id="btnBossCamo">
+          <img class="ui-icon ui-icon-xs" src="./icons/boss-shield.svg" alt="" />
+          <span id="bossBtnText">老板来了</span>
+        </button>
+        <button type="button" class="pill-btn lang-btn" id="btnLang" aria-label="Switch language">EN</button>
+        <button type="button" class="icon-circle-btn" id="btnSound" aria-label="Toggle sound">
+          <img class="ui-icon ui-icon-xs" id="soundIcon" src="./icons/sound-on.svg" alt="" />
+        </button>
+      </div>
+    </header>
+
+    <!-- Retro Desk Handheld Chassis -->
+    <section class="console-chassis">
+      <!-- 3 Game Modes -->
+      <div class="mode-tabs" id="modeTabs">
+        <button type="button" class="mode-tab active" data-mode="daily_office">日常摸鱼</button>
+        <button type="button" class="mode-tab" data-mode="lunch60">午休60秒</button>
+        <button type="button" class="mode-tab" data-mode="same_desk">今日同工位</button>
+      </div>
+
+      <!-- LCD Scoreboard + Next Drop -->
+      <div class="hud-bar">
+        <div class="hud-lcd">
+          <div class="hud-col">
+            <span class="hud-lbl" id="hudScoreLabel">当前摸鱼值</span>
+            <strong class="hud-val" id="hudScore">0</strong>
+            <span class="hud-salary" id="hudSalaryText">带薪赚回：1杯工位温开水</span>
+          </div>
+          <div class="hud-col hud-col-mid">
+            <span class="hud-lbl" id="hudMidLabel">最高分</span>
+            <strong class="hud-val hud-val-sub" id="hudMidVal">0</strong>
+          </div>
+        </div>
+        <div class="next-box">
+          <span class="next-lbl" id="nextLbl">下一招</span>
+          <canvas id="nextCanvas" width="76" height="76"></canvas>
+        </div>
+      </div>
+
+      <!-- Quote Strip + Combo Fever -->
+      <div class="quote-strip" id="quoteStrip">
+        <span class="combo-pill hidden" id="comboPill">连摸 x2</span>
+        <span class="quote-text" id="quoteText">拖动瞄准，松手投放！进化出「带薪躺平大王」～</span>
+      </div>
+
+      <!-- Physics Drop Arena -->
+      <div class="arena-frame" id="arenaFrame">
+        <canvas id="gameCanvas" width="720" height="860"></canvas>
+        <div class="danger-banner hidden" id="dangerBanner">摸鱼要露馅啦！快去茶水间或一键已读！</div>
+      </div>
+
+      <!-- Desk Skills Dock -->
+      <div class="skill-dock">
+        <button type="button" class="skill-btn skill-shake" id="btnShake">
+          <img class="ui-icon ui-icon-sm" src="./icons/teabreak.svg" alt="" />
+          <div class="skill-meta">
+            <strong id="shakeLabel">去茶水间</strong>
+            <span id="shakeCountText">剩余 2 次</span>
+          </div>
+        </button>
+        <button type="button" class="skill-btn skill-clear" id="btnClearSmall">
+          <img class="ui-icon ui-icon-sm" src="./icons/readall.svg" alt="" />
+          <div class="skill-meta">
+            <strong id="clearLabel">一键已读</strong>
+            <span id="clearCountText">剩余 1 次</span>
+          </div>
+        </button>
+        <button type="button" class="skill-btn skill-replay" id="btnRestart" aria-label="Restart">
+          <img class="ui-icon ui-icon-sm" src="./icons/replay.svg" alt="" />
+          <div class="skill-meta">
+            <strong id="restartLabel">换工位</strong>
+            <span id="restartSubLabel">重开</span>
+          </div>
+        </button>
+      </div>
+    </section>
+
+    <!-- Evolution Progress Strip -->
+    <div class="evo-strip" id="evoStrip">
+      <span class="evo-label" id="evoLabel">进化链</span>
+      <div class="evo-dots" id="evoDots"></div>
+    </div>
+  </div>
+
+  <!-- Boss Coming! One-Tap Spreadsheet Disguise Shield -->
+  <div class="boss-camo hidden" id="bossCamoOverlay" role="dialog" aria-modal="true">
+    <div class="excel-topbar">
+      <div class="excel-title-row">
+        <img class="ui-icon ui-icon-xs" src="./icons/sheet.svg" alt="" />
+        <span class="excel-filename" id="excelFilename">Q4_核心业务增长颗粒度拆解_v8_真最终版.xlsx</span>
+      </div>
+      <span class="excel-saved-tag" id="excelSavedTag">已自动同步</span>
+    </div>
+    <div class="excel-formula-bar">
+      <span class="excel-cell-ref">C4</span>
+      <span class="excel-fx" id="excelFx">=SUM(抓手闭环:心智穿透)*1.38</span>
+    </div>
+    <div class="excel-grid-wrap">
+      <table class="excel-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th id="excelColA">A 核心工作项</th>
+            <th id="excelColB">B Q4 目标</th>
+            <th id="excelColC">C 状态</th>
+          </tr>
+        </thead>
+        <tbody id="excelTableBody"></tbody>
+      </table>
+      <div class="excel-note-card">
+        <strong id="excelNoteTitle">会议纪要速记：</strong>
+        <p id="excelNoteBody">整体大盘趋势向好，后续继续聚焦核心场景，打通端到端体验闭环，确保关键节点准点交付。</p>
+      </div>
+    </div>
+    <div class="excel-footer">
+      <span class="excel-status-txt" id="bossCamoCountText">已安全隐身 · 物理与计时已暂停</span>
+      <button type="button" class="excel-resume-btn" id="btnExitBossCamo">老板走了，继续摸鱼</button>
+    </div>
+  </div>
+
+  <!-- Modal 1: Local Slacking Leaderboard -->
+  <div class="modal-backdrop hidden" id="rankModal">
+    <div class="modal-sheet">
+      <div class="modal-head">
+        <div class="modal-title-wrap">
+          <span class="modal-kicker" id="rankModeKicker">本机战绩排行</span>
+          <h2 class="modal-title" id="rankModalTitle">工位摸鱼英雄榜</h2>
+        </div>
+        <button type="button" class="modal-close-btn" data-close-modal="rankModal" aria-label="Close">×</button>
+      </div>
+      <div class="modal-scroll-body">
+        <div class="rank-period-tabs" id="rankModeTabs">
+          <button type="button" class="subtab-btn active" data-rank-mode="daily_office">日常摸鱼</button>
+          <button type="button" class="subtab-btn" data-rank-mode="lunch60">午休60秒</button>
+          <button type="button" class="subtab-btn" data-rank-mode="same_desk">今日同工位</button>
+        </div>
+        <div class="my-rank-card" id="myRankCard"></div>
+        <div class="rank-list" id="rankList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: 11-Stage Evolution Dex -->
+  <div class="modal-backdrop hidden" id="dexModal">
+    <div class="modal-sheet">
+      <div class="modal-head">
+        <div class="modal-title-wrap">
+          <span class="modal-kicker" id="dexProgressKicker">已解锁 3 / 11</span>
+          <h2 class="modal-title" id="dexModalTitle">打工人摸鱼进化图鉴</h2>
+        </div>
+        <button type="button" class="modal-close-btn" data-close-modal="dexModal" aria-label="Close">×</button>
+      </div>
+      <div class="modal-scroll-body">
+        <div class="dex-stats-bar" id="dexStatsBar"></div>
+        <div class="dex-grid" id="dexGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Run Summary -->
+  <div class="modal-backdrop hidden" id="resultModal">
+    <div class="modal-sheet">
+      <div class="modal-head">
+        <div class="modal-title-wrap">
+          <span class="modal-kicker" id="resultKicker">今日摸鱼结算</span>
+          <h2 class="modal-title" id="resultTitle">工位摸鱼鉴定书</h2>
+        </div>
+        <button type="button" class="modal-close-btn" data-close-modal="resultModal" aria-label="Close">×</button>
+      </div>
+      <div class="modal-scroll-body">
+        <div class="result-hero">
+          <canvas id="resultItemCanvas" width="160" height="160"></canvas>
+          <div class="result-score-col">
+            <span class="result-badge" id="resultBadge">茶水间观察员</span>
+            <strong class="result-score-num" id="resultScoreNum">0</strong>
+            <span class="result-sub" id="resultSubText">最高解锁：早起喝水</span>
+            <span class="result-salary-pill" id="resultSalaryPill">已稳稳赚回：1杯工位温开水</span>
+          </div>
+        </div>
+        <div class="result-kpis" id="resultKpis"></div>
+        <div class="result-tip-box" id="resultTipBox"></div>
+        <div class="result-actions">
+          <button type="button" class="action-btn primary-btn" id="btnPlayAgain">再来一局</button>
+          <button type="button" class="action-btn soft-btn" id="btnOpenPoster">查看 3:4 战绩卡</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: 3:4 Badge Card Preview & Export -->
+  <div class="modal-backdrop hidden" id="posterModal">
+    <div class="modal-sheet">
+      <div class="modal-head">
+        <div class="modal-title-wrap">
+          <span class="modal-kicker" id="posterKicker">3:4 复古工牌战绩卡</span>
+          <h2 class="modal-title" id="posterModalTitle">摸鱼战绩卡</h2>
+        </div>
+        <button type="button" class="modal-close-btn" data-close-modal="posterModal" aria-label="Close">×</button>
+      </div>
+      <div class="modal-scroll-body poster-body">
+        <div class="poster-preview-wrap">
+          <canvas id="posterCanvas" width="900" height="1200"></canvas>
+        </div>
+        <div class="result-actions">
+          <button type="button" class="action-btn primary-btn full-width" id="btnDownloadPoster">下载 PNG 战绩卡</button>
+        </div>
+        <p class="poster-hint" id="posterHint">也可右键或长按上方卡片保存图片</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-banner" id="toastBanner" role="status" aria-live="polite"></div>
+
+  <script src="./data.js"></script>
+  <script src="./storage.js"></script>
+  <script src="./slack-art.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

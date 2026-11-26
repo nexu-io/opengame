@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Fruit Gym Tycoon</title>
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+  <div class="game-root" id="gameRoot">
+    <!-- Full-Bleed Edge-to-Edge Interactive H5 Game Canvas -->
+    <canvas id="gymCanvas"></canvas>
+
+    <!-- Floating Top HUD -->
+    <header class="float-hud" id="floatHud">
+      <div class="hud-row">
+        <div class="hud-left">
+          <span class="day-pill" id="dayBadge">第 1 天</span>
+          <span class="timer-pill mono" id="timerBadge">01:12</span>
+        </div>
+        <div class="hud-right">
+          <div class="coin-pill" id="coinPill" title="Gym Coins">
+            <img class="ico-sm" src="./icons/coin.svg" alt="">
+            <span class="coin-val mono" id="coinDisplay">0</span>
+          </div>
+          <button type="button" class="icon-btn lang-btn" id="btnLang" aria-label="Switch language">EN</button>
+          <button type="button" class="icon-btn" id="btnSound" aria-label="Toggle sound">
+            <img class="ico-sm" id="soundIcon" src="./icons/sound-on.svg" alt="">
+          </button>
+          <button type="button" class="icon-btn" id="btnAlbum" aria-label="Fruit Album">
+            <img class="ico-sm" src="./icons/book.svg" alt="">
+            <span class="btn-badge mono" id="albumCount">0/6</span>
+          </button>
+          <button type="button" class="icon-btn" id="btnRank" aria-label="Revenue Board">
+            <img class="ico-sm" src="./icons/trophy.svg" alt="">
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Floating In-Game Start / Next-Day Card Over Live Animated Gym -->
+    <div class="start-overlay" id="startOverlay">
+      <div class="start-card">
+        <div class="start-kicker" id="startKicker">第 1 天 · 三星目标 ¥240</div>
+        <h1 class="start-title" id="startTitle">新店开业日</h1>
+        <p class="start-desc" id="startDesc">点按或拖拽门口水果上器械，派店长递水拍醒偷懒、暴汗爆金币！</p>
+        <div class="start-tips" id="startTips">
+          <span>点/拖水果入座</span>
+          <span>点气泡跑去照料</span>
+          <span>收金币擦汗</span>
+        </div>
+        <button type="button" class="cta-btn cta-coral cta-lg" id="btnStartDay">开门营业（第 1 天）</button>
+      </div>
+    </div>
+
+    <!-- Floating Bottom Action Dock Over the Gym Floor -->
+    <div class="float-dock" id="floatDock">
+      <div class="dock-tip" id="statusTip">点按或拖拽门口水果上器械开练！</div>
+      <div class="dock-btns">
+        <button type="button" class="dock-btn dock-shop" id="btnOpenShop">
+          <img class="ico-sm" src="./icons/shop.svg" alt="">
+          <span id="shopBtnLabel">扩店升级</span>
+          <span class="dot-notify hidden" id="shopDot"></span>
+        </button>
+        <button type="button" class="dock-btn dock-bell" id="btnFever" disabled>
+          <img class="ico-sm" src="./icons/bell.svg" alt="">
+          <span id="feverLabel">打气 0%</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Modal 1: Daily Revenue Receipt -->
+  <div class="modal-backdrop hidden" id="modalSummary" aria-hidden="true">
+    <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="sumTitle">
+      <div class="modal-head">
+        <div class="modal-title-row">
+          <img class="ico-md" src="./icons/receipt.svg" alt="">
+          <div>
+            <h2 class="modal-title" id="sumTitle">第 1 天打烊小票</h2>
+            <div class="modal-sub" id="sumStars">今日评价：三星明星健身馆</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="receipt-box">
+          <div class="receipt-row"><span id="sumServedLbl">服务水果会员</span><strong class="mono" id="sumServed">0 位</strong></div>
+          <div class="receipt-row"><span id="sumComboLbl">最高连击 Combo</span><strong class="mono" id="sumCombo">x0</strong></div>
+          <div class="receipt-row"><span id="sumTipsLbl">小费 &amp; 蜕变奖励</span><strong class="mono" id="sumTips">+¥0</strong></div>
+          <div class="receipt-row receipt-total"><span id="sumEarnedLbl">今日总营收</span><strong class="mono" id="sumEarned">+¥0</strong></div>
+        </div>
+        <div class="modal-cta-row">
+          <button type="button" class="cta-btn cta-lemon" id="btnSumShop">用金币扩店</button>
+          <button type="button" class="cta-btn cta-melon" id="btnNextDay">开启第 2 天</button>
+        </div>
+        <div class="quiet-links">
+          <button type="button" class="quiet-btn" id="btnSumPoster">查看 3:4 今日营业财报</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Upgrade & Staff Shop -->
+  <div class="modal-backdrop hidden" id="modalShop" aria-hidden="true">
+    <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="shopTitle">
+      <div class="modal-head">
+        <div class="modal-title-row">
+          <img class="ico-md" src="./icons/shop.svg" alt="">
+          <div>
+            <h2 class="modal-title" id="shopTitle">健身房扩建 &amp; 雇员</h2>
+            <div class="modal-sub" id="shopSub">当前可用金币：¥0</div>
+          </div>
+        </div>
+        <button type="button" class="close-btn" data-close="modalShop" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="shop-list" id="shopList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Fruit Transformation Album -->
+  <div class="modal-backdrop hidden" id="modalAlbum" aria-hidden="true">
+    <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="albumTitle">
+      <div class="modal-head">
+        <div class="modal-title-row">
+          <img class="ico-md" src="./icons/book.svg" alt="">
+          <div>
+            <h2 class="modal-title" id="albumTitle">水果蜕变图鉴</h2>
+            <div class="modal-sub" id="albumSub">已解锁 0 / 6 位明星学员</div>
+          </div>
+        </div>
+        <button type="button" class="close-btn" data-close="modalAlbum" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="album-grid" id="albumGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Local Revenue Leaderboard -->
+  <div class="modal-backdrop hidden" id="modalRank" aria-hidden="true">
+    <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="rankTitle">
+      <div class="modal-head">
+        <div class="modal-title-row">
+          <img class="ico-md" src="./icons/trophy.svg" alt="">
+          <div>
+            <h2 class="modal-title" id="rankTitle">明星馆长营收榜</h2>
+            <div class="modal-sub" id="rankSub">本机单日最高营收纪录</div>
+          </div>
+        </div>
+        <button type="button" class="close-btn" data-close="modalRank" aria-label="Close">&times;</button>
+      </div>
+      <div class="rank-tabs" id="rankTabs">
+        <button type="button" class="rank-tab active" data-sort="top" id="rankTabTop">按营收排行</button>
+        <button type="button" class="rank-tab" data-sort="recent" id="rankTabRecent">按营业日期</button>
+      </div>
+      <div class="modal-body">
+        <div class="my-rank-banner" id="myRankBanner">我的单日最高营收：¥0</div>
+        <div class="rank-list" id="rankList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 5: 3:4 Gym Revenue Poster -->
+  <div class="modal-backdrop hidden" id="modalPoster" aria-hidden="true">
+    <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="posterTitle">
+      <div class="modal-head">
+        <div class="modal-title-row">
+          <img class="ico-md" src="./icons/receipt.svg" alt="">
+          <div>
+            <h2 class="modal-title" id="posterTitle">今日健身房财报</h2>
+            <div class="modal-sub" id="posterSub">3:4 复古原图，可下载或保存留念</div>
+          </div>
+        </div>
+        <button type="button" class="close-btn" data-close="modalPoster" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body poster-body">
+        <div class="poster-preview-wrap">
+          <canvas id="posterCanvas" width="900" height="1200"></canvas>
+        </div>
+        <div class="poster-actions">
+          <button type="button" class="cta-btn cta-primary" id="btnSavePoster">下载 PNG 财报</button>
+        </div>
+        <p class="poster-hint" id="posterHint">也可右键或长按上方财报保存图片</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="./js/data.js"></script>
+  <script src="./js/sound.js"></script>
+  <script src="./js/storage.js"></script>
+  <script src="./js/poster.js"></script>
+  <script src="./js/game.js"></script>
+</body>
+</html>

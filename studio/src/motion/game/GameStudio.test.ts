@@ -51,17 +51,16 @@ describe('gameCatalog multi-file detection and internal tags', () => {
       'escape-match',
       'gold-miner',
       'hanzi-meme',
-      'kazehane',
       'mahjong-pairs',
       'ocean-fish-match',
       'plants-vs-zombies',
       'screw-puzzle',
-      'shanghai-vice',
       'tile-stack',
-      'vice-beach-golf-club',
-      'vice-beach-motor-club',
       'village-defense',
     ]));
+    for (const colleagueId of ['kazehane', 'shanghai-vice', 'vice-beach-golf-club', 'vice-beach-motor-club']) {
+      expect(tagged).not.toContain(colleagueId);
+    }
     for (const game of bundledGames.filter(isTopEarningGame)) {
       expect(game.tags).toContain(TOP_EARNING_TAG);
     }

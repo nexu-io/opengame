@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { copyFileSync, createReadStream, lstatSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { createGunzip } from 'node:zlib';
-import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile, chmod } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile, chmod } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -88,20 +88,20 @@ export function privacyFindings(name, text, kind = 'source') {
 
 async function scanTree(directory, kind, binary) {
   const findings = []; let files = 0, bytes = 0;
-  const visit = async (dir, prefix = '') => {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
+  const visit = (dir, prefix = '') => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const name = prefix + entry.name, filename = path.join(dir, entry.name);
       assert(!entry.isSymbolicLink(), 'Release scan does not follow links');
-      if (entry.isDirectory()) await visit(filename, name + '/');
+      if (entry.isDirectory()) visit(filename, name + '/');
       else {
         assert(entry.isFile(), 'Special file in release');
-        const data = await readFile(filename); files++; bytes += data.length;
+        const data = readFileSync(filename); files++; bytes += data.length;
         assert(bytes < 350 * 1024 * 1024 && files < 20_000, 'Expanded release exceeds scan limit');
         findings.push(...privacyFindings(name, data.includes(0) ? '' : data.toString('utf8'), kind));
       }
     }
   };
-  await visit(directory);
+  visit(directory);
   const work = await mkdtemp(path.join(os.tmpdir(), 'motion-secrets-'));
   try {
     const report = path.join(work, 'secrets.json'), ignore = path.join(work, 'empty.ignore'); await writeFile(ignore, '');
@@ -128,16 +128,22 @@ export async function scanSource(source, binary) {
   try {
     // Scan every game as its own release unit, preserving the same limits and privacy rules.
     const batches = new Set();
+    const directories = new Set();
     for (const name of names) {
       assert(!name.split('/').includes('..') && !path.isAbsolute(name), 'Unsafe tracked path');
-      const file = path.join(source, name); assert((await lstat(file)).isFile(), 'Tracked links are forbidden');
+      const file = path.join(source, name); assert(lstatSync(file).isFile(), 'Tracked links are forbidden');
       let batch = 'source';
       if (name.startsWith('docs/readme/')) batch = 'gallery';
       if (name.startsWith('library/templates/catalog/')) batch = 'catalog';
       if (name.startsWith('templates/games/')) batch = 'games-' + name.split('/')[2];
       batches.add(batch);
       const destination = path.join(work, batch, name);
-      await mkdir(path.dirname(destination), { recursive: true }); await cp(file, destination);
+      const directory = path.dirname(destination);
+      if (!directories.has(directory)) {
+        mkdirSync(directory, { recursive: true });
+        directories.add(directory);
+      }
+      copyFileSync(file, destination);
     }
     const reports = [];
     for (const batch of batches) reports.push(await scanTree(path.join(work, batch), 'source', binary));

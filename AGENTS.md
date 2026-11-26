@@ -10,7 +10,7 @@ Before publishing a branch, select local checks for the changed boundary. Run `n
 - Skill, contract, installer or distribution changes: run the affected deterministic and packaging/installation checks.
 - Prose-only changes that do not alter those boundaries: check links and run `git diff --check`; no dependency reinstall or Studio build is required.
 
-PR CI keeps repository policy, source scanning and release controls for every change. Only the explicit presentation-document allowlist skips Studio, rendering and package checks when installation sections and code blocks are unchanged; Skills, installation guides, examples and unknown paths retain the full gate. Maintainability analysis runs for code and configuration changes. Distinguish CI, target-machine installation, model creation and human content acceptance. This feature migration must not merge or publish packages unless separately authorized.
+OpenGame PR CI checks repository policy and tracked source for every change. Product changes run Studio, workspace and runtime regressions. Pushes to `main` and manual runs also cover transcript, export and rendering. Game template playtests are paused. Changes confined to `templates/games/` and allowlisted presentation documents skip product regressions unless a document changes an installation section or code block. Maintainability analysis runs for product code and configuration changes. OpenMotion owns the `@openmotion/app` npm installer and its release checks. OpenGame uses npm for source dependencies and builds. Merge and publication require separate authorization.
 
 ## Repository collaboration instructions
 

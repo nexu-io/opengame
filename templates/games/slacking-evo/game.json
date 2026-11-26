@@ -1,0 +1,27 @@
+{
+  "id": "slacking-evo",
+  "title": "Slacking Evolution",
+  "description": "Drop and merge 11 hilarious office slacking habits—from sipping water to the ultimate Paid-Relaxation King—with a one-tap Boss Coming spreadsheet shield.",
+  "genre": "casual",
+  "style": "anime",
+  "setting": "modern",
+  "multiplayer": false,
+  "maxPlayers": 1,
+  "status": "published",
+  "cover": "cover.webp",
+  "entry": "index.html",
+  "controls": "Drag or move pointer to aim and release to drop; merge matching icons to evolve. Use Pantry Shake, Mark All Read, and the Boss Coming spreadsheet shield anytime.",
+  "orientation": "portrait",
+  "plays": 0,
+  "likes": 0,
+  "dislikes": 0,
+  "createdAt": "2026-11-26T00:00:00.000Z",
+  "updatedAt": "2026-11-26T00:00:00.000Z",
+  "i18n": {
+    "zh-CN": {
+      "title": "打工人摸鱼进化链",
+      "description": "复古工位掌机风合成小游戏：拖动投放并合并 11 级职场摸鱼动作，一路进化出「带薪躺平大王」，自带一键「老板来了」伪装表格护盾。",
+      "controls": "拖动瞄准、松手投放并合并相同摸鱼球进化；支持「去茶水间」摇盒、「一键已读」清杂与「老板来了」一键切表格暂停。"
+    }
+  }
+}
