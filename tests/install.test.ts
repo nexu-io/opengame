@@ -96,5 +96,7 @@ test('OpenGame main entry Skill and setup guides install opengame once before lo
     const body = await readFile(new URL(readme, import.meta.url), 'utf8');
     assert.match(body, /npx skills add nexu-io\/opengame --skill opengame/, readme);
     assert.match(body, /skills\/opengame\/SKILL\.md/, readme);
+    assert.match(body, /Git LFS/, readme);
+    assert.match(body, /git lfs install --local --skip-smudge/, readme);
   }
 });
