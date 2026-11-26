@@ -73,14 +73,14 @@ export async function readGitTreePair(headSHA: string, baseSHA: string, fetchHea
         return;
       }
     }
-    const [hShallow, bShallow] = await Promise.all([
+    const [hShallow, bShallow]: [GitTreeResponse, GitTreeResponse | null] = await Promise.all([
       fetchHead(curHead, false),
       curHead === curBase ? Promise.resolve(null) : fetchBase(curBase, false),
     ]);
-    const baseTree = bShallow ?? hShallow;
+    const baseTree: GitTreeResponse = bShallow ?? hShallow;
     assert(!hShallow.truncated && !baseTree.truncated, 'GitHub directory tree truncated: ' + (prefix || '<root>'));
-    const hMap = new Map(hShallow.tree.map(entry => [entry.path, entry]));
-    const bMap = new Map(baseTree.tree.map(entry => [entry.path, entry]));
+    const hMap = new Map<string, TreeFile>(hShallow.tree.map(entry => [entry.path, entry]));
+    const bMap = new Map<string, TreeFile>(baseTree.tree.map(entry => [entry.path, entry]));
     for (const name of new Set([...hMap.keys(), ...bMap.keys()])) {
       const h = hMap.get(name), b = bMap.get(name), fullPath = prefix ? `${prefix}/${name}` : name;
       if (h?.type === 'tree' || b?.type === 'tree') {
