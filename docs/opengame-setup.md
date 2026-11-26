@@ -29,9 +29,11 @@ A Skills CLI failure or timeout does not block Studio or MCP setup: report it br
 git -c filter.lfs.process= -c filter.lfs.smudge= -c filter.lfs.required=false clone --depth 1 --single-branch --branch main https://github.com/nexu-io/opengame.git
 cd opengame
 git lfs install --local --skip-smudge
-npm ci
+CI=1 npm ci
 npm run build:studio
 ```
+
+`CI=1` skips the `less` dependency's development-only Playwright browser download. In Windows PowerShell, run `cmd.exe /d /c "set CI=1&&npm ci"` for the dependency installation step. Automated screenshots and play-tests use the installed Chrome or Chromium from the prerequisites above.
 
 The shallow clone includes game source, catalog metadata, covers and the complete Tidebreaker game. Other templates keep binary assets in Git LFS. Studio and MCP fetch the selected template's assets on demand and reuse them in this checkout. To prepare a template for offline use, run `git lfs pull --include="templates/games/<game-id>/**" --exclude=""` from the checkout. Optional videos have separate [storage instructions](repository-storage.md).
 
