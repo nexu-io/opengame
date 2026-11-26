@@ -9,20 +9,6 @@ This guide installs the `nexu-io/opengame` checkout and connects its game tools 
 - Chrome/Chromium for automated game screenshots and play-tests. Video trailers additionally require FFmpeg/ffprobe and the prepared export runtime.
 - Media-provider credentials or an OpenDesign account only when using the corresponding generation or hosting services.
 
-## Install the main OpenGame Skill
-
-Install the main `opengame` Skill once through the official Skills CLI as the first setup step before cloning or configuring MCP:
-
-```sh
-npx --yes skills@1.9.0 add nexu-io/opengame --skill opengame --global --agent AGENT --copy --yes
-```
-
-Use `codex` for Codex and `claude-code` for Claude Code. For DeepSeek Harness (DSH) or any host without a dedicated Skills CLI target, use `universal`. Select only the intended host; for custom or isolated profiles, omit `--global` and run inside that profile or project directory instead of the daily global profile.
-
-Reuse an existing official installation and skip this step if `opengame` is already installed from `nexu-io/opengame` (for example, when setup started from the `opengame` Skill itself). Preserve unrelated Skills, foreign same-name entries, and the CLI's telemetry opt-outs (`DISABLE_TELEMETRY`, `DO_NOT_TRACK`). Setting `OPENMOTION_SKIP_PUBLIC_SKILL=1` skips this optional step. Do not reinstall merely to generate another install event.
-
-A Skills CLI failure or timeout does not block Studio or MCP setup: report it briefly and continue below. Skills CLI installs instructions only; continue the local source installation and stdio MCP setup below in this same conversation.
-
 ## Install and build
 
 ```sh
@@ -77,11 +63,11 @@ Use your client's local stdio MCP configuration. The example below is the JSON f
 }
 ```
 
-For Windows JSON, escape backslashes (`C:\\Users\\name\\...`) or use forward slashes. In this example, `opengame` is only the client-side connection label. The main entry Skill is **`opengame`** ([`skills/opengame/SKILL.md`](../skills/opengame/SKILL.md)), while the current public tool prefix remains **`openmotion_game_*`**, the specialist game workflow Skill remains **`openmotion-game`**, and the resource URI remains **`openmotion://workflow/game/start`**. Renaming those MCP identifiers would prevent discovery or calls from matching this implementation.
+For Windows JSON, escape backslashes (`C:\\Users\\name\\...`) or use forward slashes. In this example, `opengame` is only the client-side connection label. The current public tool prefix remains **`openmotion_game_*`**, the game Skill remains **`openmotion-game`**, and the resource URI remains **`openmotion://workflow/game/start`**. Renaming these identifiers would prevent discovery or calls from matching this implementation.
 
 Refresh MCP in the selected client. Ask the agent to discover its tools, read the game workflow resource and inspect the draft you selected. A saved configuration is not proof of an active connection; verify that `openmotion_game_get` can read that draft's exact ID in the intended workspace.
 
-Both the [entry Skill](../skills/opengame/SKILL.md) and the [game workflow Skill](../skills/openmotion-game/SKILL.md) are also available directly in the checkout. Installing Skill instructions does not install the application or connect MCP. A cloud-only client cannot reach a local stdio process through this configuration.
+The [game Skill](../skills/openmotion-game/SKILL.md) is also available directly in the checkout. Installing Skill instructions does not install the application or connect MCP. A cloud-only client cannot reach a local stdio process through this configuration.
 
 ## Create and remix
 

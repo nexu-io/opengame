@@ -47,28 +47,26 @@ OpenGame は**世界初のオープンソース・フルスタック Super Game 
 以下のプロンプトを **DeepSeek TUI / Harness**、**Claude Code**、**Codex**、**WorkBuddy**、**Cursor**、**Gemini CLI**、または [対応する 22 種類のローカル Agent](#agent-wall) にそのまま貼り付けてください：
 
 ```text
-https://github.com/nexu-io/opengame/blob/main/docs/opengame-setup.md に従って、この Agent に OpenGame を接続してください。初回は浅いクローン（--depth 1）を使い、LFS 素材のダウンロードをスキップしてください。Game Studio のテンプレート一覧を開き、私がゲームを選んでプレイまたはリミックスするときに、そのゲームの素材を取得してください。
-OpenGame で再現できる不具合を見つけたら、再現手順と修正後の確認結果を添えて nexu-io/opengame に修正 PR を送ってください。
+https://github.com/nexu-io/opengame/blob/main/docs/opengame-setup.md を読み、手順に従って現在の Agent に OpenGame をインストール・接続し、/studios/game で Game Studio を開いたうえで、openmotion-game Skill を使ってプレイ可能なゲームのリミックスまたは新規制作を行ってください。
 ```
 
-### 2. Skills CLI で OpenGame メイン Skill をインストール
+### 2. Skills CLI でゲーム開発 Skill をインストール
 
-[Skills CLI](https://github.com/vercel-labs/skills) を使って、OpenGame メインエントリー Skill（`opengame`：ローカル接続を案内し、`openmotion-game` および 3C 操作感・2D/3D アニメーション・プレイアブル広告仕様・品質ゲートを網羅した 18 冊のエンジニアリングハンドブックへルーティング）を導入できます：
+[Skills CLI](https://github.com/vercel-labs/skills) を使って、ゲーム開発専用 Skill（`openmotion-game` および 3C 操作感・2D/3D アニメーション・プレイアブル広告仕様・品質ゲートを網羅した 18 冊のエンジニアリングハンドブック）を導入できます：
 
 ```sh
-npx skills add nexu-io/opengame --skill opengame
+npx skills add nexu-io/opengame --skill openmotion-game
 ```
 
-> Skills CLI はワークフロー指針を Agent に導入します（必要に応じて `--skill openmotion-game` 単体も導入可能）。12 個の `openmotion_game_*` ツール呼び出しや Game Studio 連携を行うには、以下のローカル起動と MCP 設定もあわせて完了してください。
+> Skills CLI はワークフロー指針を Agent に導入します。12 個の `openmotion_game_*` ツール呼び出しや Game Studio 連携を行うには、以下のローカル起動と MCP 設定もあわせて完了してください。
 
 ### 3. ソースからローカルで OpenGame Studio を起動
 
-必要環境：**Git**、**Git LFS**、**npm**、**Node.js 22.18+**（CI では Node.js 26.11.1 に固定）。起動後すぐにカタログを閲覧でき、初めてプレイまたは Remix する際に選んだテンプレートの素材を取得します。Tidebreaker はオフラインで遊べます。
+必要環境：**Git**、**npm**、**Node.js 22.18+**（CI では Node.js 26.11.1 に固定）。
 
 ```sh
 git -c filter.lfs.process= -c filter.lfs.smudge= -c filter.lfs.required=false clone --depth 1 --single-branch --branch main https://github.com/nexu-io/opengame.git
 cd opengame
-git lfs install --local --skip-smudge
 npm ci
 npm run build:studio
 npm start
@@ -447,7 +445,7 @@ OpenGame はローカル stdio MCP 経由で完全なゲーム開発ツール群
 | --- | --- | --- |
 | **OpenGame Studio UI** | React 19, TypeScript 5.9, Vite 6, Tailwind CSS 4, Zustand | [GameStudio.tsx](../studio/src/motion/game/GameStudio.tsx) · [gameCatalog.ts](../studio/src/motion/game/gameCatalog.ts) |
 | **ゲーム実行基盤 & 自動 QA** | Node.js, ネイティブ HTTP, Puppeteer Core / Chrome, 決定論シミュレーター | [game-projects.ts](../game-projects.ts) · [shared/game-contract.ts](../shared/game-contract.ts) · [server.ts](../server.ts) |
-| **MCP & ゲーム Skill** | ローカル stdio MCP サーバー、`opengame` メイン Skill、`openmotion-game` & 18 冊のハンドブック | [mcp.ts](../mcp.ts) · [skills/opengame/SKILL.md](../skills/opengame/SKILL.md) · [skills/openmotion-game/](../skills/openmotion-game/) |
+| **MCP & ゲーム Skill** | ローカル stdio MCP サーバー、`openmotion-game` Skill & 18 冊のハンドブック | [mcp.ts](../mcp.ts) · [skills/openmotion-game/](../skills/openmotion-game/) |
 | **マルチモーダル Gateway** | BYOK モデル検出・非同期ジョブ管理・アセットライブラリ & Web 公開 | [gateway/service.ts](../gateway/service.ts) · [gateway/catalog.ts](../gateway/catalog.ts) · [docs/assets.md](assets.md) |
 | **内蔵テンプレート** | カバー・メタデータ付き 25 本の独立 HTML5 / Canvas / Three.js ゲーム | [templates/games/](../templates/games/) |
 | **トレーラー録画パイプライン** | ヘッドレス実機録画 + HTML コンポジション + FFmpeg MP4 書き出し | [docs/usage.md](usage.md) · [scripts/verify-export.ts](../scripts/verify-export.ts) |

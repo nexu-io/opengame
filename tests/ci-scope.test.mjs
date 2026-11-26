@@ -118,6 +118,9 @@ test('OpenGame CI covers source and runtime regressions independently of OpenMot
   assert(platformReliability.includes("if: github.event_name != 'pull_request'"));
   assert(!stepBody(checks, 'Scan tracked source without publication credentials').includes('if:'));
   assert(!checks.includes('lfs pull'), 'Source checks must not download LFS media');
+  const mediaStep = stepBody(distribution, 'Download regression media');
+  assert(!mediaStep.includes('templates/games'), 'Runtime CI must not pull all on-demand game template LFS assets');
+  assert(mediaStep.includes('--include="docs/readme/**,library/**,examples/**"'), 'LFS pull must stay aligned with the cached media-key trees');
   for (const command of ['scripts/package-npm.mjs', 'scripts/test-package.mjs', 'tests/npm-package.test.ts',
     'tests/packaged-game-download.mjs', 'tests/npm-installer.test.ts', 'tests/install-guide.test.ts', 'tests/stable-release.test.mjs']) {
     assert(!runCommands(ci).includes(command), `OpenGame CI must not validate the OpenMotion installer: ${command}`);

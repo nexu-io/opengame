@@ -218,7 +218,7 @@ jobs:
       - name: Download regression media
         if: steps.scope.outputs.full == 'true'
         run: |
-          git lfs pull --include="docs/readme/**,library/**,examples/**,templates/games/**" --exclude=""
+          git lfs pull --include="docs/readme/**,library/**,examples/**" --exclude=""
           npm run media:pull
       - name: Select rendering package cache version
         if: steps.scope.outputs.full == 'true'
