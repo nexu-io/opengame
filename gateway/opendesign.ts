@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { Model } from '../shared/gateway.ts';
+import type { GenerationJob, Model } from '../shared/gateway.ts';
 import { isSfxModel } from '../shared/audio-kind.ts';
 import { openDesignImageReferenceCap } from '../shared/opendesign-models.ts';
 import { resolveGenerationParameters } from '../shared/generation-options.ts';
@@ -8,7 +8,8 @@ import { apiJson, publicProviderFetch, ProviderError, retryRead, withErrorMeta, 
 import type { ProviderAdapter, ProviderContext } from './providers.ts';
 
 export const productionApi = 'https://amr-api.open-design.ai';
-const CLOUD_MODELS_PATH = '/api/v1/media/models?include_audio=true';
+// TODO(OPEND-5839): switch to `/api/v1/media/models?include_all=true&expand=schema` once AMR ships full schema discovery.
+export const OPEN_DESIGN_MEDIA_MODELS_PATH = '/api/v1/media/models?include_audio=true';
 const CLOUD_MODEL_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,179}$/;
 
 /** Custom Cloud gateways keep their existing idempotency protocol. */
@@ -19,16 +20,30 @@ export function mediaSubmitHeaders(baseUrl: string, jobId: string): Record<strin
   };
 }
 
+export type ParsedOpenDesignMediaModel = Model & { enabled: boolean };
+
+/** Shared parser for `/api/v1/media/models` rows across OpenDesign Cloud (API key) and signed-in Account. */
+export function parseOpenDesignMediaCatalog(rows: unknown[], provider: 'opendesign' | 'account'): ParsedOpenDesignMediaModel[] {
+  return rows
+    .filter((row: any) => typeof row?.model === 'string' && CLOUD_MODEL_ID_PATTERN.test(row.model)
+      && ['image', 'video', 'audio', 'audio_speech', 'audio_music', 'audio_sound_effects'].includes(row.kind))
+    .map((row: any) => ({
+      id: `${provider}:${row.model}`,
+      provider,
+      modelId: row.model,
+      label: row.model,
+      modality: row.kind.startsWith('audio') ? 'audio' : row.kind,
+      mode: row.kind === 'audio_music' || row.kind === 'audio_sound_effects' ? 'text-to-audio' : row.kind.startsWith('audio') ? 'text-to-speech' : 'text-to-' + row.kind,
+      enabled: row.enabled !== false,
+      source: 'live' as const,
+      ...inputImages(row, provider),
+    }));
+}
+
 export async function cloudModels(baseUrl: string, key: string, fetcher: Fetcher = publicProviderFetch): Promise<Model[]> {
-  const body = await apiJson(fetcher, baseUrl + CLOUD_MODELS_PATH, { headers: { Authorization: `Bearer ${key}` } });
+  const body = await apiJson(fetcher, baseUrl + OPEN_DESIGN_MEDIA_MODELS_PATH, { headers: { Authorization: `Bearer ${key}` } });
   if (!Array.isArray(body.models)) throw new Error('OpenDesign Cloud catalogue format changed');
-  return body.models.filter((row: any) => typeof row.model === 'string' && CLOUD_MODEL_ID_PATTERN.test(row.model)
-    && ['image', 'video', 'audio', 'audio_speech', 'audio_music', 'audio_sound_effects'].includes(row.kind)).map((row: any) => ({
-    id: 'opendesign:' + row.model, provider: 'opendesign', modelId: row.model, label: row.model,
-    modality: row.kind.startsWith('audio') ? 'audio' : row.kind,
-    mode: row.kind === 'audio_music' || row.kind === 'audio_sound_effects' ? 'text-to-audio' : row.kind.startsWith('audio') ? 'text-to-speech' : 'text-to-' + row.kind, source: 'live',
-    ...inputImages(row),
-  }));
+  return parseOpenDesignMediaCatalog(body.models, 'opendesign').map(({ enabled: _enabled, ...model }) => model);
 }
 
 export type Cloud3dModelEntry = {
@@ -67,7 +82,7 @@ export async function cloudSpatialCatalog(
   fetcher: Fetcher = publicProviderFetch,
 ): Promise<{ models3d: Cloud3dModelEntry[]; modelsWorld: Cloud3dModelEntry[] }> {
   // AMR returns only image/video unless include_audio=true is passed.
-  const body = await apiJson(fetcher, baseUrl + CLOUD_MODELS_PATH, { headers: { Authorization: `Bearer ${bearer}` } });
+  const body = await apiJson(fetcher, baseUrl + OPEN_DESIGN_MEDIA_MODELS_PATH, { headers: { Authorization: `Bearer ${bearer}` } });
   if (!Array.isArray(body.models)) return { models3d: [], modelsWorld: [] };
   return {
     models3d: filterSpatialEntries(body.models, '3d_generations', SPATIAL_3D_LABELS),
@@ -84,15 +99,65 @@ export async function cloudWorldModels(baseUrl: string, bearer: string, fetcher:
 }
 
 /** Edit-capable image models accept references; video models with input images accept a first frame. */
-function inputImages(row: any): Partial<Model> {
+function inputImages(row: any, provider: 'opendesign' | 'account' = 'opendesign'): Partial<Model> {
   const capabilities = row.capabilities && typeof row.capabilities === 'object' && !Array.isArray(row.capabilities) ? row.capabilities as Record<string, unknown> : undefined;
   if (!capabilities) return {};
   const max = Number.isInteger(capabilities.max_input_images) && (capabilities.max_input_images as number) > 0 ? capabilities.max_input_images as number : undefined;
   // TODO(OPEND-5839): remove openDesignImageReferenceCap fallback once expand=schema guarantees max_input_images on all edit-capable image models.
-  if (row.kind === 'image' && capabilities.edits === true) return { nativeOptions: capabilities, supportsImageReference: true, maxInputImages: max ?? openDesignImageReferenceCap(row.model) ?? 1 };
+  if (row.kind === 'image' && capabilities.edits === true) {
+    const cap = max ?? (provider === 'opendesign' ? openDesignImageReferenceCap(row.model) ?? 1 : undefined);
+    return { nativeOptions: capabilities, supportsImageReference: true, ...(cap !== undefined ? { maxInputImages: cap } : {}) };
+  }
   // Only the first-frame role is implemented; the provider maximum stays visible in nativeOptions.
   if (row.kind === 'video' && max) return { nativeOptions: capabilities, maxInputImages: 1 };
-  return { nativeOptions: capabilities, ...(row.kind === 'image' && capabilities.edits === false ? { supportsImageReference: false } : {}) };
+  return { nativeOptions: capabilities, ...(provider === 'opendesign' && row.kind === 'image' && capabilities.edits === false ? { supportsImageReference: false } : {}) };
+}
+
+/** Shared OpenDesign `/api/v1/media/*` endpoint and request payload builder for Cloud API key and signed-in Account. */
+export function buildOpenDesignMediaRequest(
+  job: Pick<GenerationJob, 'modality' | 'model' | 'prompt'>,
+  parameters: Record<string, unknown>,
+  uploadedIds: string[],
+): { endpoint: string; payload: Record<string, unknown> } {
+  const audio = job.modality === 'audio';
+  const speech = audio && job.model.mode === 'text-to-speech';
+  const soundEffects = audio && !speech && isSfxModel(job.model);
+  if (audio) {
+    const { voice, ...audioOptions } = parameters;
+    if (speech) {
+      return {
+        endpoint: '/audio/speech',
+        payload: { model: job.model.modelId, voice: typeof voice === 'string' ? voice.trim() : voice, parameters: { ...audioOptions, text: job.prompt } },
+      };
+    }
+    if (soundEffects) {
+      return {
+        endpoint: '/audio/sound-effects',
+        payload: { model: job.model.modelId, parameters: { ...audioOptions, text: job.prompt } },
+      };
+    }
+    const { duration, ...rest } = parameters;
+    const musicParameters = typeof duration === 'number' && Number.isFinite(duration) && duration > 0 && rest.music_length_ms === undefined
+      ? { ...rest, music_length_ms: Math.round(duration * 1000) }
+      : parameters;
+    return {
+      endpoint: '/audio/music',
+      payload: { model: job.model.modelId, parameters: { ...musicParameters, prompt: job.prompt } },
+    };
+  }
+  if (job.modality === 'image') {
+    const wireParameters = cloudImageParameters(parameters);
+    const hasImages = uploadedIds.length > 0 || (Array.isArray(parameters.images) && parameters.images.length > 0);
+    return {
+      endpoint: hasImages ? '/images/edits' : '/images/generations',
+      payload: { ...wireParameters, model: job.model.modelId, prompt: job.prompt, ...(uploadedIds.length ? { images: uploadedIds } : {}) },
+    };
+  }
+  const images = uploadedIds.length ? { images: [{ asset_id: uploadedIds[0], role: 'first_frame' }] } : {};
+  return {
+    endpoint: '/videos/tasks',
+    payload: { ...parameters, model: job.model.modelId, prompt: job.prompt, ...images },
+  };
 }
 
 /** Cloud image requests carry ratio and resolution together as one `output` object. */
@@ -140,29 +205,14 @@ export const opendesign: ProviderAdapter = {
     let remoteId = job.remoteId;
     if (!remoteId) {
       const parameters = resolveGenerationParameters(job.model, job.parameters, !!ctx.references?.length);
-      const { voice, ...audioOptions } = parameters;
-      if (speech && (typeof voice !== 'string' || !voice.trim())) throw new Error('Choose a provider voice ID in parameters.voice');
+      if (speech && (typeof parameters.voice !== 'string' || !parameters.voice.trim())) throw new Error('Choose a provider voice ID in parameters.voice');
       if (audio && !speech && !soundEffects && !job.prompt.trim()) throw new Error('Music generation requires a non-empty prompt');
       if (soundEffects && job.prompt.trim().length > 450) throw new Error('Sound effects prompt must be at most 450 characters');
-      const wireParameters = job.modality === 'image' ? cloudImageParameters(parameters) : parameters;
-      const musicParameters = (() => {
-        const { duration, ...rest } = parameters;
-        if (typeof duration === 'number' && Number.isFinite(duration) && duration > 0 && rest.music_length_ms === undefined) {
-          return { ...rest, music_length_ms: Math.round(duration * 1000) };
-        }
-        return parameters;
-      })();
-      const audioBody = speech
-        ? { voice, parameters: { ...audioOptions, text: job.prompt } }
-        : soundEffects
-          ? { parameters: { ...audioOptions, text: job.prompt } }
-          : { parameters: { ...musicParameters, prompt: job.prompt } };
+      // Validate image parameter geometry before uploading reference bytes.
+      if (job.modality === 'image') cloudImageParameters(parameters);
       const inputs = audio ? [] : await uploadInputs(fetcher, api, headers, job.id, ctx);
       await ctx.progress('submitting');
-      const images = inputs.length ? { images: job.modality === 'video' ? [{ asset_id: inputs[0], role: 'first_frame' }] : inputs } : {};
-      const payload = audio ? { model: job.model.modelId, ...audioBody }
-        : { ...wireParameters, model: job.model.modelId, prompt: job.prompt, ...images };
-      const endpoint = audio ? speech ? '/audio/speech' : soundEffects ? '/audio/sound-effects' : '/audio/music' : job.modality === 'image' ? inputs.length || Array.isArray(parameters.images) && parameters.images.length ? '/images/edits' : '/images/generations' : '/videos/tasks';
+      const { endpoint, payload } = buildOpenDesignMediaRequest(job, parameters, inputs);
       const submitted = await apiJson(fetcher, api + endpoint, { method: 'POST', headers: { ...headers, ...mediaSubmitHeaders(ctx.baseUrl, job.id) }, body: JSON.stringify(payload), signal: ctx.signal });
       if (typeof submitted.task_id !== 'string' || !/^[a-zA-Z0-9_-]{1,180}$/.test(submitted.task_id)) throw new Error('OpenDesign Cloud did not return a task ID');
       remoteId = submitted.task_id;

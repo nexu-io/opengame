@@ -1536,6 +1536,68 @@ test('switching OpenDesign account during reference upload aborts before submitt
   assert.equal(submitPosts, 0, 'paid POST must never fire after an account switch during upload');
 }));
 
+test('production account media discovery fetches /api/v1/media/models directly via HTTP and forwards native model parameters without CLI allowlist blocking', t => fixture(async store => {
+  const submits: Array<{ endpoint: string; body: Record<string, unknown> }> = [];
+  const cliCalls: string[][] = [];
+  const account = new OpenDesignAccount(store.directory, {
+    pollMs: 1,
+    fetcher: (async (input: any, init: any = {}) => {
+      const url = String(input), method = (init.method ?? 'GET').toUpperCase();
+      assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer prod-control-key');
+      if (method === 'GET' && url === 'https://amr-api.open-design.ai/api/v1/media/models?include_audio=true') {
+        return Response.json({
+          models: [
+            { model: 'future-video-v2', kind: 'video', enabled: true, capabilities: { durations: [4, 6], ratios: ['16:9'] } },
+            { model: 'elevenlabs-sound-v3', kind: 'audio_sound_effects', enabled: true, capabilities: {} },
+          ],
+        });
+      }
+      if (method === 'POST' && url === 'https://amr-api.open-design.ai/api/v1/media/videos/tasks') {
+        submits.push({ endpoint: '/videos/tasks', body: JSON.parse(String(init.body)) });
+        return Response.json({ task_id: 'vt_future_1', status: 'queued' }, { status: 202 });
+      }
+      if (method === 'GET' && url === 'https://amr-api.open-design.ai/api/v1/media/videos/tasks/vt_future_1') {
+        return Response.json({ task_id: 'vt_future_1', model: 'future-video-v2', status: 'succeeded' });
+      }
+      if (method === 'GET' && url === 'https://amr-api.open-design.ai/api/v1/media/videos/tasks/vt_future_1/content') {
+        return new Response(await mediaBytes('video'), { status: 200 });
+      }
+      throw new Error(`unexpected HTTP call: ${method} ${url}`);
+    }) as Fetcher,
+    run: async args => {
+      cliCalls.push(args);
+      if (args[0] === 'model') return JSON.stringify({ source: 'remote', data: [{ id: 'gpt-text', enabled: true }] });
+      throw new Error(`media discovery/generation must not call vela CLI: ${args.join(' ')}`);
+    },
+  });
+  t.after(() => account.close());
+  await mkdir(account.home, { recursive: true });
+  await writeFile(path.join(account.root, 'session.json'), JSON.stringify({ id: 'sess-prod-http' }));
+  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({
+    profiles: {
+      prod: {
+        apiUrl: 'https://amr-api.open-design.ai',
+        user: { id: 'u-prod' },
+        controlKey: 'prod-control-key',
+        controlKeyId: 'prod-key-id',
+        runtimeKey: 'prod-rt-key',
+      },
+    },
+  }));
+  const all = await account.models(true);
+  assert.deepEqual(cliCalls, [['model', 'list', '--all', '--format', 'json']], 'media catalog must bypass vela media models');
+  assert.ok(all.some(m => m.id === 'account:future-video-v2' && m.kind === 'video'));
+  assert.ok(all.some(m => m.id === 'account:elevenlabs-sound-v3' && m.kind === 'audio' && m.mode === 'text-to-audio'));
+  const futureModel = (await account.mediaModels()).find(m => m.id === 'account:future-video-v2')!;
+  await account.generate(
+    { id: randomUUID(), model: futureModel, modality: 'video', prompt: 'sunset drone', providerOrigin: 'sess-prod-http', parameters: { duration: 4, seed: 42, camera_fixed: true } } as any,
+    store.directory,
+    new AbortController().signal,
+    async () => {},
+  );
+  assert.deepEqual(submits, [{ endpoint: '/videos/tasks', body: { duration: 4, seed: 42, camera_fixed: true, model: 'future-video-v2', prompt: 'sunset drone' } }]);
+}));
+
 test('AccountRequestError classifies local CLI flag errors as invalid requests rather than connection failures', () => {
   const cases = [
     'Error: if any flags in the group [aspect-ratio resolution] are set they must all be set; missing [aspect-ratio]\n',

@@ -23,7 +23,15 @@ import { registeredProvider } from '../shared/provider-registry.ts';
 import { resolveGenerationParameters } from '../shared/generation-options.ts';
 import { isSfxModel } from '../shared/audio-kind.ts';
 import { apiJson, MAX_MEDIA_BYTES, ProviderError, readCappedBytes, readUpstreamErrorCode, retryRead, streamMedia, withErrorMeta, type Fetcher } from './network.ts';
-import { cloudImageParameters, mediaSubmitHeaders, productionApi, uploadInputs } from './opendesign.ts';
+import {
+  buildOpenDesignMediaRequest,
+  cloudImageParameters,
+  mediaSubmitHeaders,
+  OPEN_DESIGN_MEDIA_MODELS_PATH,
+  parseOpenDesignMediaCatalog,
+  productionApi,
+  uploadInputs,
+} from './opendesign.ts';
 import type { ProviderContext } from './providers.ts';
 import { resumableDownload, type DownloadProgress } from './resumable-download.ts';
 import { accountDirectory } from './account-directory.ts';
@@ -1012,46 +1020,21 @@ export class OpenDesignAccount {
     const models: DirectoryModel[] = data.data.filter((row: any) => typeof row.id === 'string' && /^[\w./:-]{1,180}$/.test(row.id)).map((row: any) => ({
       id: 'account:' + row.id, provider: 'account', modelId: row.id, label: String(row.label || row.id), kind: 'text', enabled: row.enabled !== false, source: 'live',
     }));
-    const media = JSON.parse(await this.run(['media', 'models', '--json']));
-    if (!Array.isArray(media.models)) throw new Error('OpenDesign media catalogue is unavailable');
-    for (const row of media.models) {
-      // The connector reports speech, music and sound-effects models as `audio_speech`, `audio_music` and `audio_sound_effects`.
-      const kind = ({ image: 'image', video: 'video', audio_speech: 'audio', audio_music: 'audio', audio_sound_effects: 'audio' } as const)[row.kind as 'image' | 'video' | 'audio_speech' | 'audio_music' | 'audio_sound_effects'];
-      if (typeof row.model !== 'string' || !/^[\w./:-]{1,180}$/.test(row.model) || !kind) continue;
-      const mode = row.kind === 'audio_speech' ? 'text-to-speech' : row.kind === 'audio_music' || row.kind === 'audio_sound_effects' ? 'text-to-audio' : `text-to-${kind}`;
-      // An image model publishes `edits` only when this account is entitled to edit input images.
-      const capabilities = row.capabilities && typeof row.capabilities === 'object' && !Array.isArray(row.capabilities) ? row.capabilities as Record<string, unknown> : undefined;
-      const editable = kind === 'image' && capabilities?.edits === true;
-      const maxInputs = capabilities && Number.isInteger(capabilities.max_input_images) && (capabilities.max_input_images as number) > 0 ? capabilities.max_input_images as number : undefined;
-      models.push({
-        id: 'account:' + row.model, provider: 'account', modelId: row.model, label: row.model, kind, enabled: row.enabled !== false, source: 'live', mode,
-        ...(editable ? { supportsImageReference: true, ...(Number.isInteger(capabilities?.max_input_images) && (capabilities!.max_input_images as number) > 0 ? { maxInputImages: capabilities!.max_input_images as number } : {}) } : {}),
-        ...(kind === 'video' && maxInputs ? { maxInputImages: 1 } : {}),
-        ...(capabilities ? { nativeOptions: capabilities } : {}),
-      });
-    }
-    // Older AMR CLI releases call /api/v1/media/models without ?include_audio=true; probe once directly
-    // with controlKey so newly activated audio_sound_effects models light up without waiting for a CLI upgrade.
-    if (!media.models.some((row: any) => row.kind === 'audio_sound_effects')) {
-      const access = await this.controlAccess().catch(() => undefined);
-      if (access) {
-        const directAudio = await apiJson(
+    // Production accounts discover media models directly via HTTP (sharing OPEN_DESIGN_MEDIA_MODELS_PATH & parser with Cloud);
+    // custom/non-production connector environments fall back to `vela media models --json`.
+    const directAccess = await this.controlAccess().catch(() => undefined);
+    const media = directAccess
+      ? await apiJson(
           this.options.fetcher ?? fetch,
-          `${access.baseUrl}/api/v1/media/models?include_audio=true`,
-          { headers: { Authorization: `Bearer ${access.key}` } },
-          { timeoutMs: 8_000, maxBytes: 1024 * 1024 },
-        ).catch(() => undefined);
-        if (Array.isArray(directAudio?.models)) {
-          for (const row of directAudio.models) {
-            if (row?.kind !== 'audio_sound_effects' || typeof row.model !== 'string' || !/^[\w./:-]{1,180}$/.test(row.model)) continue;
-            const capabilities = row.capabilities && typeof row.capabilities === 'object' && !Array.isArray(row.capabilities) ? row.capabilities as Record<string, unknown> : undefined;
-            models.push({
-              id: 'account:' + row.model, provider: 'account', modelId: row.model, label: row.model, kind: 'audio', enabled: row.enabled !== false, source: 'live', mode: 'text-to-audio',
-              ...(capabilities ? { nativeOptions: capabilities } : {}),
-            });
-          }
-        }
-      }
+          `${directAccess.baseUrl}${OPEN_DESIGN_MEDIA_MODELS_PATH}`,
+          { headers: { Authorization: `Bearer ${directAccess.key}` } },
+          { timeoutMs: 15_000, maxBytes: 1024 * 1024 },
+        )
+      : JSON.parse(await this.run(['media', 'models', '--json']));
+    if (!Array.isArray(media.models)) throw new Error('OpenDesign media catalogue is unavailable');
+    for (const parsed of parseOpenDesignMediaCatalog(media.models, 'account')) {
+      const { modality, ...rest } = parsed;
+      models.push({ ...rest, kind: modality });
     }
     if (generation !== this.generation) return [];
     await this.commit(generation, async () => {
@@ -1173,23 +1156,8 @@ export class OpenDesignAccount {
     const soundEffects = music && isSfxModel(job.model);
     const speech = kind === 'audio' && !music;
     if ((reference || references.length) && kind !== 'image' && kind !== 'video') throw new Error('Account reference images are supported for image editing and video first frames only');
-    // TODO(OPEND-5839): interim static parameter allowlist until AMR expand=schema publishes full request schemas for all account models.
-    const schemaProps = isRecord(job.model.nativeOptions?.schema) && isRecord((job.model.nativeOptions!.schema as Record<string, unknown>).properties)
-      ? Object.keys((job.model.nativeOptions!.schema as Record<string, unknown>).properties as Record<string, unknown>)
-      : [];
-    const allowed = new Set([
-      ...schemaProps,
-      ...(kind === 'image'
-        ? ['aspect_ratio', 'resolution', 'quality', 'size', 'background', 'output']
-        : kind === 'video'
-          ? ['ratio', 'resolution', 'duration', 'generate_audio']
-          : soundEffects
-            ? ['duration_seconds', 'loop', 'prompt_influence']
-            : music
-              ? ['duration', 'music_length_ms']
-              : ['voice']),
-    ]);
-    if (Object.keys(params).some(key => !allowed.has(key))) throw new Error('Unsupported account model parameter');
+    // Speech-only parameters never belong on music or sound-effects models.
+    if (music && 'voice' in params) throw new Error('Unsupported account model parameter');
     if (soundEffects && job.prompt.trim().length > 450) throw new Error('Sound effects prompt must be at most 450 characters');
     if (music && !soundEffects && !job.prompt.trim()) throw new Error('Music generation requires a non-empty prompt');
     if (speech && (typeof params.voice !== 'string' || !params.voice.trim())) throw new Error('Choose a voice in parameters.voice');
@@ -1202,11 +1170,15 @@ export class OpenDesignAccount {
       const access = await this.mediaAccess();
       if (!access) throw withErrorMeta(new Error(requestMessages.unauthorized), { errorSource: 'local' });
       if (job.providerOrigin !== await this.identity()) throw new Error(jobMessages.accountChangedBeforeSubmit);
-      submitted = kind === 'image'
-        ? await this.submitImage(access, job, params, await this.normalizeReferences(reference, references), signal, progress)
+      if (kind === 'image') cloudImageParameters(params);
+      const inputReferences = kind === 'audio'
+        ? []
         : kind === 'video'
-          ? await this.submitVideo(access, job, params, (await this.normalizeReferences(reference, references)).slice(0, 1), signal, progress)
-          : await this.submitAudio(access, job, params, speech, soundEffects, signal, progress);
+          ? (await this.normalizeReferences(reference, references)).slice(0, 1)
+          : await this.normalizeReferences(reference, references);
+      const uploadedIds = await this.uploadMediaInputs(access, job, inputReferences, signal, progress);
+      const { endpoint, payload } = buildOpenDesignMediaRequest(job, params, uploadedIds);
+      submitted = await this.postMedia(access, endpoint, payload, job, signal, progress);
     }
     if (typeof submitted.task_id !== 'string' || !/^[\w-]{1,180}$/.test(submitted.task_id)) throw new Error('Account provider did not return a task ID');
     const taskId = submitted.task_id;
@@ -1214,69 +1186,6 @@ export class OpenDesignAccount {
     if (kind === 'image') return [await this.imageResult(job, taskId, directory, signal, progress)];
     if (kind === 'video') return [await this.videoTaskResult(job, taskId, signal, progress, onResult)];
     return [await this.audioTaskResult(job, taskId, directory, signal, progress, onResult)];
-  }
-  private async submitImage(access: { baseUrl: string; key: string; keyId: string }, job: GenerationJob, parameters: Record<string, unknown>, references: NonNullable<ProviderContext['references']>, signal: AbortSignal,
-    progress: (phase: string) => Promise<void>) {
-    const wireParameters = cloudImageParameters(parameters);
-    const images = await this.uploadMediaInputs(access, job, references, signal, progress);
-    const endpoint = images.length ? '/images/edits' : '/images/generations';
-    return this.postMedia(
-      access,
-      endpoint,
-      { ...wireParameters, model: job.model.modelId, prompt: job.prompt, ...(images.length ? { images } : {}) },
-      job,
-      signal,
-      progress,
-    );
-  }
-  private async submitVideo(access: { baseUrl: string; key: string; keyId: string }, job: GenerationJob, parameters: Record<string, unknown>, references: NonNullable<ProviderContext['references']>, signal: AbortSignal,
-    progress: (phase: string) => Promise<void>) {
-    const uploaded = await this.uploadMediaInputs(access, job, references, signal, progress);
-    const images = uploaded.length ? { images: [{ asset_id: uploaded[0], role: 'first_frame' }] } : {};
-    return this.postMedia(
-      access,
-      '/videos/tasks',
-      { ...parameters, model: job.model.modelId, prompt: job.prompt, ...images },
-      job,
-      signal,
-      progress,
-    );
-  }
-  private async submitAudio(access: { baseUrl: string; key: string; keyId: string }, job: GenerationJob, parameters: Record<string, unknown>, speech: boolean, soundEffects: boolean, signal: AbortSignal,
-    progress: (phase: string) => Promise<void>) {
-    if (speech) {
-      const { voice, ...audioOptions } = parameters;
-      return this.postMedia(
-        access,
-        '/audio/speech',
-        { model: job.model.modelId, voice: (voice as string).trim(), parameters: { ...audioOptions, text: job.prompt } },
-        job,
-        signal,
-        progress,
-      );
-    }
-    if (soundEffects) {
-      return this.postMedia(
-        access,
-        '/audio/sound-effects',
-        { model: job.model.modelId, parameters: { ...parameters, text: job.prompt } },
-        job,
-        signal,
-        progress,
-      );
-    }
-    const { duration, ...rest } = parameters;
-    const musicParameters = typeof duration === 'number' && Number.isFinite(duration) && duration > 0 && rest.music_length_ms === undefined
-      ? { ...rest, music_length_ms: Math.round(duration * 1000) }
-      : parameters;
-    return this.postMedia(
-      access,
-      '/audio/music',
-      { model: job.model.modelId, parameters: { ...musicParameters, prompt: job.prompt } },
-      job,
-      signal,
-      progress,
-    );
   }
   private async videoTaskResult(
     job: GenerationJob,
