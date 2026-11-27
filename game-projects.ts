@@ -1346,7 +1346,8 @@ server.listen(port, '127.0.0.1', () => {
     }
     if (logic !== null && !isUnusedStarterLogic) try {
       const runtime = new GameRuntime(logic, 'validation');
-      const players = game.multiplayer ? ['one','two'] : Array.from({ length: Math.max(1, runtime.meta.minPlayers) }, (_, i) => 'player-' + (i + 1));
+      const playerCount = Math.min(runtime.meta.maxPlayers, Math.max(runtime.meta.minPlayers, game.multiplayer ? 2 : 1));
+      const players = Array.from({ length: playerCount }, (_, i) => game.multiplayer && i < 2 ? ['one', 'two'][i] : 'player-' + (i + 1));
       runtime.setup(players);
       for (let tick = 0; tick < 50; tick++) { runtime.tick(tick); for (const player of players) { runtime.apply(player, { type: 'noop' }, game.multiplayer); runtime.view(player); } if (runtime.over().over) break; }
     } catch (e) { diagnostics.push({ path: 'logic.js', message: (e as Error).message }); }
