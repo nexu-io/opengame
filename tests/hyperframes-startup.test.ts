@@ -29,3 +29,24 @@ test('Studio immediately rejects readiness for a different project instead of wa
     await assert.rejects(startStudio(root, root, path.join(root, 'studio.log')), /工程目录不匹配/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('Studio startup failure surfaces non-warning stderr written to studio.log', { timeout: 10_000 }, async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'motion-startup-err-'));
+  try {
+    const bin = path.join(root, 'node_modules/hyperframes/bin');
+    await mkdir(bin, { recursive: true });
+    await writeFile(path.join(bin, 'hyperframes.mjs'), [
+      "console.error('(node:123) ExperimentalWarning: ignore me');",
+      "console.error(\"SyntaxError: The requested module 'node:module' does not provide an export named 'registerHooks'\");",
+      'process.exit(1);',
+    ].join('\n'));
+    await assert.rejects(
+      startStudio(root, root, path.join(root, 'studio.log')),
+      error => {
+        assert.match((error as Error).message, /Hyperframes Studio 已退出 \(1\)，请查看 studio\.log；最近输出：.*registerHooks/);
+        assert.doesNotMatch((error as Error).message, /ExperimentalWarning/);
+        return true;
+      },
+    );
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
