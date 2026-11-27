@@ -121,7 +121,12 @@
     padding: 0 var(--motion-space-8) 1px;
   }
   .badge {
-    padding: 0 5px;
+    bottom: -6px;
+    height: 13px;
+    padding: 0 var(--motion-space-4);
+  }
+  .badgeText {
+    font-size: var(--motion-text-step-9);
   }
   .cornerBadge {
     right: -2px;

@@ -37,6 +37,7 @@ import { consumeSuperAgentHandoff, queueSuperAgentHandoff, subscribeSuperAgentHa
 import { readSuperAgentPromptLink, withoutSuperAgentPromptLink } from './superAgentPromptLink';
 import { bundledGames, communityGames, gameApi } from '../motion/game/gameCatalog';
 import { isMultiplayerGameArtifact, localizedGameTitle, toGameArtifact, toGameResourceAttachment } from '../motion/game/gameSuperAgent';
+import { buildTryGamePool } from '../motion/game/gameTryFeed';
 import { gatewayRequest } from '../motion/gatewayClient';
 import { openAgentRuntimesSettings, useAgentRuntimes } from '../motion/useAgentRuntimes';
 import { notifyAgentsChanged, useLocalAgents } from '../motion/useLocalAgents';
@@ -1568,6 +1569,73 @@ export function SuperAgentWorkspace({
     return fullArtifact.id;
   }, [activeChat, activeTabId, applyChatSnapshot, locale, previewArtifacts, showToast, t, viewerOpen]);
 
+  // Unified playable game pool combining top-earning templates, existing built-in templates,
+  // and embeddable viral community games so Try Game surfing has maximum variety.
+  const [tryGamePool, setTryGamePool] = useState<GameCard[]>(() => buildTryGamePool(bundledGames, communityGames));
+  const tryGamePoolLoadedRef = useRef(false);
+  const hasGameViewerActivity = requestedMode === 'game'
+    || viewerArtifacts.some(item => item.kind === 'game-project');
+
+  useEffect(() => {
+    if (!active || !hasGameViewerActivity || tryGamePoolLoadedRef.current) return;
+    let cancelled = false;
+    void gameApi.catalog()
+      .then(res => {
+        if (cancelled) return;
+        tryGamePoolLoadedRef.current = true;
+        const catalogGames = Array.isArray(res?.games) && res.games.length ? res.games : bundledGames;
+        setTryGamePool(buildTryGamePool(catalogGames, communityGames));
+      })
+      .catch(() => {
+        // Retain static bundled + community pool when the local game service is offline.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [active, hasGameViewerActivity]);
+
+  const handleNavigateTrialGame = useCallback((game: GameCard, replaceTabId: string) => {
+    playedGamesRef.current.set(game.id, game);
+    const displayTitle = localizedGameTitle(game, locale);
+    const patch = toGameArtifact(game, displayTitle);
+    const artifactId = patch.id || `game:${game.id}`;
+    const now = Date.now();
+    const fullArtifact: SuperAgentArtifact = {
+      id: artifactId,
+      kind: 'game-project',
+      title: patch.title || displayTitle,
+      subtitle: patch.subtitle,
+      playableAd: patch.playableAd,
+      ...(patch.projectId ? { projectId: patch.projectId } : {}),
+      scenario: patch.scenario,
+      revision: patch.revision,
+      url: patch.url,
+      createdAt: now,
+      updatedAt: now,
+      presentedAt: now,
+    };
+
+    previewArtifactIdsRef.current.delete(replaceTabId);
+    previewArtifactIdsRef.current.add(fullArtifact.id);
+    setPreviewArtifacts(prev => {
+      const next = prev.filter(item => item.id !== replaceTabId && item.id !== fullArtifact.id);
+      next.push(fullArtifact);
+      return next;
+    });
+    setOpenTabIds(prev => {
+      const idx = prev.indexOf(replaceTabId);
+      if (idx < 0) return prev.includes(fullArtifact.id) ? prev : [...prev, fullArtifact.id];
+      const next: string[] = [];
+      for (let i = 0; i < prev.length; i += 1) {
+        const id = i === idx ? fullArtifact.id : prev[i];
+        if (!next.includes(id)) next.push(id);
+      }
+      return next;
+    });
+    setActiveTabId(fullArtifact.id);
+    setViewerOpen(true);
+  }, [locale]);
+
   const handleDeployGame = useCallback(async (game: GameCard) => {
     const openedArtifactId = await handlePlayGame(game);
     if (openedArtifactId) {
@@ -1733,6 +1801,10 @@ export function SuperAgentWorkspace({
     if (game && game.source !== 'mine') {
       const displayTitle = localizedGameTitle(game, locale);
       setGameTemplateSeed({ id: ++handoffSeqRef.current, game });
+      if (narrow) {
+        setViewerExpanded(false);
+        setViewerOpen(false);
+      }
       showToast(t('Remix · {title}', { title: displayTitle }), 'info', 'feedback');
       return;
     }
@@ -1746,8 +1818,12 @@ export function SuperAgentWorkspace({
         ? prev
         : [...prev, att].slice(0, 30),
     );
+    if (narrow) {
+      setViewerExpanded(false);
+      setViewerOpen(false);
+    }
     showToast(t('Attached "{title}" to prompt', { title: att.title }), 'info', 'feedback');
-  }, [locale, showToast, t]);
+  }, [locale, narrow, showToast, t]);
 
   useEffect(() => {
     if (!active || !requestedGameId) {
@@ -2188,13 +2264,21 @@ export function SuperAgentWorkspace({
 
   const maxViewerWidth = clampSuperAgentViewerWidth(10_000, containerWidth, getDockedSidebarWidth());
   const activeViewerArtifact = viewerArtifacts.find(item => item.id === activeTabId);
+  const isMobileGameTrialFullscreen = Boolean(
+    narrow
+    && viewerOpen
+    && activeViewerArtifact?.kind === 'game-project'
+    && (activeViewerArtifact.id.startsWith('game:') || !activeChat),
+  );
   const motionEditor = activeViewerArtifact?.kind === 'motion-project' && Boolean(activeViewerArtifact.projectId);
   const stackedViewer = stackedArtifactViewerHeight(containerHeight, viewerHeight, motionEditor);
-  const viewerSizeStyle = narrow && !viewerExpanded && containerHeight > 0
-    ? { flexBasis: stackedViewer.value }
-    : effectiveViewerWidth === null
-      ? undefined
-      : { width: effectiveViewerWidth, flexBasis: effectiveViewerWidth, flexGrow: 0, flexShrink: 1, maxWidth: '100%' };
+  const viewerSizeStyle = isMobileGameTrialFullscreen
+    ? undefined
+    : narrow && !viewerExpanded && containerHeight > 0
+      ? { flexBasis: stackedViewer.value }
+      : effectiveViewerWidth === null
+        ? undefined
+        : { width: effectiveViewerWidth, flexBasis: effectiveViewerWidth, flexGrow: 0, flexShrink: 1, maxWidth: '100%' };
 
   const startResize = (clientX: number) => {
     const currentWidth = effectiveViewerWidth
@@ -2405,7 +2489,7 @@ export function SuperAgentWorkspace({
         />
       )}
 
-      {viewerOpen && !viewerExpanded && narrow && (
+      {viewerOpen && !viewerExpanded && narrow && !isMobileGameTrialFullscreen && (
         <div
           role="separator"
           tabIndex={0}
@@ -2453,6 +2537,7 @@ export function SuperAgentWorkspace({
         <div
           id={viewerPaneId}
           className="om-sa-viewer-slot"
+          data-mobile-game-trial-fullscreen={isMobileGameTrialFullscreen ? 'true' : undefined}
           style={viewerSizeStyle}
         >
           <Suspense fallback={<RouteSurfaceFallback compact />}>
@@ -2465,6 +2550,7 @@ export function SuperAgentWorkspace({
               openTabIds={openTabIds}
               activeTabId={activeTabId}
               expanded={viewerExpanded}
+              mobileFullscreenGameTrial={isMobileGameTrialFullscreen}
               workspaceItems={resourcesCatalog?.items ?? []}
               onSelectTab={id => void handleOpenArtifactId(id)}
               onCloseTab={handleCloseTab}
@@ -2481,6 +2567,8 @@ export function SuperAgentWorkspace({
               }}
               onAttachArtifact={handleAttachArtifact}
               onUseGameInAgent={artifact => void handleUseGameInAgent(artifact)}
+              tryGamePool={tryGamePool}
+              onNavigateTrialGame={handleNavigateTrialGame}
               onChooseDouyin={(artifactId, options) => void handleChooseDouyin(artifactId, options)}
               pendingDeployArtifactId={pendingDeployArtifactId}
               onConsumeDeployRequest={() => setPendingDeployArtifactId(null)}
