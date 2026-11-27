@@ -28,7 +28,7 @@ import type { ProviderContext } from './providers.ts';
 import { resumableDownload, type DownloadProgress } from './resumable-download.ts';
 import { accountDirectory } from './account-directory.ts';
 import { withProcessLock } from '../shared/process-lock.ts';
-import { connectorRuntime, connectorVersion, ConnectorUnavailable, installConnector, manualInstallCommand, verifyConnector, type ConnectorProblem } from './account-connector.ts';
+import { connectorAdvice, connectorRuntime, connectorVersion, ConnectorUnavailable, installConnector, manualInstallCommand, verifyConnector, type ConnectorProblem } from './account-connector.ts';
 
 const execute = promisify(execFile);
 /** The launcher for the system default browser, which is also where the connector opens sign-in. */
@@ -118,14 +118,14 @@ const failureMessages: Record<AccountErrorCode, string> = {
 // A connector that cannot be prepared explains why; each message ends with the manual installation command.
 const connectorMessages: Record<ConnectorProblem, string> = {
   npm_missing: "OpenMotion couldn't find npm to set up the OpenDesign sign-in component. Run this command in a terminal, then select Retry:",
-  install_timeout: 'The sign-in component installation timed out. Check your connection and select Retry.',
+  install_timeout: connectorAdvice.installTimeout,
   install_failed: failureMessages.connector_unavailable,
   start_failed: "The OpenDesign sign-in component couldn't start on this device. Run this command in a terminal to reinstall it, then select Retry:",
 };
 // A connector named by OPENMOTION_ACCOUNT_CLI is used as is, so no install command is offered for it.
 const explicitConnectorMessage = "The OpenDesign sign-in component set by OPENMOTION_ACCOUNT_CLI couldn't start. Check or clear that path, then select Retry.";
 /** Sign-in failure messages Studio translates by exact text. */
-export const accountSignInMessages = [...new Set([...Object.values(failureMessages), ...Object.values(connectorMessages), explicitConnectorMessage])];
+export const accountSignInMessages = [...new Set([...Object.values(failureMessages), ...Object.values(connectorMessages), ...Object.values(connectorAdvice), explicitConnectorMessage])];
 // Billing, media and sign-out use the control key; models use the runtime key. Accept only a complete pair.
 const hasCredentials = (profile?: Profile) => Boolean(profile?.controlKey && profile.controlKeyId && profile.runtimeKey && profile.user?.id);
 const signedInProfile = (profile?: Profile) => hasCredentials(profile) && !profile!.pendingLogin;

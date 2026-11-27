@@ -14,6 +14,13 @@ export const connectorPackage = '@powerformer/vela-cli';
 /** Why a connector could not be prepared: npm was not found, npm could not install it, or the installed copy does not run. */
 export type ConnectorProblem = 'npm_missing' | 'install_failed' | 'install_timeout' | 'start_failed';
 
+export const connectorAdvice = {
+  permissions: 'OpenDesign could not access the sign-in component. Check folder permissions and device security settings, then select Retry.',
+  preparationTimeout: 'Preparing the OpenDesign sign-in component timed out. Check the network and try again.',
+  unsupportedPlatform: 'The OpenDesign sign-in component does not support this Node platform and architecture. Install a supported Node runtime, then select Retry.',
+  installTimeout: 'The sign-in component installation timed out. Check your connection and select Retry.',
+} as const;
+
 export class ConnectorUnavailable extends Error {
   readonly problem: ConnectorProblem;
   /** Local diagnostic only (end of npm's output or the start error); never shown or sent as telemetry. */
@@ -24,9 +31,10 @@ export class ConnectorUnavailable extends Error {
     super('OpenDesign connector unavailable: ' + problem);
     this.problem = problem;
     const cause = detail as NodeJS.ErrnoException & { killed?: boolean };
-    if (cause?.code === 'EACCES' || cause?.code === 'EPERM') this.advice = 'OpenDesign could not access the sign-in component. Check folder permissions and device security settings, then select Retry.';
-    else if (cause?.killed || cause?.code === 'ETIMEDOUT') this.advice = 'Preparing the OpenDesign sign-in component timed out. Check the network and try again.';
-    else if (cause?.message?.includes('Vela CLI is not packaged for')) this.advice = 'The OpenDesign sign-in component does not support this Node platform and architecture. Install a supported Node runtime, then select Retry.';
+    if (cause?.code === 'EACCES' || cause?.code === 'EPERM') this.advice = connectorAdvice.permissions;
+    else if (problem === 'install_timeout') this.advice = connectorAdvice.installTimeout;
+    else if (cause?.killed || cause?.code === 'ETIMEDOUT') this.advice = connectorAdvice.preparationTimeout;
+    else if (cause?.message?.includes('Vela CLI is not packaged for')) this.advice = connectorAdvice.unsupportedPlatform;
     const output = (detail as { stderr?: unknown })?.stderr;
     const code = (detail as NodeJS.ErrnoException | undefined)?.code;
     const npmCode = typeof output === 'string' ? /^npm (?:error|ERR!) code ([A-Z0-9_]+)$/mi.exec(output)?.[1] : undefined;
