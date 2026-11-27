@@ -1857,7 +1857,12 @@ export class GameRuntime {
     return JSON.parse(result);
   }
   summary(player: string) {
-    const json=this.run(`JSON.stringify(${this.optionalExports.has('summarize')} && typeof summarize==='function'?summarize(JSON.parse(JSON.stringify(state))):viewFor(state,${JSON.stringify(player)},ctx))`);
+    const json=this.run(`(()=>{
+      const custom=${this.optionalExports.has('summarize')} && typeof summarize==='function';
+      const summary=custom?summarize(JSON.parse(JSON.stringify(state))):viewFor(state,${JSON.stringify(player)},ctx);
+      if(typeof summary?.then==='function')throw Error((custom?'summarize':'viewFor')+' must return synchronous JSON');
+      return JSON.stringify(summary);
+    })()`);
     if(typeof json!=='string'||json.length>32768)throw new GameError('Simulation summary must be JSON under 32 KiB; export summarize(state) for large views');
     return JSON.parse(json);
   }
