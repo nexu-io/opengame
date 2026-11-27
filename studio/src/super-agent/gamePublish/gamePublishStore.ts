@@ -14,6 +14,7 @@ import { describeLinkError, publishGameLink, type GamePublishLinkTarget } from '
 import type { GamePublishDevToolId } from './devTools';
 import { gamePublishPlatform, storeLinkProblem, type GamePublishPlatform, type GamePublishPlatformId, type GamePublishStep } from './platforms';
 import { queueSuperAgentHandoff } from '../../motion/superAgentHandoff';
+import type { SuperAgentArtifact } from '../../../../shared/super-agent';
 import { wechatClient, type WechatPublishStatus } from './wechatClient';
 import { readLocale, translate } from '../../i18n/I18n';
 import wechatPortGuide from '../../../../skills/openmotion-game/references/wechat-minigame-port.md?raw';
@@ -47,6 +48,10 @@ export interface GamePublishWechatState {
 export interface GamePublishSession {
   artifactId: string;
   chatId: string | null;
+  /** The game as the preview shows it. Opened without a conversation, the WeChat handoff starts one that already holds it. */
+  artifact?: Partial<SuperAgentArtifact>;
+  /** The conversation the panel was last opened from; null for a standalone preview. A new platform run starts there. */
+  openedIn?: string | null;
   gameId: string;
   gameTitle: string;
   orientation?: 'portrait' | 'landscape';
@@ -220,7 +225,7 @@ export function linkNote(session: GamePublishSession) {
   const line = session.linkUrl
     ? '"OpenDesign 试玩链接已发布，可以在下面点打开或复制" (English: "The OpenDesign play link is published; open or copy it below")'
     : '"OpenDesign 试玩链接正在发布，好了会在下面显示打开和复制" (English: "The OpenDesign play link is being published; Open and Copy link appear below when it is ready")';
-  return `\n\nThe user kept OpenDesign selected. In your first message say only, in the user's language: ${line}. Never write the link or any URL to it, never say who published it or that you will not change it, and do not publish it yourself.`;
+  return `\n\nThe user kept OpenDesign selected; the page publishes the OpenDesign play link on its own. Your first message is about the platform above: start it with its current step as instructed, then end it with one short line, in the user's language: ${line}. The link never replaces or delays the platform step. Never write the link or any URL to it, never say who published it or that you will not change it, and do not publish it yourself.`;
 }
 
 function say(key: string, vars?: Record<string, string | number>) {
@@ -265,7 +270,7 @@ function enterStep(artifactId: string, platform: GamePublishPlatform, index: num
   if (step.kind === 'package' && step.packageTarget) void gamePublishActions.buildPackage(artifactId);
 }
 
-export interface GamePublishOpenInput { artifactId: string; chatId: string | null; gameId: string; gameTitle: string; orientation?: 'portrait' | 'landscape'; link?: GamePublishLinkTarget }
+export interface GamePublishOpenInput { artifactId: string; chatId: string | null; gameId: string; gameTitle: string; orientation?: 'portrait' | 'landscape'; link?: GamePublishLinkTarget; artifact?: Partial<SuperAgentArtifact> }
 
 export interface GamePublishChooseOptions { signedIn?: boolean; deferLink?: boolean }
 
@@ -275,12 +280,17 @@ export const gamePublishActions = {
     if (existing) {
       // A checkpoint result (steps still to go) stays; a final result goes back to the list.
       const view: GamePublishView = existing.view === 'result' && !stepInProgress(existing) ? 'list' : existing.view === 'list' && stepInProgress(existing) ? 'step' : existing.view;
-      update(input.artifactId, { open: true, view: existing.platformId === 'wechat' && view !== 'list' ? 'step' : view, chatId: input.chatId, link: input.link ?? existing.link });
+      // The run follows the place it is opened from. Cards made without a conversation move to the one it is opened in;
+      // a run still in progress stays with its conversation, and the next platform picked starts where the user is.
+      if (input.chatId && !existing.chatId) gamePublishActions.bindChat(input.artifactId, input.chatId);
+      const chatId = input.chatId ?? (stepInProgress(existing) ? existing.chatId : null);
+      update(input.artifactId, { open: true, view: existing.platformId === 'wechat' && view !== 'list' ? 'step' : view, chatId, openedIn: input.chatId, link: input.link ?? existing.link, artifact: input.artifact ?? existing.artifact });
       if (existing.platformId === 'wechat' && existing.wechat) gamePublishActions.watchWechat(input.artifactId);
       return;
     }
     sessions.set(input.artifactId, {
       ...input,
+      openedIn: input.chatId,
       open: true,
       view: 'list',
       stepIndex: 0,
@@ -293,6 +303,19 @@ export const gamePublishActions = {
     emit();
   },
   close(artifactId: string) { update(artifactId, { open: false }); },
+  /**
+   * The conversation a chat-less publish run now lives in (created by the WeChat handoff). Its cards move there, so
+   * the panel and the conversation keep showing the same run.
+   */
+  bindChat(artifactId: string, chatId: string) {
+    const session = sessions.get(artifactId);
+    if (!session || session.chatId) return;
+    const from = threadKey(session);
+    const moved = threads.get(from) ?? [];
+    threads.delete(from);
+    if (moved.length) threads.set(chatId, [...(threads.get(chatId) ?? []), ...moved]);
+    update(artifactId, { chatId, openedIn: chatId });
+  },
   /** Show the panel again for a game that already has publish state (e.g. from a conversation card). */
   reopen(artifactId: string) {
     const session = sessions.get(artifactId);
@@ -390,11 +413,14 @@ export const gamePublishActions = {
     platformRuns.set(artifactId, (platformRuns.get(artifactId) ?? 0) + 1);
     const guestOnNonLinkPlatform = options?.signedIn === false && platformId !== 'telegram';
     const guestOnTelegram = options?.signedIn === false && platformId === 'telegram';
-    const dispatchesHandoff = platformId === 'wechat' || (platformId === 'douyin-minigame' && Boolean(session.chatId));
+    const startsHere = session.openedIn === null && Boolean(session.chatId);
+    const dispatchesHandoff = platformId === 'wechat' || (platformId === 'douyin-minigame' && Boolean(session.chatId) && !startsHere);
     const platformTurnIndex = currentAnchorTurnIndex(session, dispatchesHandoff ? 'next' : 'current');
     // Clear stale link errors and previous package build logs so re-picking a platform never stacks duplicate cards.
     removeEntries(session, entry => isLinkFailureEntry(entry) || isPackageWorkEntry(entry));
     update(artifactId, {
+      // Opened from a standalone preview: this run gets its own conversation with the game (see startWechat).
+      ...(startsHere ? { chatId: null } : {}),
       platformId,
       stepIndex: 0,
       guideRequestedAt: undefined,
@@ -502,6 +528,9 @@ export const gamePublishActions = {
       mode: 'game',
       newChat: false,
       autoSend: true,
+      // Without a conversation (standalone preview from My games) the new one is created with the game in it, so the
+      // preview, the WeChat panel, the key button and the QR code stay.
+      ...(!session.chatId && session.artifact ? { initialArtifact: { ...session.artifact, id: session.artifactId }, title: session.gameTitle } : {}),
     });
     gamePublishActions.watchWechat(artifactId);
   },
