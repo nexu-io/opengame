@@ -346,7 +346,7 @@ test('preview returns a PNG data URL, upload preserves metadata, and temporary P
     png = options.qrcodeOutputDest;
     assert.equal(options.desc, 'OpenDesign preview'); assert.equal(options.robot, 1);
     assert.equal(options.project.options.projectPath, projectDir);
-    assert.deepEqual(options.project.options.ignores, ['node_modules/**/*', 'mock-*.js', 'port-report.json']);
+    assert.deepEqual(options.project.options.ignores, ['node_modules/**/*', 'mock-*.js', 'port-report.json', '**/.?*', '**/.?*/**']);
     assert.equal(options.project.options.type, 'miniGame');
     assert.deepEqual(options.setting, { es6: true, minify: true });
     await writeFile(png, Buffer.from([137, 80, 78, 71]));
@@ -476,6 +476,28 @@ async function workerFixture(workspace: string, script: string, workerTimeoutMs 
   return { service, workerPath };
 }
 const uploadBody = { appid, gameId: 'demo', version: '1.0.0', desc: 'Worker test' };
+
+test('worker applies the same hidden-file exclusions to preview and upload projects', () => fixture(async workspace => {
+  await project(workspace);
+  const { service } = await workerFixture(workspace, `
+    import assert from 'node:assert/strict';
+    import { writeFile } from 'node:fs/promises';
+    import { runWechatCiWorker } from ${JSON.stringify(workerModule)};
+    void runWechatCiWorker(async () => ({
+      Project: class {
+        constructor(options) {
+          assert.deepEqual(options.ignores, ['node_modules/**/*', 'mock-*.js', 'port-report.json', '**/.?*', '**/.?*/**']);
+        }
+      },
+      preview: async options => writeFile(options.qrcodeOutputDest, 'png'),
+      upload: async () => ({ subPackageInfo: [{ name: 'main', size: 10 }] }),
+    }));
+  `);
+  const preview = await request(service, 'POST', '/preview', { appid, gameId: 'demo' });
+  assert.equal(preview.status, 200, JSON.stringify(preview));
+  const upload = await request(service, 'POST', '/upload', uploadBody);
+  assert.equal(upload.status, 200, JSON.stringify(upload));
+}));
 
 test('worker fatal handlers contain asynchronous unhandled rejection and uncaught exception; daemon stays alive', () => fixture(async workspace => {
   await project(workspace);

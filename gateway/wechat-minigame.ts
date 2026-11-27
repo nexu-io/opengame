@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { GameError, gameProjectsFor } from '../game-projects.ts';
+import { wechatProjectIgnores } from './wechat-project-files.ts';
 
 export type ConfirmStep = 'account' | 'testers' | 'category' | 'review' | 'filing' | 'release';
 type StepKey = ConfirmStep | 'appid' | 'key' | 'ip' | 'port' | 'preview' | 'upload';
@@ -290,7 +291,7 @@ export class WechatMinigame {
     const walk = async (prefix = '') => {
       for (const entry of await readdir(path.join(projectDir, prefix), { withFileTypes: true })) {
         const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
-        // miniprogram-ci also packs dotfiles and follows links, so every entry is checked, hidden or not.
+        // Keep link checks even for files excluded from the inventory and SDK package.
         if (entry.isSymbolicLink()) throw new PublishError(400, 'PROJECT_MISSING', `Symlinks are not allowed in WeChat projects: ${relative}`);
         if (entry.name.startsWith('.') || entry.name === 'node_modules') {
           if (entry.isDirectory()) await walkLinksOnly(relative);
@@ -410,7 +411,7 @@ export class WechatMinigame {
           let ci: Ci;
           try { ci = await this.options.loadCi(); }
           catch { throw new PublishError(500, 'WECHAT_CI_MISSING', 'miniprogram-ci could not be loaded'); }
-          const project = new ci.Project({ appid, type: 'miniGame', projectPath: projectInfo.projectDir, privateKeyPath, ignores: ['node_modules/**/*', 'mock-*.js', 'port-report.json'] });
+          const project = new ci.Project({ appid, type: 'miniGame', projectPath: projectInfo.projectDir, privateKeyPath, ignores: [...wechatProjectIgnores] });
           const common = { project, setting: { es6: true, minify: true }, robot: 1, onProgressUpdate: () => {} };
           result = kind === 'preview'
             ? await ci.preview({ ...common, desc: 'OpenDesign preview', qrcodeFormat: 'image', qrcodeOutputDest: png })

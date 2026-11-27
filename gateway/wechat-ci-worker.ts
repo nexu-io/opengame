@@ -3,6 +3,7 @@ import { setDefaultResultOrder } from 'node:dns';
 import { writeSync } from 'node:fs';
 import { setDefaultAutoSelectFamily } from 'node:net';
 import { pathToFileURL } from 'node:url';
+import { wechatProjectIgnores } from './wechat-project-files.ts';
 
 export type WechatCiJob = {
   kind: 'preview' | 'upload';
@@ -49,7 +50,7 @@ export async function runWechatCiWorker(loadCi: () => Promise<any> = () => impor
     try { ci = await loadCi(); }
     catch { report({ ok: false, message: 'miniprogram-ci could not be loaded', errCode: 'WECHAT_CI_MISSING' }); return; }
     const project = new ci.Project({ appid: job.appid, type: 'miniGame', projectPath: job.projectPath,
-      privateKeyPath: job.privateKeyPath, ignores: ['node_modules/**/*', 'mock-*.js', 'port-report.json'] });
+      privateKeyPath: job.privateKeyPath, ignores: [...wechatProjectIgnores] });
     const common = { project, setting: { es6: true, minify: true }, robot: 1, onProgressUpdate: () => {} };
     const result = job.kind === 'preview'
       ? await ci.preview({ ...common, desc: job.desc || 'OpenDesign preview', qrcodeFormat: 'image', qrcodeOutputDest: job.qrcodeOutputDest })
