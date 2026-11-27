@@ -97,7 +97,7 @@ export function posthogCommonProperties(options: {
   return {
     event_schema_version: 1,
     schema_version: 1,
-    product: 'openmotion',
+    product: currentProductId(),
     source_product: currentProductId(),
     ...(hostContext ?? unknownHost),
     app_version: appVersion,

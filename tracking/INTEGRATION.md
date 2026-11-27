@@ -192,8 +192,10 @@ installation without a source keeps `utm_source` null. The installer emits
 registration, onboarding persistence and Skill installation complete; a rolled-back
 setup does not emit a success result.
 
-Events go to the existing OpenDesign project (420348), with `product=openmotion`.
-Filter OM queries by that property and exclude OM from unrelated shared reports.
+Events go to the existing OpenDesign project (420348), with `product` resolved from
+`currentProductId()` (`openmotion` in OpenMotion, `opengame` in OpenGame).
+Filter queries by `properties.product` (or `IN ('openmotion', 'opengame')` for combined
+reports) and exclude them from unrelated shared reports.
 An OM-only receiver transformation preserves coarse GeoIP and removes raw IP and
 precise location after the existing GeoIP transformation; non-OM events are unchanged.
 Do not add client IP lookups or collect IP in callers.
@@ -311,14 +313,14 @@ Keep test-run UUIDs stable for one run and start a fresh UUID for another. Do no
 override a user's saved preference or remove their force-off variables to make a
 test pass. Use a separately owned test launch; record an intentional opt-out case.
 
-Exercise the actual action, then query the exact `test_run_id` and `product=openmotion`
-in the OpenDesign PostHog project. A read-authorized connector/account is needed; the distributed
+Exercise the actual action, then query the exact `test_run_id` and `product`
+(`openmotion` or `opengame`) in the OpenDesign PostHog project. A read-authorized connector/account is needed; the distributed
 public capture token cannot query events. For example, replace the UUID below:
 
 ```sql
 SELECT event, count() AS rows, uniqExact(uuid) AS unique_events
 FROM events
-WHERE properties.product = 'openmotion'
+WHERE properties.product IN ('openmotion', 'opengame')
   AND properties.env = 'test'
   AND properties.test_run_id = 'REPLACE_WITH_TEST_RUN_UUID'
 GROUP BY event

@@ -16,8 +16,10 @@ stable releases, test/prerelease packages and local builds, into the existing
 OpenDesign project (420348). Application version and environment remain event
 properties; they do not disable collection. DEV packages retain their separate
 installation/data directories and template routing.
-OM events carry `product=openmotion`; OM reports must filter by that property,
-and shared-project reports must distinguish OM from other products. The project's
+OpenMotion and OpenGame events stamp `product` from `currentProductId()` (`openmotion`
+or `opengame`); single-product reports filter by `properties.product = 'openmotion'`
+or `'opengame'`, and combined reports filter `properties.product IN ('openmotion', 'opengame')`.
+Shared-project reports must distinguish OpenMotion/OpenGame from other products. The project's
 public, write-only token and ingestion host are distributed in
 `shared/tracking-config.json`; it contains no read/admin credentials and is never
 included in the browser bundle. Users do not need to supply a key or opt-in flag.
@@ -204,7 +206,7 @@ device-level analyses; those need explicit aggregation by `device_id`. For examp
 SELECT uniqExact(properties.device_id) AS active_devices
 FROM events
 WHERE timestamp >= now() - INTERVAL 2 DAY
-  AND properties.product = 'openmotion'
+  AND properties.product IN ('openmotion', 'opengame')
   AND properties.device_id_source = 'platform'
 ```
 
