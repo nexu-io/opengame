@@ -20,6 +20,8 @@ import { imageFeatureCapable, imageFeatureSupported, type ImageFeatureId } from 
 import { modelCapabilities } from '../shared/model-capabilities.ts';
 import { openDesignImageReferenceCap, openDesignModels } from '../shared/opendesign-models.ts';
 import { OpenDesignAccount } from '../gateway/account.ts';
+import { mediaSubmitHeaders, productionApi } from '../gateway/opendesign.ts';
+import { currentProductId } from '../shared/product-identity.ts';
 import type { AccountSummary } from '../shared/provider-directory.ts';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -50,6 +52,26 @@ for (const provider of ['opendesign', 'account']) for (const modelId of ['wan-2.
   });
 }
 
+test('mediaSubmitHeaders stamps X-Source-Product from currentProductId for production AMR only', () => {
+  const prior = process.env.OPENMOTION_PRODUCT;
+  try {
+    for (const product of ['openmotion', 'opengame'] as const) {
+      process.env.OPENMOTION_PRODUCT = product;
+      assert.deepEqual(mediaSubmitHeaders(productionApi, fixtureJobId), {
+        'Idempotency-Key': fixtureJobId,
+        'X-Source-Product': product,
+        'X-OpenMotion-Job-Id': fixtureJobId,
+      });
+      assert.deepEqual(mediaSubmitHeaders('https://cloud.example', fixtureJobId), {
+        'Idempotency-Key': fixtureJobId,
+      });
+    }
+  } finally {
+    if (prior === undefined) delete process.env.OPENMOTION_PRODUCT;
+    else process.env.OPENMOTION_PRODUCT = prior;
+  }
+});
+
 test('first-frame ratio policy leaves other providers, models and image editing unchanged', () => {
   const base: Model = { id: 'opendesign:wan-2.7', provider: 'opendesign', modelId: 'wan-2.7', label: 'Wan', modality: 'video', mode: 'text-to-video', source: 'live', defaults: { ratio: '16:9' } };
   for (const model of [{ ...base, provider: 'fal' }, { ...base, provider: 'atlascloud' }, { ...base, modelId: 'future-video' }, { ...base, modality: 'image' as const }]) {
@@ -63,7 +85,7 @@ test('account first-frame video rejects fixed ratios before running the connecto
   const account = new OpenDesignAccount(store.directory, {
     pollMs: 0,
     run: async (args, _signal, env) => {
-      assert.deepEqual(env, args[1] === 'gen' ? { VELA_SOURCE_PRODUCT: 'openmotion', VELA_OPENMOTION_JOB_ID: fixtureJobId } : undefined);
+      assert.deepEqual(env, args[1] === 'gen' ? { VELA_SOURCE_PRODUCT: currentProductId(), VELA_OPENMOTION_JOB_ID: fixtureJobId } : undefined);
       calls.push(args);
       if (args[1] === 'gen') return JSON.stringify({ task_id: `task-${calls.length}` });
       if (args[1] === 'get') {
@@ -102,7 +124,7 @@ test('account image jobs with a transparent background or several references go 
     const url = String(input), method = init.method ?? 'GET';
     const headers = new Headers(init.headers);
     const isSubmission = method === 'POST' && /\/images\/(edits|generations)$/.test(url);
-    assert.equal(headers.get('X-Source-Product'), isSubmission ? 'openmotion' : null);
+    assert.equal(headers.get('X-Source-Product'), isSubmission ? currentProductId() : null);
     assert.equal(headers.get('X-OpenMotion-Job-Id'), isSubmission ? fixtureJobId : null);
     if (isSubmission) assert.equal(headers.get('Idempotency-Key'), fixtureJobId);
     calls.push({ url, method, body: typeof init.body === 'string' ? JSON.parse(init.body) : undefined, auth: init.headers?.Authorization });
@@ -552,7 +574,7 @@ test('OpenDesign Cloud packs image aspect_ratio and resolution into output, pres
       fetcher: async (url, init) => {
         const headers = new Headers(init?.headers);
         const accountSubmission = init?.method === 'POST' && baseUrl === 'https://amr-api.open-design.ai';
-        assert.equal(headers.get('X-Source-Product'), accountSubmission ? 'openmotion' : null);
+        assert.equal(headers.get('X-Source-Product'), accountSubmission ? currentProductId() : null);
         assert.equal(headers.get('X-OpenMotion-Job-Id'), accountSubmission ? fixtureJobId : null);
         if (init?.method === 'POST') {
           assert.equal(headers.get('Idempotency-Key'), fixtureJobId);

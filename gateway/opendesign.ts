@@ -4,6 +4,7 @@ import type { Model } from '../shared/gateway.ts';
 import { isSfxModel } from '../shared/audio-kind.ts';
 import { openDesignImageReferenceCap } from '../shared/opendesign-models.ts';
 import { resolveGenerationParameters } from '../shared/generation-options.ts';
+import { currentProductId } from '../shared/product-identity.ts';
 import { apiJson, publicProviderFetch, ProviderError, retryRead, withErrorMeta, type Fetcher } from './network.ts';
 import type { ProviderAdapter, ProviderContext } from './providers.ts';
 
@@ -15,7 +16,7 @@ const CLOUD_MODEL_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,179}$/;
 export function mediaSubmitHeaders(baseUrl: string, jobId: string): Record<string, string> {
   return {
     'Idempotency-Key': jobId,
-    ...(baseUrl === productionApi ? { 'X-Source-Product': 'openmotion', 'X-OpenMotion-Job-Id': jobId } : {}),
+    ...(baseUrl === productionApi ? { 'X-Source-Product': currentProductId(), 'X-OpenMotion-Job-Id': jobId } : {}),
   };
 }
 

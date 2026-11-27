@@ -1117,7 +1117,7 @@ export class OpenDesignAccount {
         : directSfx
           ? await this.submitSoundEffect(job, params, signal)
           : JSON.parse(await this.run(args, signal, {
-              VELA_SOURCE_PRODUCT: 'openmotion', VELA_OPENMOTION_JOB_ID: job.id,
+              VELA_SOURCE_PRODUCT: currentProductId(), VELA_OPENMOTION_JOB_ID: job.id,
             }));
     if (typeof submitted.task_id !== 'string' || !/^[\w-]{1,180}$/.test(submitted.task_id)) throw new Error('Account provider did not return a task ID');
     const taskId = submitted.task_id;

@@ -10,6 +10,7 @@ import { Phase1Service } from '../phase1.ts';
 import { OpenDesignAccount } from '../gateway/account.ts';
 import { readCappedBytes } from '../gateway/network.ts';
 import { productionApi } from '../gateway/opendesign.ts';
+import { currentProductId } from '../shared/product-identity.ts';
 import { gatewayFor } from '../gateway/service.ts';
 import { clearOpenDesign3dDiscoveryCache, normalizeTripoAnimation } from '../gateway/opendesign-3d.ts';
 import {
@@ -1754,7 +1755,7 @@ test('3d-asset production AMR submissions send canonical UUID X-OpenMotion-Job-I
       });
       assert.equal(res.asset.modality, '3d');
       assert.equal(seenHeaders.length, 1);
-      assert.equal(seenHeaders[0].sourceProduct, 'openmotion');
+      assert.equal(seenHeaders[0].sourceProduct, currentProductId());
       assert.ok(seenHeaders[0].jobId && uuidPattern.test(seenHeaders[0].jobId), `expected UUID X-OpenMotion-Job-Id, got ${seenHeaders[0].jobId}`);
       assert.equal(seenHeaders[0].idempotencyKey, seenHeaders[0].jobId);
     } finally {

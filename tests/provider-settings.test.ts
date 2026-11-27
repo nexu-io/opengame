@@ -245,7 +245,7 @@ test('account device authorization, billing, remote models and all media outputs
     assert.equal(completed.state, 'completed', completed.error); assert.match(completed.remoteId!, /fixture-task-/);
     assert.equal((await mediaUse(store, args)).job.id, queued.job.id);
     const recorded = JSON.parse(await readFile(path.join(account.home, 'last-generation-source.json'), 'utf8'));
-    assert.deepEqual(recorded, { product: 'openmotion', jobId: queued.job.id });
+    assert.deepEqual(recorded, { product: currentProductId(), jobId: queued.job.id });
   }
   assert.equal(JSON.parse(await readFile(path.join(account.home, 'submissions.json'), 'utf8')).length, 3);
   await writeFile(path.join(account.home, 'fixture-mode'), 'billing-failure');
