@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://go.open-design.ai/?utm_source=github&amp;utm_medium=referral&amp;utm_campaign=opengame&amp;utm_content=readme_en"><img src="docs/readme/badges/opendesign-go.svg" alt="OpenDesign Go model abonelikleri" /></a>
+  <a href="https://go.open-design.ai/?utm_source=github&amp;utm_medium=referral&amp;utm_campaign=opengame&amp;utm_content=readme_tr"><img src="docs/readme/badges/opendesign-go.svg" alt="OpenDesign Go model abonelikleri" /></a>
   <a href="https://discord.com/invite/M7NnHS9gNa"><img src="docs/readme/badges/discord.svg" alt="OpenGame Discord sunucusuna katıl" /></a>
   <a href="https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=b6cs46dc-acb2-48ed-941d-c45642ead841"><img src="docs/readme/badges/feishu.svg" alt="OpenGame Feishu grubuna katıl" /></a>
   <a href="https://x.com/OpenDesignHQ"><img src="docs/readme/badges/x-opendesignhq.svg" alt="X'te OpenDesign (@OpenDesignHQ)" /></a>
@@ -36,7 +36,7 @@ OpenGame, **ilk açık kaynaklı Süper Oyun Ajanıdır** — **DeepSeek (DSH)**
 - 🚀 **Ajanınızla AAA Düzeyinde 3B Oyunlar Geliştirin.** Tam yığın 3B oynanış, sanat, müzik ve seslendirmeyi doğrudan **DeepSeek (DSH)**, **Claude**, **Codex** veya **Gemini** üzerinden yönetin — tek bir istemden oynanabilir 3B aksiyon, yarış ve açık dünya oyunlarına.
 - 🎮 **Herhangi Bir Oyunu Tek Tıkla Yeniden Düzenleyin (Remix) ve Stilini Değiştirin.** Tamamen düzenlenebilir kaynak kodlu **25 dahili oynanabilir şablonla** (3B, voksel, anime, piksel ve 9:16 hitler) başlayın — kanıtlanmış mekanikleri korurken dakikalar içinde karakterleri, dünyaları ve sanat stillerini değiştirin.
 - 💰 **Kazandıran Oyunlar İnşa Edin: Üret → Doğrula → Gelire Dönüştür.** Otomatik mantık kontrolleri, denge simülasyonu, başsız oynanış testi, kapaklar ve oynanış fragmanları — canlı web bağlantıları yayımlayın, tek dosyalık **9:16 Oynanabilir Reklamlar (Playable Ads)** dışa aktarın ve **WeChat Mini Games**, **TikTok** ile **Douyin** yayımlama yollarına bağlanın.
-- 🔓 **Tam Yığın Açık Kaynak (BYOA + BYOK).** Kod, sanat, video, müzik, seslendirme, SFX ve Three.js 3B tamamen açık kaynaklıdır — favori [yerel ajanınızı](#agent-wall) ve kendi API anahtarlarınızı takın veya [OpenDesign Go](https://go.open-design.ai/?utm_source=github&utm_medium=referral&utm_campaign=opengame&utm_content=readme_en) bağlantısını kullanın.
+- 🔓 **Tam Yığın Açık Kaynak (BYOA + BYOK).** Kod, sanat, video, müzik, seslendirme, SFX ve Three.js 3B tamamen açık kaynaklıdır — favori [yerel ajanınızı](#agent-wall) ve kendi API anahtarlarınızı takın veya [OpenDesign Go](https://go.open-design.ai/?utm_source=github&utm_medium=referral&utm_campaign=opengame&utm_content=readme_tr) bağlantısını kullanın.
 
 <a id="quick-start"></a> <a id="快速开始"></a>
 
@@ -304,7 +304,7 @@ Gerçek bir oyun koddan fazlasını gerektirir — ana görseller, karakter spri
 | **🔊 Etki ses efektleri (vuruş, zıplama, altın, arayüz)** | Web Audio API ile doğrudan oyun kodunda sentezlenir | Aynı (sıfır gecikme, sıfır harici dosya) |
 | **🧊 3B sahneler ve modeller** | Dahili **Three.js** + dahili CC0 kitleri + ayrılmış 3B ağ geçidi yuvası (bağlandığında otomatik keşfedilir) | Prosedürel Three.js geometrisi, ışıklandırma ve gölgelendiriciler |
 
-> OpenGame yerel açık kaynak yığını için hiçbir yazılım aboneliği ücreti almaz. **Model Settings** içinde kendi sağlayıcı anahtarlarınızı kullanın, birleşik çoklu model erişimi için [OpenDesign Go](https://go.open-design.ai/?utm_source=github&utm_medium=referral&utm_campaign=opengame&utm_content=readme_en) bağlayın veya %100 kodla üretilen sıfır API maliyetli oyunlar yapın. [Model kataloğu](gateway/catalog.ts) · [Sağlayıcı kurulumu](docs/model-gateway.md)
+> OpenGame yerel açık kaynak yığını için hiçbir yazılım aboneliği ücreti almaz. **Model Settings** içinde kendi sağlayıcı anahtarlarınızı kullanın, birleşik çoklu model erişimi için [OpenDesign Go](https://go.open-design.ai/?utm_source=github&utm_medium=referral&utm_campaign=opengame&utm_content=readme_tr) bağlayın veya %100 kodla üretilen sıfır API maliyetli oyunlar yapın. [Model kataloğu](gateway/catalog.ts) · [Sağlayıcı kurulumu](docs/model-gateway.md)
 
 ### 3. Otomatik Oyun QA, Denge Simülasyonu ve Otomatik Fragmanlar
 
@@ -468,6 +468,41 @@ OpenGame, açık kaynaklı oyun, yaratıcı araçlar ve yapay zekâ ajan toplulu
 | **[Model Context Protocol (MCP) SDK](https://github.com/modelcontextprotocol/typescript-sdk)** ve **[Vercel Skills CLI](https://github.com/vercel-labs/skills)** | MIT / Apache-2.0 | 22 yerel yapay zekâ ajanını bağlamak ve hafif Beceri dağıtımı için standart protokol |
 
 Yığınımıza güç veren daha geniş açık kaynak ekosistemine de teşekkür ederiz: **Puppeteer & Chrome for Testing**, **FFmpeg**, **Dockview**, **CodeMirror 6**, **Lexical**, **React**, **Vite**, **Tailwind CSS**, **Zustand**, **Electron**, **GSAP**, **DiceBear** (Micah avatar stili, CC BY 4.0, [atıf](studio/skill-cover-attribution.md)) ve açık kaynak yazı tipleri (**Albert Sans**, **IBM Plex Mono**, **Instrument Serif**, SIL OFL 1.1).
+
+### Topluluk Oyun Vitrini Katkıları
+
+Game Studio'da ilham bağlantıları olarak öne çıkarılan herkese açık yapay zekâ tarayıcı oyunlarının geliştiricilerine özel teşekkürler (geliştiricinin orijinal gönderisini ziyaret etmek için herhangi bir kareye tıklayın):
+
+<p>
+  <a href="https://x.com/felixrieseberg/status/2119925633564463609" title="Saltline by @felixrieseberg"><img src="studio/src/motion/game/community/saltline.jpg" width="56" height="56" alt="Saltline (@felixrieseberg)" /></a>
+  <a href="https://x.com/Saccc_c/status/2109962425512734739" title="The Little Prince: Star Journey by @Saccc_c"><img src="studio/src/motion/game/community/little-prince.jpg" width="56" height="56" alt="The Little Prince: Star Journey (@Saccc_c)" /></a>
+  <a href="https://x.com/Rubzem/status/2104253584737230926" title="Sky Reach by @jonesiller"><img src="studio/src/motion/game/community/sky-reach.jpg" width="56" height="56" alt="Sky Reach (@jonesiller)" /></a>
+  <a href="https://x.com/edwinarbus/status/2102463453176979794" title="Antikythera Dive by @edwinarbus"><img src="studio/src/motion/game/community/shipwreck.jpg" width="56" height="56" alt="Antikythera Dive (@edwinarbus)" /></a>
+  <a href="https://x.com/bridgemindai/status/2102451997395866021" title="Turbo Kart Rally by @bridgemindai"><img src="studio/src/motion/game/community/turbo-kart.jpg" width="56" height="56" alt="Turbo Kart Rally (@bridgemindai)" /></a>
+  <a href="https://x.com/BubuStd/status/2102991290568954264" title="Voxel Musou by @BubuStd"><img src="studio/src/motion/game/community/voxel-musou.jpg" width="56" height="56" alt="Voxel Musou (@BubuStd)" /></a>
+  <a href="https://x.com/ebbyamir/status/2120284261089673376" title="Starry Nightrider by @ebbyamir"><img src="studio/src/motion/game/community/starry-nightrider.jpg" width="56" height="56" alt="Starry Nightrider (@ebbyamir)" /></a>
+  <a href="https://x.com/ViktorKav/status/2122647483281015155" title="Uno com Escada by @ViktorKav"><img src="studio/src/motion/game/community/uno-com-escada.jpg" width="56" height="56" alt="Uno com Escada (@ViktorKav)" /></a>
+  <a href="https://x.com/kevin_t_ngo/status/2119868968307695818" title="What the Water Keeps by @kevin_t_ngo"><img src="studio/src/motion/game/community/what-the-water-keeps.jpg" width="56" height="56" alt="What the Water Keeps (@kevin_t_ngo)" /></a>
+  <a href="https://x.com/kevin_t_ngo/status/2120238844754923874" title="Evensong by @kevin_t_ngo"><img src="studio/src/motion/game/community/evensong.jpg" width="56" height="56" alt="Evensong (@kevin_t_ngo)" /></a>
+  <a href="https://x.com/mattshumer_/status/2119877065701036047" title="Mirror Earth by @mattshumer_"><img src="studio/src/motion/game/community/mirror-earth.jpg" width="56" height="56" alt="Mirror Earth (@mattshumer_)" /></a>
+  <a href="https://x.com/photonstorm/status/2120330010112434313" title="Tennis (Go Wild) by @photonstorm"><img src="studio/src/motion/game/community/tennis-go-wild.jpg" width="56" height="56" alt="Tennis (Go Wild) (@photonstorm)" /></a>
+  <a href="https://x.com/op7418/status/2120694045299327187" title="Mist-Locked Mountain Gate by @op7418"><img src="studio/src/motion/game/community/mist-locked-mountain-gate.jpg" width="56" height="56" alt="Mist-Locked Mountain Gate (@op7418)" /></a>
+  <a href="https://x.com/__morse/status/2122013410309153042" title="omw: Castle Valley by @__morse"><img src="studio/src/motion/game/community/omw-castle-valley.jpg" width="56" height="56" alt="omw: Castle Valley (@__morse)" /></a>
+  <a href="https://x.com/loktar00/status/2120192761542615271" title="LANTERNFALL by @loktar00"><img src="studio/src/motion/game/community/lanternfall.jpg" width="56" height="56" alt="LANTERNFALL (@loktar00)" /></a>
+  <a href="https://x.com/Andrew_Blumson/status/2120599812512833557" title="MAAD MAXXING by @Andrew_Blumson"><img src="studio/src/motion/game/community/maad-maxxing.jpg" width="56" height="56" alt="MAAD MAXXING (@Andrew_Blumson)" /></a>
+  <a href="https://x.com/kevin_t_ngo/status/2119900487688622171" title="Gilt &amp; Gutter by @kevin_t_ngo"><img src="studio/src/motion/game/community/gilt-and-gutter.jpg" width="56" height="56" alt="Gilt &amp; Gutter (@kevin_t_ngo)" /></a>
+  <a href="https://x.com/xikhar/status/2122682962647122403" title="Papertrails by @xikhar"><img src="studio/src/motion/game/community/papertrails.jpg" width="56" height="56" alt="Papertrails (@xikhar)" /></a>
+  <a href="https://x.com/AravSrinivas/status/2122338465648103676" title="VICE '86 by @AravSrinivas"><img src="studio/src/motion/game/community/vice-86.jpg" width="56" height="56" alt="VICE '86 (@AravSrinivas)" /></a>
+  <a href="https://x.com/FuSheng_0306/status/2121237878097207583" title="Starfall by @FuSheng_0306"><img src="studio/src/motion/game/community/starfall-moba.jpg" width="56" height="56" alt="Starfall (@FuSheng_0306)" /></a>
+  <a href="https://x.com/aniketjart/status/2121793239175119279" title="Goku: Four-Star Road by @aniketjart"><img src="studio/src/motion/game/community/goku-four-star-road.jpg" width="56" height="56" alt="Goku: Four-Star Road (@aniketjart)" /></a>
+  <a href="https://x.com/noclipepe/status/2119728047754547326" title="Rug Racers by @noclipepe"><img src="studio/src/motion/game/community/rug-racers.jpg" width="56" height="56" alt="Rug Racers (@noclipepe)" /></a>
+  <a href="https://x.com/noclipepe/status/2119927838321328577" title="Dino Run: Locked In by @noclipepe"><img src="studio/src/motion/game/community/rambo-dino.jpg" width="56" height="56" alt="Dino Run: Locked In (@noclipepe)" /></a>
+  <a href="https://x.com/AravSrinivas/status/2122713692324384793" title="HADAL by @AravSrinivas"><img src="studio/src/motion/game/community/hadal.jpg" width="56" height="56" alt="HADAL (@AravSrinivas)" /></a>
+  <a href="https://x.com/emollick/status/2119876449494540554" title="I Would Have Gotten Away With It by @emollick"><img src="studio/src/motion/game/community/i-would-have-gotten-away.jpg" width="56" height="56" alt="I Would Have Gotten Away With It (@emollick)" /></a>
+  <a href="https://x.com/petergyang/status/2119901658394358005" title="Turbo Tails by @petergyang"><img src="studio/src/motion/game/community/turbo-tails.jpg" width="56" height="56" alt="Turbo Tails (@petergyang)" /></a>
+</p>
+
+> **Not:** Topluluk oyunları doğrudan geliştiricilerinin orijinal sayfalarına bağlanır ve ilgili yazarlarının münhasır mülkiyetinde kalır — hiçbir üçüncü taraf kaynak kodu kopyalanmaz. Bir geliştiriciyseniz ve çalışmanızın güncellenmesini, farklı şekilde atıf yapılmasını veya kaldırılmasını istiyorsanız lütfen [bir issue açın](https://github.com/nexu-io/opengame/issues); konuyu hızla ele alacağız.
 
 ## Katkıda Bulunanlar
 

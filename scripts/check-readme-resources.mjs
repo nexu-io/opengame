@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const resourceDocuments = [
-  'README.md', 'README.zh-CN.md', 'README.ja.md', 'README.REVERSE-ENGINEERING.md', 'docs/README.zh-CN.md', 'docs/README.ja.md',
+  'README.md', 'README.zh-CN.md', 'README.ja.md', 'README.tr.md', 'README.REVERSE-ENGINEERING.md', 'docs/README.zh-CN.md', 'docs/README.ja.md',
   'docs/opengame-setup.md', 'docs/opengame-architecture.md', 'docs/readme/opengame/ASSETS.md',
   'docs/examples.md', 'docs/examples.zh-CN.md',
   'docs/motion-design-examples.md', 'docs/motion-design-examples.zh-CN.md',
