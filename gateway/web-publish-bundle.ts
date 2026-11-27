@@ -12,7 +12,6 @@ const MAX_RAW_COLLECT_BYTES = 200 * 1024 * 1024;
 const WEBP_COMPRESS_MIN_BYTES = 256 * 1024;
 
 async function maybeCompressRasterForPublish(
-  sourcePath: string,
   originalBytes: Buffer,
   ext: string,
   mimeType?: string,
@@ -22,7 +21,7 @@ async function maybeCompressRasterForPublish(
   if (originalBytes.length < WEBP_COMPRESS_MIN_BYTES || (!isPng && !isJpeg)) {
     return { data: originalBytes, ext, optimized: false };
   }
-  const compressed = await transcodeRasterToWebp(sourcePath, originalBytes, isPng ? 'image/png' : 'image/jpeg', {
+  const compressed = await transcodeRasterToWebp(originalBytes, originalBytes, isPng ? 'image/png' : 'image/jpeg', {
     losslessPng: isPng,
     quality: 82,
   });
@@ -219,19 +218,24 @@ export async function buildPublishBundle(input: {
   let optimizedRasterCount = 0;
   const maxBytes = input.maxBytes ?? MAX_PUBLISH_BYTES;
 
-  const resolveBundledAssetPath = async (assetId: string, versionId: string): Promise<string | null> => {
+  const resolveBundledAssetPath = async (assetId: string, versionId: string): Promise<string> => {
     const key = `${assetId}/${versionId}`;
     const existing = bundledAssets.get(key);
     if (existing) return existing.file;
 
     let resolved;
+    let rawBytes: Buffer;
     try {
-      resolved = await getAssetLibrary().resolve({ assetId, versionId });
-    } catch {
-      return null;
+      // Existing references remain readable after Trash, like the local media
+      // route. Publishing does not create a new reference or restore the asset.
+      resolved = await getAssetLibrary().resolve({ assetId, versionId }, true);
+      rawBytes = await readFile(resolved.filename);
+    } catch (cause) {
+      throw new Error(`ASSET_VERSION_UNAVAILABLE: Cannot bundle pinned asset ${key}`, { cause });
     }
-    const rawBytes = await readFile(resolved.filename).catch(() => null);
-    if (!rawBytes) return null;
+    if (rawBytes.length !== resolved.version.bytes || createHash('sha256').update(rawBytes).digest('hex') !== resolved.version.sha256) {
+      throw new Error(`ASSET_CONTENT_CHANGED: Bytes no longer match pinned asset ${key}`);
+    }
     originalBytes += rawBytes.length;
 
     const rawExt = path.extname(resolved.version.filename || '') || MIME_EXTENSIONS[resolved.version.mimeType || ''] || '';
@@ -245,7 +249,6 @@ export async function buildPublishBundle(input: {
       if (optimized.optimized) optimizedGlbCount++;
     } else {
       const optimized = await maybeCompressRasterForPublish(
-        resolved.filename,
         rawBytes,
         safeRawExt,
         resolved.version.mimeType,
@@ -298,9 +301,7 @@ export async function buildPublishBundle(input: {
         const full = match[0];
         if (replacements.has(full)) continue;
         const bundledPath = await resolveBundledAssetPath(match[1], match[2]);
-        if (bundledPath) {
-          replacements.set(full, relativePosixPath(runtimeBasePath, bundledPath));
-        }
+        replacements.set(full, relativePosixPath(runtimeBasePath, bundledPath));
       }
       if (replacements.size > 0) {
         text = text.replace(ASSET_MEDIA_REF, matched => replacements.get(matched) ?? matched);
