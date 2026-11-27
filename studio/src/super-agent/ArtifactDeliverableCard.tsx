@@ -12,7 +12,7 @@ import { designClient } from '../design/designClient';
 import { useI18n } from '../i18n/I18n';
 import { RemixIcon } from '../icons/RemixIcons';
 import { modelDisplayLabel } from '../motion/generationLabels';
-import { buildGamePublishOpenInput, resolvePublishableGameId } from './gamePublish/gamePublishEntry';
+import { buildGamePublishOpenInput, resolveGameCloudTarget, resolvePublishableGameId } from './gamePublish/gamePublishEntry';
 import { gamePublishActions, useGamePublishSession } from './gamePublish/gamePublishStore';
 
 export type DeliverableTone = 'agent' | 'coding' | 'image' | 'video' | 'audio';
@@ -128,15 +128,8 @@ export function artifactDeliverableMeta(artifact: SuperAgentArtifact): ArtifactD
 
 export function resolveArtifactCloudTarget(artifact: SuperAgentArtifact): ArtifactCloudTarget | null {
   if (artifact.kind === 'game-project') {
-    const targetId = artifact.projectId || (artifact.id.startsWith('game:') ? artifact.id.slice('game:'.length) : '');
-    if (!targetId) return null;
-    if (artifact.projectId) {
-      return { targetKind: 'game', targetId, filePath: artifact.entry };
-    }
-    if (artifact.url && /^https:\/\//i.test(artifact.url)) {
-      return { targetKind: 'game', targetId, embedUrl: artifact.url };
-    }
-    return null;
+    const gameTarget = resolveGameCloudTarget(artifact);
+    return gameTarget ? { targetKind: 'game', ...gameTarget } : null;
   }
   if (artifact.kind === 'design-project' && artifact.projectId) {
     return { targetKind: 'design', targetId: artifact.projectId, filePath: artifact.entry };

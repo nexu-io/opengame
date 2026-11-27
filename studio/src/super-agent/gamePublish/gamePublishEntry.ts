@@ -30,20 +30,28 @@ export function resolvePublishableGameId(
   return isTrialGameArtifact(artifact, catalogSource) ? undefined : artifact.projectId;
 }
 
+/** Shared OpenDesign Cloud target derivation for `game-project` artifacts (Share popover + Publish wizard). */
+export function resolveGameCloudTarget(
+  artifact: SuperAgentArtifact | null | undefined,
+): { targetId: string; filePath?: string; embedUrl?: string } | null {
+  if (artifact?.kind !== 'game-project') return null;
+  const targetId = artifact.projectId || (artifact.id.startsWith('game:') ? artifact.id.slice('game:'.length) : '');
+  if (!targetId) return null;
+  if (artifact.projectId) {
+    return { targetId, filePath: artifact.entry };
+  }
+  if (artifact.url && /^https:\/\//i.test(artifact.url)) {
+    return { targetId, embedUrl: artifact.url };
+  }
+  return null;
+}
+
 /** Shared OpenDesign Cloud share target used by both the Artifact Viewer and deliverable cards. */
 export function resolveGamePublishLink(
   artifact: SuperAgentArtifact,
 ): GamePublishLinkTarget | undefined {
-  if (artifact.kind !== 'game-project') return undefined;
-  const targetId = artifact.projectId || (artifact.id.startsWith('game:') ? artifact.id.slice('game:'.length) : '');
-  if (!targetId) return undefined;
-  if (artifact.projectId) {
-    return { targetId, filePath: artifact.entry, title: artifact.title };
-  }
-  if (artifact.url && /^https:\/\//i.test(artifact.url)) {
-    return { targetId, embedUrl: artifact.url, title: artifact.title };
-  }
-  return undefined;
+  const target = resolveGameCloudTarget(artifact);
+  return target ? { ...target, title: artifact.title } : undefined;
 }
 
 /** Builds the shared `gamePublishActions` open/toggle payload for a publishable game artifact. */

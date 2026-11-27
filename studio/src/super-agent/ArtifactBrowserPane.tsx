@@ -65,7 +65,7 @@ import {
 } from './BrowserAnnotationOverlay';
 import { fileAttachmentIcon, resourceIcon } from './ResourcePickerDialog';
 import { GamePublishPanel } from './gamePublish/GamePublishPanel';
-import { buildGamePublishOpenInput, isTrialGameArtifact, resolvePublishableGameId } from './gamePublish/gamePublishEntry';
+import { buildGamePublishOpenInput, isTrialGameArtifact, resolveGameCloudTarget, resolvePublishableGameId } from './gamePublish/gamePublishEntry';
 import { gamePublishActions, useGamePublishSession, type GamePublishChooseOptions } from './gamePublish/gamePublishStore';
 import {
   captureSuperAgentPreviewSnapshot,
@@ -2691,15 +2691,10 @@ export function ArtifactBrowserPane({
         <div className="om-sa-context-actions">
           {(() => {
             const hasModeSwitch = activeArtifact?.kind === 'design-project' || Boolean(activeGameProjectId && !isGameTrial);
-            const gamePublishId = activeArtifact?.kind === 'game-project'
-              ? (activeArtifact.projectId || (activeArtifact.id.startsWith('game:') ? activeArtifact.id.slice('game:'.length) : ''))
-              : '';
-            const gameEmbedUrl = activeArtifact?.kind === 'game-project' && !activeArtifact.projectId && activeArtifact.url && /^https:\/\//i.test(activeArtifact.url)
-              ? activeArtifact.url
-              : undefined;
+            const gameCloudTarget = resolveGameCloudTarget(activeArtifact);
             const canCloudShare = !showNewTab && (
               (Boolean(activeArtifact?.projectId) && (activeArtifact?.kind === 'design-project' || activeArtifact?.kind === 'motion-project'))
-              || (activeArtifact?.kind === 'game-project' && Boolean(gamePublishId) && (Boolean(activeArtifact.projectId) || Boolean(gameEmbedUrl)))
+              || Boolean(gameCloudTarget)
             );
             const activeDeviceIcon = activeArtifact?.kind === 'web'
               ? (webDevicePreset === 'mobile' ? 'smartphone-line' : webDevicePreset === 'tablet' ? 'tablet-line' : 'computer-line')
@@ -3021,9 +3016,9 @@ export function ArtifactBrowserPane({
                   <WebPublishPopover
                     compact
                     targetKind={activeArtifact.kind === 'game-project' ? 'game' : activeArtifact.kind === 'motion-project' ? 'motion' : 'design'}
-                    targetId={activeArtifact.kind === 'game-project' ? gamePublishId : activeArtifact.projectId!}
-                    embedUrl={gameEmbedUrl}
-                    filePath={activeArtifact.entry}
+                    targetId={activeArtifact.kind === 'game-project' ? gameCloudTarget!.targetId : activeArtifact.projectId!}
+                    embedUrl={gameCloudTarget?.embedUrl}
+                    filePath={activeArtifact.kind === 'game-project' ? gameCloudTarget?.filePath : activeArtifact.entry}
                     title={activeArtifact.title}
                     triggerClassName="om-sa-share-trigger"
                     autoOpen={pendingDeployArtifactId === activeArtifact.id}
