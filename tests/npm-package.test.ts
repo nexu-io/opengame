@@ -290,6 +290,7 @@ test('test npm artifacts contain their application, locked manifest and no bundl
     assert(entries.includes('shared/editor-launch.pl'), 'macOS shared editor launcher must ship');
     for (const script of ['vision-runtime.mjs', 'lint-project.mjs', 'recover-workspace-lock.ts', 'cleanup-harness-bundles.mjs', 'npm-installer.mjs', 'npm-hosts.mjs', 'workbuddy-config.mjs', 'check-installed-mcp.mjs', 'mcp-client.mjs', 'diagnostics.mjs', 'zip.mjs', 'diagnostic-redaction.mjs', 'install-onboarding.mjs', 'onboarding-catalog.ts', 'open-template-library.ts']) assert(entries.includes('scripts/' + script), 'Runtime diagnostic and lint entry must ship: ' + script);
     await readFile(path.join(installer, 'package/scripts/check-installed-mcp.mjs'));
+    await access(path.join(installer, 'package/scripts/workbuddy-config.mjs'));
     const diagnosticFile = path.join(directory, 'packaged-diagnostics.zip');
     await runFile(process.execPath, [cli, 'diagnostics', '--home', path.join(directory, 'not-installed'), '--output', diagnosticFile]);
     assert.match(await runFile('unzip', ['-p', diagnosticFile, 'metadata.json']), new RegExp(version.replaceAll('.', '\\.')));
