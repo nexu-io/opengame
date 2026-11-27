@@ -91,7 +91,7 @@ export const jobManageTool = {
   name: 'openmotion_job_manage',
   title: 'OpenMotion · Job Manage',
   description:
-    'Unified async job lifecycle manager across Workspace Assets and project media tasks. list returns recent jobs (optionally filtered by projectId or conversationId); status reads one jobId; cancel requests cancellation; retry_save saves retained local outputs (savePending=true) without another model call; resume rechecks an eligible interrupted Cloud task or account image download without another paid submission.',
+    'Unified async job lifecycle manager across Workspace Assets and project media tasks. list returns recent jobs (optionally filtered by projectId or conversationId); status reads one jobId; cancel requests cancellation; retry_save saves retained local outputs (savePending=true) without another model call; resume rechecks an eligible interrupted Cloud or OpenDesign account media task (image, video, audio) without another paid submission.',
   inputSchema: {
     ...object(
       {

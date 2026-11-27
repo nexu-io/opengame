@@ -94,7 +94,7 @@ test('Cloud image editing uploads every library reference and submits their asse
   await gateway.close();
 }));
 
-test('OpenDesign image guards: Seedream 5.5 takes one reference, GPT Image 2.6 forwards a transparent background, references stay within 2 MiB', () => fixture(async store => {
+test('OpenDesign image guards: Seedream 5.5 takes one reference, GPT Image 2.6 forwards a transparent background, references over 2 MiB upload cleanly while >30 MiB are rejected', () => fixture(async store => {
   const added = [
     { model: 'gpt-image-2.6-sunburst', kind: 'image', capabilities: { edits: true, max_input_images: 16, quality: { values: ['low', 'medium', 'high'], default: 'low' } } },
     // A catalogue that overstates the limit still meets the measured cap of one.
@@ -121,8 +121,25 @@ test('OpenDesign image guards: Seedream 5.5 takes one reference, GPT Image 2.6 f
     assert.equal(made.code, 0, made.stderr);
     assert.ok((await readFile(noisy)).length > 2 * 1024 * 1024);
     const large = await new AssetLibrary(store).importFile(noisy, { requestId: 'noisy', name: 'noisy.png' });
-    await assert.rejects(gateway.submit({ library: { references: [{ assetId: large.id, versionId: large.currentVersionId }] }, model: sunburst.id, modality: 'image', prompt: 'cut out', parameters: {} }), /larger than the 2 MiB OpenDesign upload limit/);
-    assert.equal(submits.length, 1);
+    const largeJob = await finish(store, (await gateway.submit({ library: { references: [{ assetId: large.id, versionId: large.currentVersionId }] }, model: sunburst.id, modality: 'image', prompt: 'cut out', parameters: {} })).id);
+    assert.equal(largeJob.state, 'completed', largeJob.error);
+    assert.equal(submits.length, 2);
+
+    // Source images exceeding 30 MiB are still rejected before queueing.
+    const { crc32 } = await import('node:zlib');
+    const basePng = await readFile(await image(store.directory, 'base-30.png', 'white'));
+    const textType = Buffer.from('tEXt'), textPayload = Buffer.alloc(30 * 1024 * 1024 + 64, 0x61);
+    const length = Buffer.alloc(4); length.writeUInt32BE(textPayload.length, 0);
+    const checksum = Buffer.alloc(4); checksum.writeUInt32BE(crc32(Buffer.concat([textType, textPayload])), 0);
+    const hugePng = Buffer.concat([basePng.subarray(0, basePng.length - 12), length, textType, textPayload, checksum, basePng.subarray(basePng.length - 12)]);
+    const hugePath = path.join(store.directory, 'over-30mib.png');
+    await writeFile(hugePath, hugePng);
+    const huge = await new AssetLibrary(store).importFile(hugePath, { requestId: 'over-30mib', name: 'over-30mib.png' });
+    await assert.rejects(
+      gateway.submit({ library: { references: [{ assetId: huge.id, versionId: huge.currentVersionId }] }, model: sunburst.id, modality: 'image', prompt: 'cut out', parameters: {} }),
+      /larger than the 30 MiB OpenDesign limit/,
+    );
+    assert.equal(submits.length, 2);
   } finally {
     catalogue.splice(catalogue.length - added.length, added.length);
     await gateway.close();

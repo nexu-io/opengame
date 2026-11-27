@@ -115,7 +115,7 @@ For a non-Codex test, keep the isolated application/data paths from the examples
 | Codex | Separate `CODEX_HOME` | `--host codex --skills-dir <isolated-skills-root>` |
 | Claude Code | Separate `CLAUDE_CONFIG_DIR` | `--host claude --skills-dir <isolated-skills-root>` |
 | DeepSeek Harness | Separate `DSH_HOME` and selected profile | `--host deepseek --profile <selected-profile>`; Skills live in this installation's managed bundle |
-| WorkBuddy | Separate `WORKBUDDY_CONFIG_DIR` | `--host workbuddy --skills-dir <isolated-skills-root>` |
+| WorkBuddy | `WORKBUDDY_CONFIG_DIR` takes precedence. Setup uses `~/.workbuddy-ai` when the desktop profile exists and `~/.workbuddy` otherwise. | `--host workbuddy --skills-dir <isolated-skills-root>` |
 
 Harness callers should pass the actual current profile from their host context, such as `DSH_PROFILE`, rather than assuming `web` or `desktop`. On macOS, setup already detects the standard Desktop CLI at `/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh`; it need not be on PATH. Keep that host-specific lookup in the Harness adapter. Other executable locations use `--dsh`; do not unpack the host or invent a wrapper for ordinary installation.
 

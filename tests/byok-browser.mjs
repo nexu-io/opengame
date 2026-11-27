@@ -34,7 +34,27 @@ try {
   };
   gateway.connections = new ProviderConnections(store, fetcher);
   const binary = fileURLToPath(new URL('./fixtures/account-cli.mjs', import.meta.url)); await chmod(binary, 0o755);
-  gateway.account = new OpenDesignAccount(data, { binary });
+  const accountFetcher = async (input, init = {}) => {
+    const url = String(input);
+    assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer synthetic-private-control-key');
+    if (url === 'https://amr-api.open-design.ai/api/v1/billing/summary') return Response.json({ membershipTier: 'pro', balanceUsd: '12.50' });
+    if (url === 'https://amr-api.open-design.ai/api/v1/workspaces') return Response.json({ items: [] });
+    if (url === 'https://amr-api.open-design.ai/api/v1/media/models?include_audio=true') {
+      return Response.json({
+        models: [
+          ...['image', 'video', 'audio'].map(kind => ({ model: `fixture-${kind}`, kind: kind === 'audio' ? 'audio_speech' : kind, enabled: true, capabilities: kind === 'image' ? { edits: true, max_input_images: 4 } : {} })),
+          { model: 'fixture-i2v', kind: 'video', enabled: true, capabilities: { max_input_images: 1, ratios: { values: ['16:9', 'adaptive'], default: '16:9' } } },
+          { model: 'fixture-image-basic', kind: 'image', capabilities: { edits: false, max_input_images: 0 } },
+          { model: 'fixture-music', kind: 'audio_music', capabilities: {} },
+          { model: 'elevenlabs-v3', kind: 'audio_speech', capabilities: {} },
+        ],
+      });
+    }
+    throw new Error(`unexpected account request: ${url}`);
+  };
+  gateway.account = new OpenDesignAccount(data, { binary, fetcher: accountFetcher });
+  await mkdir(gateway.account.home, { recursive: true });
+  await writeFile(path.join(gateway.account.home, 'fixture-api-url'), 'https://amr-api.open-design.ai');
   let directoryGate;
   running = await startServer(store, Number(process.env.PLAYWRIGHT_WEB_PORT || 0), { editor: true, privateHandler: async (req, res) => {
     if (directoryGate && req.method === 'GET' && req.url === '/motion-api/settings/providers') {

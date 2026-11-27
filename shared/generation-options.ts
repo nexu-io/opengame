@@ -301,7 +301,7 @@ function sortResolutions(values: string[]): string[] {
     .map(item => item.value);
 }
 
-// TODO(OPEND-5839): interim fallbacks until AMR publishes capabilities/schema audio state and vela-cli stops defaulting omitted --generate-audio to false.
+// TODO(OPEND-5839): interim fallbacks until AMR publishes capabilities/schema audio state for all video models.
 const seedance25Models = new Set(['doubao-seedance-2-5-260628', 'doubao-seedance-2-5-flash-261115']);
 const alwaysOnVideoAudioModels = new Set(['wan-2.7', 'magi-2']);
 

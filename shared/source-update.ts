@@ -1,3 +1,4 @@
+import { workbuddyConfigDirectory } from '../scripts/workbuddy-config.mjs';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { cp, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
@@ -675,7 +676,8 @@ export async function syncInstalledHostSkills(
     path.join(home, '.agents/skills'),
     path.join(env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), 'skills'),
     path.join(env.CODEX_HOME || path.join(home, '.codex'), 'skills'),
-    path.join(env.WORKBUDDY_CONFIG_DIR || path.join(home, '.workbuddy'), 'skills'),
+    path.join(workbuddyConfigDirectory(home, env), 'skills'),
+    ...(!env.WORKBUDDY_CONFIG_DIR?.trim() ? [path.join(home, '.workbuddy', 'skills')] : []),
     path.join(home, '.cursor/skills'),
   ])];
 

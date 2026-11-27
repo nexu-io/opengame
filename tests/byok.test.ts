@@ -1,5 +1,6 @@
 // Keep Cloud contract cases in the maintained BYOK entry for both CI and npm test.
 import './cloud-native-media.cases.ts';
+import './reference-upload.cases.ts';
 import test from 'node:test';
 import { mediaBytes } from './media-fixtures.ts';
 import assert from 'node:assert/strict';

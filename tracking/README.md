@@ -354,8 +354,12 @@ Beyond Codex, `shared/host-session-tracking.ts` (Claude Code and WorkBuddy) and 
 | --- | --- | --- | --- | --- |
 | `external_mcp` | `codex_sqlite` | `codex` | `codex:<sha256>` | MCP `_meta.threadId` / `x-codex-turn-metadata` → read-only `~/.codex/{state_5,thread_history_1}.sqlite` |
 | `external_mcp` | `claude_jsonl` | `claude` | `claude:<sha256>` | MCP `_meta.sessionId` or `CLAUDE_CODE_SESSION_ID` → read-only `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/<slug>/<sessionId>.jsonl` (aggregated per user turn; streaming `message.id` usage deduplicated) |
-| `external_mcp` | `workbuddy_jsonl` | `workbuddy` | `workbuddy:<sha256>` | MCP `_meta.sessionId` / `conversationId`, `WORKBUDDY_SESSION_ID` / `CODEBUDDY_SESSION_ID`, or exact 32-hex W3C `_meta.traceparent` matched against recent `workbuddy.db` sessions → read-only `${WORKBUDDY_CONFIG_DIR:-~/.workbuddy}/projects/<slug>/<sessionId>.jsonl` |
+| `external_mcp` | `workbuddy_jsonl` | `workbuddy` | `workbuddy:<sha256>` | MCP `_meta.sessionId` / `conversationId`, `WORKBUDDY_SESSION_ID` / `CODEBUDDY_SESSION_ID`, or exact 32-hex W3C `_meta.traceparent` matched against recent `workbuddy.db` sessions → read-only `projects/<slug>/<sessionId>.jsonl` in the selected WorkBuddy profile |
 | `studio_super_agent` | `super_agent_runtime` | Normalized engine id (`codex`, `claude`, `deepseek`, `antigravity`, `opencode`, `pi`, ...) | `super-agent:<sha256>` | In-memory turn completion in `gateway/super-agent.ts` (`super_agent_engine`, `super_agent_runtime_kind`, `super_agent_intent`, `$ai_input_tokens`, `$ai_output_tokens`) |
+
+WorkBuddy reads both `workbuddy.db` and `projects/` from the profile specified by
+`WORKBUDDY_CONFIG_DIR`. With no override, it uses `~/.workbuddy-ai` when that
+desktop profile directory exists, and falls back to `~/.workbuddy` otherwise.
 
 Every surface reports one `$ai_generation` event per completed user turn (never per raw streaming chunk or intermediate tool step), strips source file contents/diffs and terminal stdout, never sends raw session/thread IDs, and immediately aborts in-flight batches and removes `active-host-sessions.json` on opt-out.
 

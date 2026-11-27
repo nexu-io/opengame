@@ -13,6 +13,7 @@ import { fixture } from './fixtures.ts';
 import { gatewayFor, ModelGateway } from '../gateway/service.ts';
 import { ProviderConnections, connectionBaseUrl } from '../gateway/connections.ts';
 import { AccountRequestError, OpenDesignAccount, systemBrowserCommand, type SignInRecord } from '../gateway/account.ts';
+import { productionApi } from '../gateway/opendesign.ts';
 import { accountDirectory, sharedAccountDirectory } from '../gateway/account-directory.ts';
 import { ConnectorUnavailable, findNpmCli, installConnector, manualInstallCommand, npmCliCandidates } from '../gateway/account-connector.ts';
 import { createTracker, validProperties } from '../tracking/core.ts';
@@ -32,25 +33,149 @@ import { callTool } from '../mcp.ts';
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=', 'base64');
 const binary = fileURLToPath(new URL('./fixtures/account-cli.mjs', import.meta.url));
-function imageTransport(directory: string) {
+type AccountMediaSubmission = {
+  endpoint: string;
+  body: Record<string, any>;
+  headers: { sourceProduct: string | null; jobId: string | null; idempotencyKey: string | null };
+  taskId: string;
+};
+function mediaTransport(directory: string) {
   const home = path.join(directory, 'account', 'credentials');
+  const submissions: AccountMediaSubmission[] = [];
+  const uploads: Array<{ assetId: string; mimeType: string; sizeBytes: number; bytes?: Buffer }> = [];
+  const tasks = new Map<string, { kind: 'image' | 'video' | 'audio'; model: string }>();
+  const readMode = () => readFile(path.join(home, 'fixture-mode'), 'utf8').catch(() => '');
+  const billingResponse = (scenario: string) => {
+    if (scenario === 'billing-failure') return new Response('private upstream data', { status: 500 });
+    if (scenario === 'billing-403') return Response.json({ error: 'workspace_billing_scope_locked' }, { status: 403 });
+    if (scenario === 'billing-401') return Response.json({ error: 'invalid_api_key' }, { status: 401 });
+    if (scenario === 'billing-502') return new Response('', { status: 502 });
+    if (scenario === 'billing-403-text') return Response.json({ error: 'rate-limited by edge' }, { status: 403 });
+    const summaries: Record<string, Record<string, unknown>> = {
+      'billing-free': { membershipTier: null, balanceUsd: '0.00' },
+      'billing-go': { membershipTier: ' Go ', balanceUsd: '0.00' },
+      'billing-plus': { membershipTier: 'PLUS', balanceUsd: '0.00' },
+      'billing-topup': { membershipTier: 'free', balanceUsd: '1.2345' },
+      'billing-malformed': { membershipTier: 'free', balanceUsd: 'invalid' },
+      'billing-missing': { membershipTier: 'go', balanceUsd: '' },
+    };
+    return Response.json(summaries[scenario] ?? { membershipTier: 'pro', balanceUsd: '12.50' });
+  };
   return {
-    fetcher: (async (input: any, init: any) => {
-      assert.match(String(input), /^https:\/\/amr-api.open-design.ai\/api\/v1\/media\/images\/tasks\/fixture-task-\d+$/);
-      assert.equal(init.headers.Authorization, 'Bearer synthetic-private-control-key');
-      const taskId = String(input).split('/').at(-1)!;
-      const calls = JSON.parse(await readFile(path.join(home, 'submissions.json'), 'utf8')) as string[][];
-      const args = calls[Number(taskId.split('-').at(-1)) - 1];
-      return Response.json({ task_id: taskId, status: 'succeeded', model: args[args.indexOf('--model') + 1],
-        assets: [{ asset_id: 'fixture-asset', status: 'ready', mime_type: 'image/png', size_bytes: png.length, url: 'https://media.example/image' }] });
+    submissions,
+    uploads,
+    fetcher: (async (input: any, init: any = {}) => {
+      const url = String(input);
+      const method = (init.method ?? 'GET').toUpperCase();
+      const headers = new Headers(init.headers);
+      if (url.startsWith('https://storage.example/')) {
+        assert.equal(method, 'PUT');
+        assert.equal(headers.get('Authorization'), null, 'presigned storage PUT must not receive credentials');
+        const index = Number(url.split('/').at(-1)) - 1;
+        uploads[index].bytes = Buffer.from(init.body);
+        return new Response(null, { status: 200 });
+      }
+      assert.equal(headers.get('Authorization'), 'Bearer synthetic-private-control-key');
+      if (method === 'GET' && url === `${productionApi}/api/v1/billing/summary`) {
+        return billingResponse(await readMode());
+      }
+      if (method === 'GET' && url === `${productionApi}/api/v1/workspaces`) {
+        return Response.json({ items: [] });
+      }
+      assert.ok(url.startsWith(`${productionApi}/api/v1/media/`), `unexpected URL: ${url}`);
+      const apiPath = url.slice(`${productionApi}/api/v1/media`.length);
+      if (method === 'GET' && apiPath === '/models?include_audio=true') {
+        return Response.json({
+          models: [
+            ...['image', 'video', 'audio'].map(kind => ({ model: `fixture-${kind}`, kind: kind === 'audio' ? 'audio_speech' : kind, enabled: true, capabilities: kind === 'image' ? { edits: true, max_input_images: 4 } : {} })),
+            { model: 'fixture-i2v', kind: 'video', enabled: true, capabilities: { max_input_images: 1, ratios: { values: ['16:9', 'adaptive'], default: '16:9' } } },
+            { model: 'fixture-image-basic', kind: 'image', capabilities: { edits: false, max_input_images: 0 } },
+            { model: 'fixture-music', kind: 'audio_music', capabilities: {} },
+            { model: 'elevenlabs-v3', kind: 'audio_speech', capabilities: {} },
+          ],
+        });
+      }
+      if (method === 'POST' && apiPath === '/uploads') {
+        const body = JSON.parse(String(init.body));
+        const assetId = `upload-${uploads.length + 1}`;
+        uploads.push({ assetId, mimeType: body.mime_type, sizeBytes: body.size_bytes });
+        return Response.json({ asset_id: assetId, upload_url: `https://storage.example/${uploads.length}` });
+      }
+      if (method === 'POST' && /^\/uploads\/upload-\d+\/commit$/.test(apiPath)) {
+        return Response.json({ status: 'ready' });
+      }
+      if (method === 'POST' && ['/images/generations', '/images/edits', '/videos/tasks', '/audio/speech', '/audio/music', '/audio/sound-effects'].includes(apiPath)) {
+        const scenario = await readMode();
+        if (scenario === 'media-invalid') return Response.json({ error: { code: 'invalid_request', message: 'private detail for fixture-user-id' } }, { status: 400 });
+        if (scenario === 'media-plan') return Response.json({ error: { code: 'model_access_denied', message: 'private detail for fixture-user-id' } }, { status: 403 });
+        if (scenario === 'media-401') return Response.json({ error: 'unauthorized' }, { status: 401 });
+        if (scenario === 'media-unknown-code') return Response.json({ error: { code: 'new_service_code', message: 'private detail' } }, { status: 409 });
+        if (scenario === 'media-empty-code') return new Response('private upstream HTML for fixture-user-id', { status: 502 });
+        const body = JSON.parse(String(init.body));
+        const taskId = `fixture-task-${submissions.length + 1}`;
+        const kind = apiPath.startsWith('/images/') ? 'image' : apiPath.startsWith('/videos/') ? 'video' : 'audio';
+        submissions.push({
+          endpoint: apiPath,
+          body,
+          headers: {
+            sourceProduct: headers.get('X-Source-Product'),
+            jobId: headers.get('X-OpenMotion-Job-Id'),
+            idempotencyKey: headers.get('Idempotency-Key'),
+          },
+          taskId,
+        });
+        tasks.set(taskId, { kind, model: body.model });
+        return Response.json({ task_id: taskId, status: 'queued' }, { status: 202 });
+      }
+      const taskMatch = /^\/(images|videos|audio)\/tasks\/(fixture-task-\d+)(\/content)?$/.exec(apiPath);
+      if (method === 'GET' && taskMatch) {
+        const [, plural, taskId, content] = taskMatch;
+        const scenario = await readMode();
+        if (scenario === 'media-get-502') return Response.json({ error: { code: 'provider_error', message: 'private detail for fixture-user-id' } }, { status: 502 });
+        if (scenario === 'media-get-401') return Response.json({ error: 'unauthorized' }, { status: 401 });
+        const task = tasks.get(taskId);
+        assert.ok(task, `unknown task ${taskId}`);
+        if (plural === 'videos' && content === '/content') {
+          return new Response(null, { status: 302, headers: { location: `https://media.example/video/${taskId}` } });
+        }
+        if (plural === 'images') {
+          return Response.json({
+            task_id: taskId, status: 'succeeded', model: task.model,
+            assets: [{ asset_id: 'fixture-asset', status: 'ready', mime_type: 'image/png', size_bytes: png.length, url: 'https://media.example/image' }],
+          });
+        }
+        if (plural === 'audio') {
+          const audioBytes = await mediaBytes('audio');
+          return Response.json({
+            task_id: taskId, status: 'succeeded', model: task.model,
+            assets: [{ asset_id: 'fixture-audio-asset', status: 'ready', mime_type: 'audio/mpeg', size_bytes: audioBytes.length, url: 'https://media.example/audio' }],
+          });
+        }
+        return Response.json({ task_id: taskId, status: 'succeeded', model: task.model });
+      }
+      throw new Error(`unexpected media request: ${method} ${url}`);
     }) as Fetcher,
-    download: async () => new Response(png, { headers: { etag: '"fixture"', 'content-length': String(png.length) } }),
+    download: async (url: string) => {
+      if (url.includes('/video/')) {
+        const bytes = await mediaBytes('video');
+        return new Response(bytes, { headers: { etag: '"fixture-video"', 'content-type': 'video/mp4', 'content-length': String(bytes.length) } });
+      }
+      if (url.includes('/audio')) {
+        const bytes = await mediaBytes('audio');
+        return new Response(bytes, { headers: { etag: '"fixture-audio"', 'content-type': 'audio/mpeg', 'content-length': String(bytes.length) } });
+      }
+      return new Response(png, { headers: { etag: '"fixture"', 'content-length': String(png.length) } });
+    },
   };
 }
 
 async function until(check: () => Promise<boolean>) { for (let n = 0; n < 500; n++) { if (await check()) return; await delay(20); } throw new Error('Fixture timed out'); }
 async function finish(store: any, id: string) { const g = gatewayFor(store); await g.tick(); await Promise.all([...g.active.values()].map(task => task.done)); return g.getJob(id); }
-async function signIn(account: OpenDesignAccount) {
+async function signIn(account: OpenDesignAccount, apiUrl?: string) {
+  if (apiUrl !== undefined) {
+    await mkdir(account.home, { recursive: true });
+    await writeFile(path.join(account.home, 'fixture-api-url'), apiUrl);
+  }
   await account.login(); await until(async () => Boolean((await account.summary()).authorizationUrl));
   await writeFile(path.join(account.home, 'authorize'), 'yes');
   await until(async () => (await account.summary()).state === 'signed-in');
@@ -224,12 +349,11 @@ test('unsafe custom endpoints and failed catalogue sync cannot leak keys or eras
 test('account device authorization, billing, remote models and all media outputs use the same isolated session', t => fixture(async store => {
   await chmod(binary, 0o755);
   const gateway = gatewayFor(store); gateway.options.detect = async () => [];
-  const account = gateway.account = new OpenDesignAccount(store.directory, { binary, pollMs: 1, ...imageTransport(store.directory) });
+  const media = mediaTransport(store.directory);
+  const account = gateway.account = new OpenDesignAccount(store.directory, { binary, pollMs: 1, fetcher: media.fetcher, download: media.download });
   t.after(() => gateway.close());
-  await mkdir(account.home, { recursive: true });
-  await Promise.all((['video', 'audio'] as const).map(async kind => writeFile(path.join(account.home, `fixture-${kind}`), await mediaBytes(kind))));
   assert.equal((await account.summary()).state, 'signed-out');
-  await signIn(account);
+  await signIn(account, productionApi);
   const summary = await account.summary(true);
   assert.equal(summary.plan, 'pro'); assert.equal(summary.balance, '12.50'); assert.doesNotMatch(JSON.stringify(summary), /synthetic-private/);
   assert.equal(summary.errorCode, undefined); assert.equal(summary.attempt?.receipt, 'accepted'); assert.equal(summary.attempt?.exitCode, 0);
@@ -244,46 +368,46 @@ test('account device authorization, billing, remote models and all media outputs
     const queued = await mediaUse(store, args); const completed = await finish(store, queued.job.id);
     assert.equal(completed.state, 'completed', completed.error); assert.match(completed.remoteId!, /fixture-task-/);
     assert.equal((await mediaUse(store, args)).job.id, queued.job.id);
-    const recorded = JSON.parse(await readFile(path.join(account.home, 'last-generation-source.json'), 'utf8'));
-    assert.deepEqual(recorded, { product: 'openmotion', jobId: queued.job.id });
+    const recorded = media.submissions.at(-1)!;
+    assert.deepEqual(recorded.headers, { sourceProduct: 'openmotion', jobId: queued.job.id, idempotencyKey: queued.job.id });
   }
-  assert.equal(JSON.parse(await readFile(path.join(account.home, 'submissions.json'), 'utf8')).length, 3);
+  assert.equal(media.submissions.length, 3);
+  await assert.rejects(access(path.join(account.home, 'submissions.json')), 'account media must bypass the CLI connector');
   await writeFile(path.join(account.home, 'fixture-mode'), 'billing-failure');
   assert.equal((await account.summary(true)).billingUnavailable, true);
   const queued = await gateway.submit({ model: 'account:fixture-image', modality: 'image', prompt: 'pending' });
   await account.logout(); assert.equal((await account.summary()).state, 'signed-out');
   assert.equal((await account.models()).length, 0);
   assert.equal((await finish(store, queued.id)).state, 'failed');
-  assert.equal(JSON.parse(await readFile(path.join(account.home, 'submissions.json'), 'utf8')).length, 3);
+  assert.equal(media.submissions.length, 3);
   await gateway.close();
 }));
 
-test('account music, default-voice speech and one-image editing run the matching connector commands', t => fixture(async store => {
+test('account music, default-voice speech and one-image editing submit directly via the OpenDesign media HTTP API', t => fixture(async store => {
   await chmod(binary, 0o755);
   const gateway = gatewayFor(store); gateway.options.detect = async () => [];
-  const account = gateway.account = new OpenDesignAccount(store.directory, { binary, pollMs: 1, ...imageTransport(store.directory) });
+  const media = mediaTransport(store.directory);
+  const account = gateway.account = new OpenDesignAccount(store.directory, { binary, pollMs: 1, fetcher: media.fetcher, download: media.download });
   t.after(() => gateway.close());
-  await signIn(account); await account.models(true);
-  await writeFile(path.join(account.home, 'fixture-audio'), await mediaBytes('audio'));
+  await signIn(account, productionApi); await account.models(true);
   const models = (await providerDirectory(gateway)).models;
   const api = new Phase1Service(store, pluginRoot, { origin: () => 'http://localhost:4173', nativeUrl: () => undefined,
     openProject: async () => {}, mutation: async task => task(), cancel: async () => {} });
   assert.equal(models.find(m => m.modelId === 'fixture-image')?.supportsImageReference, true);
   assert.equal(models.find(m => m.modelId === 'fixture-image-basic')?.supportsImageReference, undefined);
-  const submissions = async () => JSON.parse(await readFile(path.join(account.home, 'submissions.json'), 'utf8')) as string[][];
 
   const music = { action: 'generate', provider: 'account', model: 'fixture-music', projectId: store.projectId, modality: 'audio', mode: 'text-to-audio', prompt: 'calm piano', parameters: { duration: 12 }, requestId: 'account-music' };
   const queuedMusic = await mediaUse(store, music);
   assert.equal((await finish(store, queuedMusic.job.id)).state, 'completed');
-  assert.deepEqual((await submissions()).at(-1)?.slice(0, 2), ['audio', 'music']);
-  assert.deepEqual((await submissions()).at(-1)?.slice(-4), ['--no-wait', '--json', '--duration', '12']);
+  assert.equal(media.submissions.at(-1)?.endpoint, '/audio/music');
+  assert.deepEqual(media.submissions.at(-1)?.body, { model: 'fixture-music', parameters: { music_length_ms: 12000, prompt: 'calm piano' } });
   await assert.rejects(mediaUse(store, { ...music, parameters: { duration: 1.5 }, requestId: 'account-music-fraction' }), /Invalid Duration/);
-  // A speech-only parameter fails the music job locally, before any connector submission.
+  // A speech-only parameter fails the music job locally, before any HTTP submission.
   const voiced = await mediaUse(store, { ...music, parameters: { voice: 'narrator' }, requestId: 'account-music-voice' });
   assert.equal((await finish(store, voiced.job.id)).state, 'failed');
-  // A caller mode cannot switch an account model to another connector command.
+  // A caller mode cannot switch an account model to another operation.
   await assert.rejects(mediaUse(store, { ...music, mode: 'text-to-speech', parameters: { voice: 'narrator' }, requestId: 'account-music-as-speech' }), /does not match the selected account model/);
-  assert.equal((await submissions()).length, 1);
+  assert.equal(media.submissions.length, 1);
 
   await writeFile(path.join(store.projectDirectoryFor(store.projectId), 'cup.png'), png);
   const editInputProject = { action: 'generate', provider: 'account', model: 'fixture-image', projectId: store.projectId, modality: 'image', prompt: 'make it blue', referenceAsset: 'cup.png', requestId: 'account-project-edit' };
@@ -295,12 +419,13 @@ test('account music, default-voice speech and one-image editing run the matching
   assert.equal((await api.call('openmotion_media_use', editInputProject)).job.id, edit.id);
   const edited = await finish(store, edit.id);
   assert.equal(edited.state, 'completed', edited.error); assert.equal(edited.reference?.path, 'cup.png');
-  const call = (await submissions()).at(-1)!;
-  assert.deepEqual(call.slice(0, 2), ['image', 'edit']);
-  assert.match(call[call.indexOf('--image') + 1], /reference\.png$/);
-  assert.equal((await submissions()).length, 2);
+  const call = media.submissions.at(-1)!;
+  assert.equal(call.endpoint, '/images/edits');
+  assert.deepEqual(call.body, { model: 'fixture-image', prompt: 'make it blue', images: ['upload-1'] });
+  assert.deepEqual(media.uploads[0].bytes, png);
+  assert.equal(media.submissions.length, 2);
 
-  // The public asset tool edits a pinned library version through the same connector command.
+  // The public asset tool edits a pinned library version through the same HTTP endpoint.
   const source = path.join(store.directory, 'cup-source.png'); await writeFile(source, png);
   const cup = await new AssetLibrary(store).importFile(source, { requestId: 'account-cup', name: 'Cup' });
   const reference = { assetId: cup.id, versionId: cup.currentVersionId };
@@ -312,27 +437,29 @@ test('account music, default-voice speech and one-image editing run the matching
   assert.equal(status.job.state, 'completed', status.job.error);
   const versions = (await new AssetLibrary(store).get(cup.id)).versions;
   assert.equal(versions.length, 2); assert.deepEqual(versions[1].references, [reference]);
-  const libraryCall = (await submissions()).at(-1)!;
-  assert.deepEqual(libraryCall.slice(0, 2), ['image', 'edit']);
-  assert.match(libraryCall[libraryCall.indexOf('--image') + 1], /reference\.png$/);
-  assert.equal((await submissions()).length, 3, 'The replay submits no additional paid operation');
+  const libraryCall = media.submissions.at(-1)!;
+  assert.equal(libraryCall.endpoint, '/images/edits');
+  assert.deepEqual(libraryCall.body, { model: 'fixture-image', prompt: 'make it blue', images: ['upload-2'] });
+  assert.equal(media.submissions.length, 3, 'The replay submits no additional paid operation');
 
   // A checked account speech model falls back to its first voice when the caller names none.
   const speech = await mediaUse(store, { ...music, model: 'elevenlabs-v3', mode: 'text-to-speech', prompt: 'Welcome', parameters: {}, requestId: 'account-default-voice' });
   assert.equal((await finish(store, speech.job.id)).state, 'completed');
-  assert.deepEqual((await submissions()).at(-1)?.slice(-2), ['--voice', '21m00Tcm4TlvDq8ikWAM']);
+  assert.equal(media.submissions.at(-1)?.endpoint, '/audio/speech');
+  assert.deepEqual(media.submissions.at(-1)?.body, { model: 'elevenlabs-v3', voice: '21m00Tcm4TlvDq8ikWAM', parameters: { text: 'Welcome' } });
+  await assert.rejects(access(path.join(account.home, 'submissions.json')), 'account media must never invoke CLI media commands');
 }));
 
 test('signed-in accounts expose built-in audio fallbacks when omitted by the remote catalogue without overriding live entries', t => fixture(async store => {
   await chmod(binary, 0o755);
   const gateway = gatewayFor(store); gateway.options.detect = async () => [];
-  const account = gateway.account = new OpenDesignAccount(store.directory, { binary, pollMs: 1, ...imageTransport(store.directory) });
+  const media = mediaTransport(store.directory);
+  const account = gateway.account = new OpenDesignAccount(store.directory, { binary, pollMs: 1, fetcher: media.fetcher, download: media.download });
   t.after(() => gateway.close());
   assert.deepEqual(await account.models(), []);
   assert.deepEqual((await gateway.listModels({ provider: 'account', modality: 'audio' })).models, []);
 
-  await signIn(account); await account.models(true);
-  await writeFile(path.join(account.home, 'fixture-audio'), await mediaBytes('audio'));
+  await signIn(account, productionApi); await account.models(true);
   const directory = await providerDirectory(gateway);
   // Fixture returns elevenlabs-v3 live, while omitting byteplus-tts-2 and elevenlabs-music-v2.
   assert.equal(directory.models.find(m => m.id === 'account:elevenlabs-v3')?.source, 'live');
@@ -349,15 +476,19 @@ test('signed-in accounts expose built-in audio fallbacks when omitted by the rem
 
   const queuedMusic = await mediaUse(store, { action: 'generate', provider: 'account', model: 'elevenlabs-music-v2', projectId: store.projectId, modality: 'audio', mode: 'text-to-audio', prompt: 'soft piano', parameters: { duration: 15 }, requestId: 'account-builtin-music' });
   assert.equal((await finish(store, queuedMusic.job.id)).state, 'completed');
-  const submissions = JSON.parse(await readFile(path.join(account.home, 'submissions.json'), 'utf8')) as string[][];
-  assert.deepEqual(submissions.at(-1)?.slice(0, 4), ['audio', 'music', '--model', 'elevenlabs-music-v2']);
-  assert.deepEqual(submissions.at(-1)?.slice(-2), ['--duration', '15']);
+  assert.equal(media.submissions.at(-1)?.endpoint, '/audio/music');
+  assert.deepEqual(media.submissions.at(-1)?.body, { model: 'elevenlabs-music-v2', parameters: { music_length_ms: 15000, prompt: 'soft piano' } });
 
   // A live catalogue entry with enabled=false must suppress the built-in fallback.
   const disabled = new OpenDesignAccount(store.directory, {
-    run: async args => args[0] === 'model'
-      ? JSON.stringify({ source: 'remote', data: [] })
-      : JSON.stringify({ models: [{ model: 'elevenlabs-music-v2', kind: 'audio_music', enabled: false }] }),
+    fetcher: (async (input: any) => {
+      assert.equal(String(input), `${productionApi}/api/v1/media/models?include_audio=true`);
+      return Response.json({ models: [{ model: 'elevenlabs-music-v2', kind: 'audio_music', enabled: false }] });
+    }) as Fetcher,
+    run: async args => {
+      assert.deepEqual(args, ['model', 'list', '--all', '--format', 'json']);
+      return JSON.stringify({ source: 'remote', data: [] });
+    },
   });
   t.after(() => disabled.close());
   const refreshed = await disabled.models(true);
@@ -370,12 +501,13 @@ test('signed-in accounts expose built-in audio fallbacks when omitted by the rem
   assert.deepEqual(await account.models(), []);
 }));
 
-test('account media failures report the service reason without connector output', t => fixture(async store => {
+test('account media failures report the service reason without leaking private upstream details', t => fixture(async store => {
   await chmod(binary, 0o755);
   const gateway = gatewayFor(store); gateway.options.detect = async () => [];
-  const account = gateway.account = new OpenDesignAccount(store.directory, { binary, pollMs: 1, ...imageTransport(store.directory) });
+  const media = mediaTransport(store.directory);
+  const account = gateway.account = new OpenDesignAccount(store.directory, { binary, pollMs: 1, fetcher: media.fetcher, download: media.download });
   t.after(() => gateway.close());
-  await signIn(account); await account.models(true);
+  await signIn(account, productionApi); await account.models(true);
   const cases: [string, RegExp][] = [
     ['media-invalid', /^OpenDesign rejected this request for the selected model\./],
     ['media-plan', /^Your OpenDesign plan does not include this model\./],
@@ -990,35 +1122,41 @@ test('an in-flight billing refresh cannot report an old account after sign-out',
 
 test('concurrent billing reads keep the latest plan and sync newly entitled account models', t => fixture(async store => {
   const gateway = gatewayFor(store); gateway.options.detect = async () => [];
-  const account = gateway.account = new OpenDesignAccount(store.directory, { binary }); t.after(() => gateway.close());
-  await signIn(account);
+  const media = mediaTransport(store.directory);
+  const account = gateway.account = new OpenDesignAccount(store.directory, { binary, fetcher: media.fetcher }); t.after(() => gateway.close());
+  await signIn(account, productionApi);
   await writeFile(path.join(account.home, 'fixture-mode'), 'billing-go');
   assert.equal((await account.summary(true)).plan?.trim().toLowerCase(), 'go');
   // Remember the last verified entitlement even when a temporary billing failure hides the plan.
   await writeFile(path.join(account.home, 'fixture-mode'), 'billing-403');
   assert.equal((await account.summary(true)).plan, undefined);
 
-  const staleGo = Promise.withResolvers<string>(), stale401 = Promise.withResolvers<string>();
-  const staleCatalog = Promise.withResolvers<string>();
+  const staleGo = Promise.withResolvers<Response>(), stale401 = Promise.withResolvers<Response>();
+  const staleCatalog = Promise.withResolvers<Response>();
   let billingReads = 0, catalogReads = 0;
   account.options.run = async args => {
-    if (args[0] === 'billing') {
+    assert.deepEqual(args, ['model', 'list', '--all', '--format', 'json']);
+    return JSON.stringify({ source: 'remote', data: [{ id: 'language-one' }] });
+  };
+  account.options.fetcher = (async (input: any) => {
+    const url = String(input);
+    if (url === `${productionApi}/api/v1/workspaces`) return Response.json({ items: [] });
+    if (url === `${productionApi}/api/v1/billing/summary`) {
       billingReads++;
       if (billingReads === 1) return staleGo.promise;
       if (billingReads === 2) return stale401.promise;
-      return JSON.stringify({ membershipTier: 'Plus', balanceUsd: '4.00' });
+      return Response.json({ membershipTier: 'Plus', balanceUsd: '4.00' });
     }
-    if (args[0] === 'model') return JSON.stringify({ source: 'remote', data: [{ id: 'language-one' }] });
-    assert.deepEqual(args, ['media', 'models', '--json']);
+    assert.equal(url, `${productionApi}/api/v1/media/models?include_audio=true`);
     if (++catalogReads === 1) return staleCatalog.promise;
-    return JSON.stringify({ models: [{ model: 'new-plus-image', kind: 'image' }] });
-  };
+    return Response.json({ models: [{ model: 'new-plus-image', kind: 'image' }] });
+  }) as Fetcher;
   const oldSync = account.models(true); await until(async () => catalogReads === 1);
   const slow = account.summary(true); await until(async () => billingReads === 1);
   const failed = account.summary(true); await until(async () => billingReads === 2);
   const updated = await gateway.status(false, { refreshAccount: true });
-  staleGo.resolve(JSON.stringify({ membershipTier: 'Go', balanceUsd: '0.00' }));
-  stale401.reject(new AccountRequestError('API request failed with status 401'));
+  staleGo.resolve(Response.json({ membershipTier: 'Go', balanceUsd: '0.00' }));
+  stale401.resolve(Response.json({ error: 'invalid_api_key' }, { status: 401 }));
   assert.equal(updated.providers.find(p => p.id === 'account')?.plan, 'plus');
   assert.deepEqual(updated.capabilities.find(capability => capability.modality === 'image')?.modelIds, ['account:new-plus-image']);
   for (const result of await Promise.all([slow, failed, account.summary(true)])) {
@@ -1027,7 +1165,7 @@ test('concurrent billing reads keep the latest plan and sync newly entitled acco
     assert.equal(result.balance, '4.00');
     assert.equal(result.billingUnavailable, false);
   }
-  staleCatalog.resolve(JSON.stringify({ models: [] }));
+  staleCatalog.resolve(Response.json({ models: [] }));
   await oldSync;
   assert.equal(catalogReads, 2, 'a stable entitled plan does not keep refreshing the catalogue');
   assert((await account.models()).some(model => model.id === 'account:new-plus-image'));
@@ -1087,14 +1225,22 @@ test('media setup discovery rechecks saved and removed keys without executing a 
 test('media inspection refreshes advisory billing without disabling account models or leaking balances', t => fixture(async store => {
   await chmod(binary, 0o755);
   const gateway = gatewayFor(store); gateway.options.detect = async () => [];
-  const fetcher = t.mock.fn(async () => Response.json({ intentId: 'must-not-be-exposed' }));
+  const media = mediaTransport(store.directory);
+  let intentCalls = 0;
+  const fetcher: Fetcher = async (input, init) => {
+    if (String(input).includes('/api/v1/auth/intents')) {
+      intentCalls++;
+      return Response.json({ intentId: 'must-not-be-exposed' });
+    }
+    return media.fetcher(input, init);
+  };
   const account = gateway.account = new OpenDesignAccount(store.directory, { binary, fetcher });
   t.after(() => gateway.close());
   const inspect = () => mediaUse(store, { action: 'inspect' });
   const signedOut = (await inspect()).providers.find(p => p.id === 'account')!;
   assert.equal(signedOut.available, false); assert.equal(Object.hasOwn(signedOut, 'mediaEntitlement'), false);
   assert.equal(signedOut.plan, undefined); assert.equal(signedOut.hasBalance, undefined);
-  await signIn(account);
+  await signIn(account, productionApi);
   for (const [mode, entitlement, plan, hasBalance] of [
     ['billing-free', 'not-included', 'free', false], ['billing-go', 'not-included', 'go', false],
     ['billing-plus', 'included', 'plus', undefined], ['', 'included', 'pro', undefined],
@@ -1145,7 +1291,7 @@ test('media inspection refreshes advisory billing without disabling account mode
   const rejected = expired.providers.find(p => p.id === 'account')!;
   assert.equal(rejected.available, false); assert.equal(Object.hasOwn(rejected, 'mediaEntitlement'), false);
   assert.equal((await account.summary()).state, 'reauth-required');
-  assert.equal(fetcher.mock.callCount(), 0, 'media inspection must never request account intents');
+  assert.equal(intentCalls, 0, 'media inspection must never request account intents');
 }));
 
 
@@ -1165,9 +1311,9 @@ test('provider directory keeps a signed-in account usable before billing is fetc
 test('account image recovery through MCP keeps the original task and snapshot without a second submission', t => fixture(async store => {
   await chmod(binary, 0o755);
   const gateway = gatewayFor(store); gateway.options.detect = async () => [];
-  const transport = imageTransport(store.directory);
+  const media = mediaTransport(store.directory);
   let interrupted = true, downloads = 0;
-  const account = gateway.account = new OpenDesignAccount(store.directory, { binary, pollMs: 1, ...transport,
+  const account = gateway.account = new OpenDesignAccount(store.directory, { binary, pollMs: 1, fetcher: media.fetcher,
     download: async (_url, init) => {
       downloads++;
       const offset = Number(new Headers(init.headers).get('range')?.match(/\d+/)?.[0] ?? 0);
@@ -1177,7 +1323,7 @@ test('account image recovery through MCP keeps the original task and snapshot wi
       return new Response(new ReadableStream({ pull(controller) { if (read) controller.error(new Error('private signed URL')); else { read = true; if (!offset) controller.enqueue(png.subarray(0, 32)); } } }), {
         status: offset ? 206 : 200, headers: { etag: '"original"', ...(offset ? { 'content-range': `bytes ${offset}-${png.length - 1}/${png.length}` } : {}) } });
     } });
-  t.after(() => gateway.close()); await signIn(account); await account.models(true);
+  t.after(() => gateway.close()); await signIn(account, productionApi); await account.models(true);
   const api = new Phase1Service(store, pluginRoot, { origin: () => 'http://localhost:4173', nativeUrl: () => undefined, openProject: async () => {}, mutation: async task => task(), cancel: async () => {} });
   const queued = await api.call('openmotion_assets_use', { action: 'generate', model: 'account:fixture-image', modality: 'image', prompt: 'original prompt', requestId: 'original-download' });
   const failed = await finish(store, queued.job.id);
@@ -1199,7 +1345,7 @@ test('account image recovery through MCP keeps the original task and snapshot wi
   const completed = await finish(store, failed.id);
   assert.equal(completed.state, 'completed', completed.error); assert.equal(completed.remoteId, failed.remoteId);
   assert.equal(completed.prompt, 'original prompt'); assert.deepEqual(completed.parameters, failed.parameters); assert.deepEqual(completed.model, failed.model);
-  assert.equal(JSON.parse(await readFile(path.join(account.home, 'submissions.json'), 'utf8')).length, 1);
+  assert.equal(media.submissions.length, 1);
   await assert.rejects(access(path.join(gateway.root, 'work', failed.id, 'image.partial')));
   assert.equal((await gateway.resume(failed.id, 'again-completed')).state, 'completed');
   assert.equal(downloads, 4);
@@ -1208,8 +1354,9 @@ test('account image recovery through MCP keeps the original task and snapshot wi
 async function interruptedAccountImage(t: any, store: any) {
   await chmod(binary, 0o755);
   const gateway = gatewayFor(store); gateway.options.detect = async () => [];
+  const media = mediaTransport(store.directory);
   let downloads = 0;
-  const account = gateway.account = new OpenDesignAccount(store.directory, { binary, pollMs: 1, ...imageTransport(store.directory),
+  const account = gateway.account = new OpenDesignAccount(store.directory, { binary, pollMs: 1, fetcher: media.fetcher,
     download: async (_url, init) => {
       downloads++;
       const offset = Number(new Headers(init.headers).get('range')?.match(/\d+/)?.[0] ?? 0);
@@ -1219,17 +1366,17 @@ async function interruptedAccountImage(t: any, store: any) {
         else { pulled = true; if (!offset) controller.enqueue(png.subarray(0, 32)); }
       } }), { status: offset ? 206 : 200, headers: { etag: '"original"', ...(offset ? { 'content-range': `bytes ${offset}-${png.length - 1}/${png.length}` } : {}) } });
     } });
-  t.after(() => gateway.close()); await signIn(account); await account.models(true);
+  t.after(() => gateway.close()); await signIn(account, productionApi); await account.models(true);
   const api = new Phase1Service(store, pluginRoot, { origin: () => 'http://localhost:4173', nativeUrl: () => undefined,
     openProject: async () => {}, mutation: async task => task(), cancel: async () => {} });
   const queued = await api.call('openmotion_assets_use', { action: 'generate', model: 'account:fixture-image', modality: 'image', prompt: 'original prompt', requestId: 'interrupted-image' });
   const failed = await finish(store, queued.job.id);
   assert.equal(failed.state, 'failed'); assert.equal(failed.download?.receivedBytes, 32);
-  return { gateway, account, api, failed, downloads: () => downloads, directory: path.join(gateway.root, 'work', failed.id) };
+  return { gateway, account, api, failed, media, downloads: () => downloads, directory: path.join(gateway.root, 'work', failed.id) };
 }
 
 test('account image recovery replaces an output left before manifest commit using the complete verified download', t => fixture(async store => {
-  const { gateway, account, api, failed, downloads, directory } = await interruptedAccountImage(t, store);
+  const { gateway, media, api, failed, downloads, directory } = await interruptedAccountImage(t, store);
   // Reproduce a crash after the image and final-name output reached disk, before outputs.json.
   const checkpoint = { assetId: 'fixture-asset', size: png.length, mime: 'image/png', bytes: png.length,
     sha256: createHash('sha256').update(png).digest('hex'), etag: '"original"' };
@@ -1246,14 +1393,14 @@ test('account image recovery replaces an output left before manifest commit usin
   const completed = await finish(store, failed.id);
   assert.equal(completed.state, 'completed', completed.error); assert.equal(completed.remoteId, failed.remoteId);
   assert.equal(downloads(), before, 'the verified complete download needs no new transfer');
-  assert.equal(JSON.parse(await readFile(path.join(account.home, 'submissions.json'), 'utf8')).length, 1);
+  assert.equal(media.submissions.length, 1);
   const result = await new AssetLibrary(store).resolve(completed.libraryAssets![0]);
   assert.deepEqual(await readFile(result.filename), png);
   await assert.rejects(access(directory));
 }));
 
 test('cancelling a queued account image recovery removes partial files despite a prior started attempt', t => fixture(async store => {
-  const { gateway, account, api, failed, downloads, directory } = await interruptedAccountImage(t, store);
+  const { gateway, media, api, failed, downloads, directory } = await interruptedAccountImage(t, store);
   assert(failed.startedAt); assert.equal(failed.workerPid, process.pid);
   await access(path.join(directory, 'image.partial')); await access(path.join(directory, 'image-download.json'));
   await api.call('openmotion_assets_use', { action: 'resume', jobId: failed.id, requestId: 'resume-then-cancel' });
@@ -1267,8 +1414,361 @@ test('cancelling a queued account image recovery removes partial files despite a
   assert.equal((await restarted.cancel(failed.id)).state, 'cancelled'); await restarted.tick();
   assert.equal(restarted.active.size, 0); assert.equal(gateway.active.size, 0);
   assert.equal(downloads(), before);
-  assert.equal(JSON.parse(await readFile(path.join(account.home, 'submissions.json'), 'utf8')).length, 1);
+  assert.equal(media.submissions.length, 1);
   await assert.rejects(access(directory));
+}));
+
+test('account video and speech recovery resumes polling the original HTTP task without resubmitting', t => fixture(async store => {
+  await chmod(binary, 0o755);
+  const gateway = gatewayFor(store); gateway.options.detect = async () => [];
+  const media = mediaTransport(store.directory);
+  const account = gateway.account = new OpenDesignAccount(store.directory, { binary, pollMs: 1, fetcher: media.fetcher, download: media.download });
+  t.after(() => gateway.close());
+  await signIn(account, productionApi); await account.models(true);
+  const api = new Phase1Service(store, pluginRoot, { origin: () => 'http://localhost:4173', nativeUrl: () => undefined,
+    openProject: async () => {}, mutation: async task => task(), cancel: async () => {} });
+
+  // Video fails during task polling with 502, then resumes without submitting a second task.
+  await writeFile(path.join(account.home, 'fixture-mode'), 'media-get-502');
+  const queuedVideo = await api.call('openmotion_assets_use', { action: 'generate', model: 'account:fixture-video', modality: 'video', prompt: 'ocean waves', requestId: 'resume-account-video' });
+  const failedVideo = await finish(store, queuedVideo.job.id);
+  assert.equal(failedVideo.state, 'failed');
+  assert.equal(failedVideo.remoteId, 'fixture-task-1');
+  assert.equal(media.submissions.length, 1);
+  await writeFile(path.join(account.home, 'fixture-mode'), '');
+  await api.call('openmotion_assets_use', { action: 'resume', jobId: failedVideo.id, requestId: 'resume-account-video-retry' });
+  const resumedVideo = await finish(store, failedVideo.id);
+  assert.equal(resumedVideo.state, 'completed', resumedVideo.error);
+  assert.equal(resumedVideo.remoteId, 'fixture-task-1');
+  assert.equal(media.submissions.length, 1, 'video resume must not resubmit');
+
+  // Speech fails during task polling with 502, then resumes without submitting a second task.
+  await writeFile(path.join(account.home, 'fixture-mode'), 'media-get-502');
+  const queuedSpeech = await api.call('openmotion_assets_use', { action: 'generate', model: 'account:fixture-audio', modality: 'audio', prompt: 'hello world', parameters: { voice: 'test-voice' }, requestId: 'resume-account-speech' });
+  const failedSpeech = await finish(store, queuedSpeech.job.id);
+  assert.equal(failedSpeech.state, 'failed');
+  assert.equal(failedSpeech.remoteId, 'fixture-task-2');
+  assert.equal(media.submissions.length, 2);
+  await writeFile(path.join(account.home, 'fixture-mode'), '');
+  await api.call('openmotion_assets_use', { action: 'resume', jobId: failedSpeech.id, requestId: 'resume-account-speech-retry' });
+  const resumedSpeech = await finish(store, failedSpeech.id);
+  assert.equal(resumedSpeech.state, 'completed', resumedSpeech.error);
+  assert.equal(resumedSpeech.remoteId, 'fixture-task-2');
+  assert.equal(media.submissions.length, 2, 'speech resume must not resubmit');
+}));
+
+test('account video 302 redirect works with real Node fetch without leaking Authorization, and expired/CDN-401 errors classify accurately', t => fixture(async store => {
+  const { createServer } = await import('node:http');
+  const { resumableJob } = await import('../shared/gateway.ts');
+  const mp4 = await mediaBytes('video');
+  const cdnAuthHeaders: Array<string | undefined> = [];
+  let mode: 'redirect' | 'expired-status' | 'expired-content' | 'cdn-401' = 'redirect';
+  const server = createServer((req, res) => {
+    if (req.url === '/cdn/video.mp4') {
+      cdnAuthHeaders.push(req.headers.authorization);
+      if (mode === 'cdn-401') {
+        res.writeHead(401, { 'content-type': 'text/plain' });
+        res.end('expired signed cdn url');
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'video/mp4', 'content-length': String(mp4.length) });
+      res.end(mp4);
+      return;
+    }
+    if (req.url === '/api/v1/media/videos/tasks' && req.method === 'POST') {
+      res.writeHead(202, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ task_id: 'vt_real_1', status: 'queued' }));
+      return;
+    }
+    if (req.url === '/api/v1/media/videos/tasks/vt_real_1' && req.method === 'GET') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ task_id: 'vt_real_1', model: 'wan-2.7', status: mode === 'expired-status' ? 'expired' : 'succeeded' }));
+      return;
+    }
+    if (req.url === '/api/v1/media/videos/tasks/vt_real_1/content' && req.method === 'GET') {
+      assert.equal(req.headers.authorization, 'Bearer test-control');
+      if (mode === 'expired-content') {
+        res.writeHead(410, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: { code: 'video_content_expired' } }));
+        return;
+      }
+      const addr = server.address();
+      const port = typeof addr === 'object' && addr ? addr.port : 0;
+      res.writeHead(302, { location: `http://127.0.0.1:${port}/cdn/video.mp4` });
+      res.end();
+      return;
+    }
+    res.writeHead(404).end();
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
+  t.after(() => server.close());
+  const port = (server.address() as { port: number }).port;
+  const localOrigin = `http://127.0.0.1:${port}`;
+
+  // Route productionApi requests to the local HTTP server through REAL Node global fetch (preserving redirect: 'manual' semantics).
+  const realFetch: Fetcher = (input, init) => fetch(String(input).replace('https://amr-api.open-design.ai', localOrigin), init);
+  const account = new OpenDesignAccount(store.directory, {
+    pollMs: 1,
+    fetcher: realFetch,
+    download: (url, init) => fetch(url, init),
+    run: async () => { throw new Error('unexpected connector call'); },
+  });
+  t.after(() => account.close());
+  await mkdir(account.home, { recursive: true });
+  await writeFile(path.join(account.root, 'session.json'), JSON.stringify({ id: 'sess-redirect' }));
+  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({
+    profiles: { prod: { apiUrl: productionApi, user: { id: 'u1' }, controlKey: 'test-control', controlKeyId: 'key-1', runtimeKey: 'test-rt' } },
+  }));
+  const model = { id: 'account:wan-2.7', provider: 'account', modelId: 'wan-2.7', label: 'Wan 2.7', modality: 'video' as const, mode: 'text-to-video', source: 'live' as const };
+  const baseJob = { id: randomUUID(), model, modality: 'video' as const, prompt: 'waves', providerOrigin: 'sess-redirect', parameters: {} } as any;
+
+  // 1. Real fetch handles 302 with redirect: 'manual' and never sends Authorization to the CDN target.
+  const [bytes] = await account.generate(baseJob, store.directory, new AbortController().signal, async () => {});
+  assert.deepEqual(bytes, mp4);
+  assert.deepEqual(cdnAuthHeaders, [undefined]);
+
+  // 2. CDN 401 maps to resultUnreadable with errorSource='download', NOT resultUnauthorized.
+  mode = 'cdn-401';
+  await assert.rejects(
+    account.generate({ ...baseJob, remoteId: 'vt_real_1' }, store.directory, new AbortController().signal, async () => {}),
+    (err: any) => err.message.includes('result could not be read') && err.status === 401 && err.errorSource === 'download',
+  );
+
+  // 3. AMR 410 video_content_expired marks remoteTerminal so the job is no longer resumable.
+  mode = 'expired-content';
+  let terminalFlag = false;
+  let capturedCode: string | undefined;
+  await assert.rejects(
+    account.generate(
+      { ...baseJob, remoteId: 'vt_real_1' },
+      store.directory,
+      new AbortController().signal,
+      async () => {},
+      undefined,
+      [],
+      async (data, terminal) => { terminalFlag = Boolean(terminal); capturedCode = (data as any)?.error?.code; },
+    ),
+    (err: any) => err.message.includes('Account media task failed') && err.upstreamCode === 'video_content_expired',
+  );
+  assert.equal(terminalFlag, true);
+  assert.equal(capturedCode, 'video_content_expired');
+  assert.equal(resumableJob({ ...baseJob, state: 'failed', remoteId: 'vt_real_1', remoteTerminal: terminalFlag }), false);
+
+  // 4. Task status 'expired' also marks remoteTerminal.
+  mode = 'expired-status';
+  terminalFlag = false;
+  await assert.rejects(
+    account.generate(
+      { ...baseJob, remoteId: 'vt_real_1' },
+      store.directory,
+      new AbortController().signal,
+      async () => {},
+      undefined,
+      [],
+      async (_data, terminal) => { terminalFlag = Boolean(terminal); },
+    ),
+    (err: any) => err.message.includes('Account media task failed') && err.upstreamCode === 'video_content_expired',
+  );
+  assert.equal(terminalFlag, true);
+}));
+
+test('switching OpenDesign account during reference upload aborts before submitting a paid POST', t => fixture(async store => {
+  const refPath = path.join(store.directory, 'ref.png');
+  await writeFile(refPath, png);
+  let submitPosts = 0;
+  let switched = false;
+  const account = new OpenDesignAccount(store.directory, {
+    pollMs: 1,
+    fetcher: (async (input: any, init: any = {}) => {
+      const url = String(input), method = (init.method ?? 'GET').toUpperCase();
+      if (url.startsWith('https://storage.example/')) {
+        // Simulate another workspace signing in as a different user while the reference upload is in flight.
+        if (!switched) {
+          switched = true;
+          await writeFile(path.join(account.root, 'session.json'), JSON.stringify({ id: 'sess-account-B' }));
+          await writeFile(path.join(account.home, 'config.json'), JSON.stringify({
+            profiles: { prod: { apiUrl: productionApi, user: { id: 'user-B' }, controlKey: 'key-B', controlKeyId: 'key-id-B', runtimeKey: 'rt-B' } },
+          }));
+        }
+        return new Response(null, { status: 200 });
+      }
+      if (url.endsWith('/uploads')) return Response.json({ asset_id: 'upload-1', upload_url: 'https://storage.example/1' });
+      if (url.endsWith('/uploads/upload-1/commit')) return Response.json({ status: 'ready' });
+      if (method === 'POST' && url.endsWith('/videos/tasks')) {
+        submitPosts++;
+        return Response.json({ task_id: 'should-not-happen' });
+      }
+      throw new Error(`unexpected request: ${method} ${url}`);
+    }) as Fetcher,
+    run: async () => { throw new Error('unexpected connector call'); },
+  });
+  t.after(() => account.close());
+  await mkdir(account.home, { recursive: true });
+  await writeFile(path.join(account.root, 'session.json'), JSON.stringify({ id: 'sess-account-A' }));
+  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({
+    profiles: { prod: { apiUrl: productionApi, user: { id: 'user-A' }, controlKey: 'key-A', controlKeyId: 'key-id-A', runtimeKey: 'rt-A' } },
+  }));
+  const model = { id: 'account:wan-2.7', provider: 'account', modelId: 'wan-2.7', label: 'Wan 2.7', modality: 'video' as const, mode: 'text-to-video', source: 'live' as const, maxInputImages: 1 };
+  const job = { id: randomUUID(), model, modality: 'video' as const, prompt: 'walk forward', providerOrigin: 'sess-account-A', parameters: {} } as any;
+  await assert.rejects(
+    account.generate(job, store.directory, new AbortController().signal, async () => {}, refPath, [{ file: refPath, mimeType: 'image/png', bytes: png.length }]),
+    /Account changed; the queued task was not submitted/,
+  );
+  assert.equal(submitPosts, 0, 'paid POST must never fire after an account switch during upload');
+
+  // Switching account inside the `submitting` progress callback must also abort before dispatching POST.
+  await writeFile(path.join(account.root, 'session.json'), JSON.stringify({ id: 'sess-account-A' }));
+  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({
+    profiles: { prod: { apiUrl: productionApi, user: { id: 'user-A' }, controlKey: 'key-A', controlKeyId: 'key-id-A', runtimeKey: 'rt-A' } },
+  }));
+  await assert.rejects(
+    account.generate(
+      job,
+      store.directory,
+      new AbortController().signal,
+      async phase => {
+        if (phase === 'submitting') {
+          await writeFile(path.join(account.root, 'session.json'), JSON.stringify({ id: 'sess-account-C' }));
+          await writeFile(path.join(account.home, 'config.json'), JSON.stringify({
+            profiles: { prod: { apiUrl: productionApi, user: { id: 'user-C' }, controlKey: 'key-C', controlKeyId: 'key-id-C', runtimeKey: 'rt-C' } },
+          }));
+        }
+      },
+    ),
+    /Account changed; the queued task was not submitted/,
+  );
+  assert.equal(submitPosts, 0, 'paid POST must never fire after an account switch during submitting');
+  await assert.rejects(
+    account.generate({ ...job, providerOrigin: 'sess-account-C', parameters: { images: ['raw-asset-id'] } }, store.directory, new AbortController().signal, async () => {}),
+    /pinned references/,
+  );
+  assert.equal(submitPosts, 0, 'raw parameters.images must be rejected on account route');
+}));
+
+test('production account media discovery fetches /api/v1/media/models directly via HTTP and forwards native model parameters without CLI allowlist blocking', t => fixture(async store => {
+  const submits: Array<{ endpoint: string; body: Record<string, unknown> }> = [];
+  const cliCalls: string[][] = [];
+  const account = new OpenDesignAccount(store.directory, {
+    pollMs: 1,
+    fetcher: (async (input: any, init: any = {}) => {
+      const url = String(input), method = (init.method ?? 'GET').toUpperCase();
+      assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer prod-control-key');
+      if (method === 'GET' && url === 'https://amr-api.open-design.ai/api/v1/media/models?include_audio=true') {
+        return Response.json({
+          models: [
+            { model: 'future-video-v2', kind: 'video', enabled: true, capabilities: { durations: [4, 6], ratios: ['16:9'] } },
+            { model: 'elevenlabs-sound-v3', kind: 'audio_sound_effects', enabled: true, capabilities: {} },
+          ],
+        });
+      }
+      if (method === 'POST' && url === 'https://amr-api.open-design.ai/api/v1/media/videos/tasks') {
+        submits.push({ endpoint: '/videos/tasks', body: JSON.parse(String(init.body)) });
+        return Response.json({ task_id: 'vt_future_1', status: 'queued' }, { status: 202 });
+      }
+      if (method === 'GET' && url === 'https://amr-api.open-design.ai/api/v1/media/videos/tasks/vt_future_1') {
+        return Response.json({ task_id: 'vt_future_1', model: 'future-video-v2', status: 'succeeded' });
+      }
+      if (method === 'GET' && url === 'https://amr-api.open-design.ai/api/v1/media/videos/tasks/vt_future_1/content') {
+        return new Response(await mediaBytes('video'), { status: 200 });
+      }
+      throw new Error(`unexpected HTTP call: ${method} ${url}`);
+    }) as Fetcher,
+    run: async args => {
+      cliCalls.push(args);
+      if (args[0] === 'model') return JSON.stringify({ source: 'remote', data: [{ id: 'gpt-text', enabled: true }] });
+      throw new Error(`media discovery/generation must not call vela CLI: ${args.join(' ')}`);
+    },
+  });
+  t.after(() => account.close());
+  await mkdir(account.home, { recursive: true });
+  await writeFile(path.join(account.root, 'session.json'), JSON.stringify({ id: 'sess-prod-http' }));
+  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({
+    profiles: {
+      prod: {
+        apiUrl: 'https://amr-api.open-design.ai',
+        user: { id: 'u-prod' },
+        controlKey: 'prod-control-key',
+        controlKeyId: 'prod-key-id',
+        runtimeKey: 'prod-rt-key',
+      },
+    },
+  }));
+  const all = await account.models(true);
+  assert.deepEqual(cliCalls, [['model', 'list', '--all', '--format', 'json']], 'media catalog must bypass vela media models');
+  assert.ok(all.some(m => m.id === 'account:future-video-v2' && m.kind === 'video'));
+  assert.ok(all.some(m => m.id === 'account:elevenlabs-sound-v3' && m.kind === 'audio' && m.mode === 'text-to-audio'));
+  const futureModel = (await account.mediaModels()).find(m => m.id === 'account:future-video-v2')!;
+  await account.generate(
+    { id: randomUUID(), model: futureModel, modality: 'video', prompt: 'sunset drone', providerOrigin: 'sess-prod-http', parameters: { duration: 4, seed: 42, camera_fixed: true } } as any,
+    store.directory,
+    new AbortController().signal,
+    async () => {},
+  );
+  assert.deepEqual(submits, [{ endpoint: '/videos/tasks', body: { duration: 4, seed: 42, camera_fixed: true, model: 'future-video-v2', prompt: 'sunset drone' } }]);
+}));
+
+test('non-production or omitted apiUrl aligns controlAccess, media discovery, and generation without advertising un-generatable media models', t => fixture(async store => {
+  const httpCalls: string[] = [];
+  const cliCalls: string[][] = [];
+  const account = new OpenDesignAccount(store.directory, {
+    pollMs: 1,
+    fetcher: (async (input: any) => {
+      httpCalls.push(String(input));
+      throw new Error(`non-production profile must not call direct media HTTP: ${String(input)}`);
+    }) as Fetcher,
+    run: async args => {
+      cliCalls.push(args);
+      if (args[0] === 'model') return JSON.stringify({ source: 'remote', data: [{ id: 'gpt-text', enabled: true }] });
+      throw new Error(`non-production profile must not call CLI media commands: ${args.join(' ')}`);
+    },
+  });
+  t.after(() => account.close());
+  await mkdir(account.home, { recursive: true });
+  await writeFile(path.join(account.root, 'session.json'), JSON.stringify({ id: 'sess-custom' }));
+  // Seed a stale cached models.json containing a media model to verify cached reads also suppress media models.
+  await writeFile(path.join(account.root, 'models.json'), JSON.stringify([
+    { id: 'account:gpt-text', provider: 'account', modelId: 'gpt-text', label: 'gpt-text', kind: 'text', enabled: true, source: 'live' },
+    { id: 'account:stale-image', provider: 'account', modelId: 'stale-image', label: 'Stale Image', kind: 'image', enabled: true, source: 'live', mode: 'text-to-image' },
+  ]));
+
+  for (const apiUrl of ['https://amr-api.example.test', '', undefined]) {
+    const profile = {
+      ...(apiUrl !== undefined ? { apiUrl } : {}),
+      user: { id: 'u-custom' },
+      controlKey: 'custom-control-key',
+      controlKeyId: 'custom-key-id',
+      runtimeKey: 'custom-rt-key',
+    };
+    await writeFile(path.join(account.home, 'config.json'), JSON.stringify({ profiles: { prod: profile } }));
+    assert.equal(await account.controlAccess(), undefined, `controlAccess must be undefined for apiUrl=${String(apiUrl)}`);
+    const cached = await account.models(false);
+    assert.deepEqual(cached.map(m => m.id), ['account:gpt-text'], `cached models must exclude media and builtin audio for apiUrl=${String(apiUrl)}`);
+    const refreshed = await account.models(true);
+    assert.deepEqual(refreshed.map(m => m.id), ['account:gpt-text'], `refreshed models must exclude media and builtin audio for apiUrl=${String(apiUrl)}`);
+    assert.deepEqual(await account.mediaModels(), [], `mediaModels must be empty for apiUrl=${String(apiUrl)}`);
+    await assert.rejects(
+      account.generate(
+        {
+          id: randomUUID(),
+          model: { id: 'account:wan-2.7', provider: 'account', modelId: 'wan-2.7', label: 'Wan 2.7', modality: 'video', mode: 'text-to-video', source: 'live' },
+          modality: 'video',
+          prompt: 'ocean waves',
+          providerOrigin: 'sess-custom',
+          parameters: {},
+        } as any,
+        store.directory,
+        new AbortController().signal,
+        async () => {},
+      ),
+      /Your OpenDesign sign-in is no longer accepted/,
+    );
+  }
+  assert.deepEqual(httpCalls, []);
+  assert.deepEqual(cliCalls, [
+    ['model', 'list', '--all', '--format', 'json'],
+    ['model', 'list', '--all', '--format', 'json'],
+    ['model', 'list', '--all', '--format', 'json'],
+  ]);
 }));
 
 test('AccountRequestError classifies local CLI flag errors as invalid requests rather than connection failures', () => {
@@ -1289,13 +1789,13 @@ test('AccountRequestError classifies local CLI flag errors as invalid requests r
   assert.equal(connection.message, 'OpenDesign account request failed. Check your connection and sign in again if needed.');
 });
 
-test('account video first-frame uses --first-frame and OpenDesign providers reject reference images over 2 MiB before queueing', t => fixture(async store => {
+test('account video first-frame uploads via HTTP as role=first_frame, accepts >2 MiB PNGs, and rejects >30 MiB references before queueing', t => fixture(async store => {
   await chmod(binary, 0o755);
   const gateway = gatewayFor(store); gateway.options.detect = async () => [];
-  const account = gateway.account = new OpenDesignAccount(store.directory, { binary, pollMs: 1, ...imageTransport(store.directory) });
+  const media = mediaTransport(store.directory);
+  const account = gateway.account = new OpenDesignAccount(store.directory, { binary, pollMs: 1, fetcher: media.fetcher, download: media.download });
   t.after(() => gateway.close());
-  await signIn(account); await account.models(true);
-  await writeFile(path.join(account.home, 'fixture-video'), await mediaBytes('video'));
+  await signIn(account, productionApi); await account.models(true);
   const api = new Phase1Service(store, pluginRoot, { origin: () => 'http://localhost:4173', nativeUrl: () => undefined,
     openProject: async () => {}, mutation: async task => task(), cancel: async () => {} });
   const models = (await gateway.listModels({ provider: 'account', modality: 'video' })).models;
@@ -1310,29 +1810,46 @@ test('account video first-frame uses --first-frame and OpenDesign providers reje
   });
   const completed = await finish(store, queued.job.id);
   assert.equal(completed.state, 'completed', completed.error);
-  const calls = JSON.parse(await readFile(path.join(account.home, 'submissions.json'), 'utf8')) as string[][];
-  assert.deepEqual(calls.at(-1)?.slice(0, 2), ['video', 'gen']);
-  assert.match(calls.at(-1)![calls.at(-1)!.indexOf('--first-frame') + 1], /reference\.png$/);
+  const call = media.submissions.at(-1)!;
+  assert.equal(call.endpoint, '/videos/tasks');
+  assert.deepEqual(call.body, { model: 'fixture-i2v', prompt: 'slow camera push', images: [{ asset_id: 'upload-1', role: 'first_frame' }] });
+  assert.deepEqual(media.uploads[0].bytes, png);
 
-  // Oversized reference (> 2 MiB) is rejected before queueing for OpenDesign account and Cloud providers.
+  // Reference > 2 MiB (e.g., 2K PNG) is accepted and uploaded smoothly via OpenDesign account.
   const { crc32 } = await import('node:zlib');
-  const textType = Buffer.from('tEXt'), textPayload = Buffer.alloc(2 * 1024 * 1024 + 16, 0x61);
-  const length = Buffer.alloc(4); length.writeUInt32BE(textPayload.length, 0);
-  const checksum = Buffer.alloc(4); checksum.writeUInt32BE(crc32(Buffer.concat([textType, textPayload])), 0);
-  const oversizedPng = Buffer.concat([png.subarray(0, png.length - 12), length, textType, textPayload, checksum, png.subarray(png.length - 12)]);
-  const oversizedPath = path.join(store.directory, 'oversized.png');
+  const buildSizedPng = (extraBytes: number) => {
+    const textType = Buffer.from('tEXt'), textPayload = Buffer.alloc(extraBytes, 0x61);
+    const length = Buffer.alloc(4); length.writeUInt32BE(textPayload.length, 0);
+    const checksum = Buffer.alloc(4); checksum.writeUInt32BE(crc32(Buffer.concat([textType, textPayload])), 0);
+    return Buffer.concat([png.subarray(0, png.length - 12), length, textType, textPayload, checksum, png.subarray(png.length - 12)]);
+  };
+  const mediumPng = buildSizedPng(2 * 1024 * 1024 + 16);
+  const mediumPath = path.join(store.directory, 'medium-2k.png');
+  await writeFile(mediumPath, mediumPng);
+  const medium = await new AssetLibrary(store).importFile(mediumPath, { requestId: 'medium-ref', name: 'Medium 2K' });
+  const mediumRef = { assetId: medium.id, versionId: medium.currentVersionId };
+  const queuedMedium = await api.call('openmotion_assets_use', {
+    action: 'generate', requestId: 'account-medium-edit', model: 'account:fixture-image', modality: 'image', prompt: 'edit 2k', references: [mediumRef],
+  });
+  const completedMedium = await finish(store, queuedMedium.job.id);
+  assert.equal(completedMedium.state, 'completed', completedMedium.error);
+  assert.equal(media.submissions.length, 2);
+
+  // Source reference > 30 MiB is rejected before queueing for OpenDesign account providers.
+  const oversizedPng = buildSizedPng(30 * 1024 * 1024 + 64);
+  const oversizedPath = path.join(store.directory, 'oversized-30mib.png');
   await writeFile(oversizedPath, oversizedPng);
   const oversized = await new AssetLibrary(store).importFile(oversizedPath, { requestId: 'oversized-ref', name: 'Oversized' });
   const oversizedRef = { assetId: oversized.id, versionId: oversized.currentVersionId };
   await assert.rejects(
     api.call('openmotion_assets_use', { action: 'generate', requestId: 'account-too-large', model: 'account:fixture-image', modality: 'image', prompt: 'edit', references: [oversizedRef] }),
-    /2 MiB OpenDesign upload limit/,
+    /30 MiB OpenDesign limit/,
   );
   await assert.rejects(
     api.call('openmotion_assets_use', { action: 'generate', requestId: 'account-i2v-too-large', model: 'account:fixture-i2v', modality: 'video', prompt: 'animate', references: [oversizedRef] }),
-    /2 MiB OpenDesign upload limit/,
+    /30 MiB OpenDesign limit/,
   );
-  assert.equal((JSON.parse(await readFile(path.join(account.home, 'submissions.json'), 'utf8')) as string[][]).length, 1);
+  assert.equal(media.submissions.length, 2);
 }));
 
 test('the account directory is per user, except for temporary workspaces and an explicit MOTION_ACCOUNT_DIR', () => {

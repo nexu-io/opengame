@@ -36,7 +36,7 @@ async function setupFixture(t: any) {
   for (const name of ['scripts', 'shared', 'studio/build', 'skills/openmotion-video', 'docs', 'mcp-ui/template-recommendations']) await mkdir(path.join(application, name), { recursive: true });
   for (const name of ['mcp.ts', 'scripts/npm-runtime.mjs', 'studio/build/index.html', 'README.md', 'AGENTS.md', 'CLAUDE.md']) await writeFile(path.join(application, name), 'fixture');
   for (const file of ['docs/install.md', 'scripts/install-onboarding.mjs', 'scripts/inline-onboarding.mjs', 'scripts/codex-host-handoff.mjs', 'scripts/check-installed-mcp.mjs', 'shared/onboarding-templates.ts', 'scripts/runtime-assets.mjs', 'scripts/open-template-library.ts', 'shared/workspace-url.ts', 'shared/studio-catalog.ts', 'shared/audio-kind.ts', 'shared/capability-registry.ts', 'shared/model-capabilities.ts', 'shared/gateway.ts', 'shared/generation-options.ts', 'shared/opendesign-models.ts', 'shared/provider-registry.ts', 'shared/provider-presets.json', 'mcp-ui/template-recommendations/i18n.ts']) await cp(new URL('../' + file, import.meta.url), path.join(application, file));
-  for (const file of ['shared/install-attribution.ts', 'packages/multimodal-models/src/schema.ts', 'packages/multimodal-models/src/normalize.ts', 'tracking/node.ts', 'tracking/core.ts', 'tracking/host.ts', 'tracking/device.ts', 'tracking/events.ts', 'tracking/tool-fields.ts', 'tracking/studio-events.ts']) {
+  for (const file of ['shared/install-attribution.ts', 'shared/product-identity.ts', 'packages/multimodal-models/src/schema.ts', 'packages/multimodal-models/src/normalize.ts', 'tracking/node.ts', 'tracking/core.ts', 'tracking/host.ts', 'tracking/device.ts', 'tracking/events.ts', 'tracking/tool-fields.ts', 'tracking/studio-events.ts']) {
     await mkdir(path.join(application, path.dirname(file)), { recursive: true });
     await cp(new URL('../' + file, import.meta.url), path.join(application, file));
   }
@@ -172,7 +172,7 @@ for (const host of ['workbuddy', 'claude', 'codex', 'deepseek']) {
 test('bundled CLI installs without a sidecar manifest, isolates DEV defaults and rejects a mixed-environment home', async t => {
   const options = await setupFixture(t), bundle = path.join(options.directory, 'bundle');
   await mkdir(path.join(bundle, 'scripts'), { recursive: true }); await mkdir(path.join(bundle, 'payload'));
-  for (const file of ['npm-installer.mjs', 'npm-hosts.mjs', 'install-public-skill.ts', 'npm-runtime.mjs', 'runtime-assets.mjs', 'check-installed-mcp.mjs', 'mcp-client.mjs', 'diagnostics.mjs', 'diagnostic-redaction.mjs', 'zip.mjs']) {
+  for (const file of ['npm-installer.mjs', 'npm-hosts.mjs', 'workbuddy-config.mjs', 'install-public-skill.ts', 'npm-runtime.mjs', 'runtime-assets.mjs', 'check-installed-mcp.mjs', 'mcp-client.mjs', 'diagnostics.mjs', 'diagnostic-redaction.mjs', 'zip.mjs']) {
     await cp(new URL('../scripts/' + file, import.meta.url), path.join(bundle, 'scripts', file));
   }
   await writeJSON(path.join(bundle, 'package.json'), { version: '1.2.3', type: 'module' });
@@ -465,6 +465,30 @@ test('WorkBuddy installs flat Skills and preserves other hosts and native MCP se
   assert.equal(marker.host, 'workbuddy'); assert.equal(marker.runtimeRoot, buddy.appRoot);
   assert.equal((await setup({ ...options, host: 'workbuddy' })).appRoot, buddy.appRoot);
   assert.equal((await readdir(path.join(options.home, 'apps'))).length, 1);
+});
+
+test('WorkBuddy setup finds the initialized desktop profile and preserves the legacy profile', { skip: process.platform === 'win32' }, async t => {
+  const options = await setupFixture(t), userHome = path.join(options.directory, 'user');
+  const previousHome = process.env.HOME, previousProfile = process.env.WORKBUDDY_CONFIG_DIR;
+  process.env.HOME = userHome;
+  delete process.env.WORKBUDDY_CONFIG_DIR;
+  t.after(() => {
+    if (previousHome === undefined) delete process.env.HOME; else process.env.HOME = previousHome;
+    if (previousProfile === undefined) delete process.env.WORKBUDDY_CONFIG_DIR; else process.env.WORKBUDDY_CONFIG_DIR = previousProfile;
+  });
+  const legacy = path.join(userHome, '.workbuddy');
+  const desktop = path.join(userHome, '.workbuddy-ai');
+  await mkdir(legacy, { recursive: true });
+  await mkdir(desktop);
+  const original = { mcpServers: { unrelated: { command: 'keep-legacy' } } };
+  await writeJSON(path.join(legacy, 'mcp.json'), original);
+  await writeJSON(path.join(desktop, 'mcp.json'), { mcpServers: { unrelated: { command: 'keep-desktop' } } });
+  const installed = await setup({ ...options, host: 'workbuddy', skillsDirectory: undefined });
+  const config = JSON.parse(await readFile(path.join(desktop, 'mcp.json'), 'utf8'));
+  assert.equal(config.mcpServers.openmotion.args[0], installed.launcher);
+  assert.equal(config.mcpServers.unrelated.command, 'keep-desktop');
+  assert.deepEqual(JSON.parse(await readFile(path.join(legacy, 'mcp.json'), 'utf8')), original);
+  assert.match(await readFile(path.join(desktop, 'skills/openmotion-video/SKILL.md'), 'utf8'), /Fixture/);
 });
 
 test('WorkBuddy refuses conflicting or malformed native configuration without altering it', { skip: process.platform === 'win32' }, async t => {

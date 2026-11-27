@@ -13,6 +13,11 @@ import {
   readBlackFridayCountdown,
 } from './campaignAttribution';
 import { useCheckoutReturnRefresh } from './entitlementAttribution';
+import {
+  MAGI2_MODAL_OPEN_EVENT,
+  isMagi2ModalOpen,
+  shouldSkipExploreHeroIntro,
+} from './magi2LaunchModalConfig';
 import { trackMotion } from './tracking';
 
 const RING_COUNT = 8;
@@ -119,14 +124,16 @@ export function ExploreBlackFridayHero({ active = true, onExpire }: { active?: b
   const [entryId, setEntryId] = useState(newCampaignEntryId);
   const [displayDigits, setDisplayDigits] = useState<[string, string, string] | null>(null);
   const [startedCollapsed] = useState(() => (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    (typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches) ||
+    shouldSkipExploreHeroIntro()
   ));
+  const [magi2ModalOpen, setMagi2ModalOpen] = useState(() => isMagi2ModalOpen());
   const [collapsed, setCollapsed] = useState(startedCollapsed);
   const collapsedRef = useRef(collapsed);
   collapsedRef.current = collapsed;
-  const collapseStartedAtRef = useRef<number | null>(null);
+  const collapseStartedAtRef = useRef<number | null>(startedCollapsed ? -10_000 : null);
   const [introActivated, setIntroActivated] = useState(() => active);
   const introActivatedRef = useRef(active);
   const [ctaEngaged, setCtaEngaged] = useState(false);
@@ -139,17 +146,39 @@ export function ExploreBlackFridayHero({ active = true, onExpire }: { active?: b
   const ringRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [stageSize, setStageSize] = useState({ width: 1280, height: 660 });
   const [collapsedHeight, setCollapsedHeight] = useState<number | null>(null);
-  const introStartRef = useRef<number>(typeof performance !== 'undefined' ? performance.now() : 0);
+  const introStartRef = useRef<number>(
+    (typeof performance !== 'undefined' ? performance.now() : 0) - (startedCollapsed ? 10_000 : 0),
+  );
+
+  useEffect(() => {
+    const syncModalOpen = (open: boolean) => {
+      setMagi2ModalOpen(open);
+      if (open) {
+        introStartRef.current = (typeof performance !== 'undefined' ? performance.now() : 0) - 10_000;
+        collapseStartedAtRef.current = -10_000;
+        setCollapsed(true);
+      }
+    };
+    if (isMagi2ModalOpen()) syncModalOpen(true);
+    const onModalChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ open?: boolean }>).detail;
+      const open = typeof detail?.open === 'boolean' ? detail.open : isMagi2ModalOpen();
+      syncModalOpen(open);
+    };
+    window.addEventListener(MAGI2_MODAL_OPEN_EVENT, onModalChange);
+    return () => window.removeEventListener(MAGI2_MODAL_OPEN_EVENT, onModalChange);
+  }, []);
 
   // Trigger the full-screen opening choreography the first time Explore actually becomes active,
   // instead of burning through the intro/auto-collapse timer while Explore sits mounted behind another tab.
   useEffect(() => {
     if (!active || introActivatedRef.current) return;
     introActivatedRef.current = true;
-    introStartRef.current = typeof performance !== 'undefined' ? performance.now() : 0;
+    introStartRef.current =
+      (typeof performance !== 'undefined' ? performance.now() : 0) - (startedCollapsed ? 10_000 : 0);
     collapseRemainingRef.current = AUTO_COLLAPSE_DELAY_MS;
     setIntroActivated(true);
-  }, [active]);
+  }, [active, startedCollapsed]);
 
   useEffect(() => {
     if (collapsed && collapseStartedAtRef.current === null) {
@@ -172,7 +201,7 @@ export function ExploreBlackFridayHero({ active = true, onExpire }: { active?: b
     update();
     return () => { observer?.disconnect(); document.removeEventListener('visibilitychange', update); };
   }, [active]);
-  const playing = active && visible;
+  const playing = active && visible && !magi2ModalOpen;
 
   // Interactive physics state kept in refs to avoid React re-renders at 60fps
   const interactionRef = useRef({
@@ -265,7 +294,10 @@ export function ExploreBlackFridayHero({ active = true, onExpire }: { active?: b
 
   // Precision staggered countdown digit roll-in synced with the signature opening sequence
   useEffect(() => {
-    if (!playing) return;
+    if (!playing || startedCollapsed) {
+      setDisplayDigits(null);
+      return;
+    }
     const prefersReduced =
       typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
@@ -362,7 +394,7 @@ export function ExploreBlackFridayHero({ active = true, onExpire }: { active?: b
 
   // 60fps infinite ring-recycling + signature opening camera choreography + mouse parallax + wheel inertia
   useEffect(() => {
-    if (!playing) return;
+    if (!active || !visible) return;
     const prefersReduced =
       typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
@@ -392,7 +424,7 @@ export function ExploreBlackFridayHero({ active = true, onExpire }: { active?: b
       }
     };
 
-    if (prefersReduced) {
+    if (prefersReduced || magi2ModalOpen) {
       applyStatic();
       return;
     }
@@ -468,7 +500,7 @@ export function ExploreBlackFridayHero({ active = true, onExpire }: { active?: b
 
     rafId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(rafId);
-  }, [geometry, playing]);
+  }, [active, geometry, magi2ModalOpen, visible]);
 
   // Passive wheel listener for kinetic corridor speed nudge; downward scroll while expanded immediately triggers collapse.
   useEffect(() => {

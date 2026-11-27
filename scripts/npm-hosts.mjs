@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { access, cp, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { workbuddyConfigDirectory } from './workbuddy-config.mjs';
 import { canonical, readJSON, runFile, withLock, writeJSON } from './runtime-assets.mjs';
 
 // Hosts with a dedicated registration adapter. Any other valid --host name installs the same
@@ -74,8 +75,9 @@ export async function hostPlan(options, home, launcher, previous, bundleId) {
     return { host, skillOwner: genericSkillOwner, ...metadata, metadata, connection: { transport }, register: async () => {},
       agentRegistration: { serverName: 'openmotion', transport, skillsDirectory } };
   }
+  const workbuddyDirectory = host === 'workbuddy' ? workbuddyConfigDirectory() : undefined;
   const defaultSkills = host === 'claude' ? path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'skills')
-    : host === 'workbuddy' ? path.join(process.env.WORKBUDDY_CONFIG_DIR || path.join(os.homedir(), '.workbuddy'), 'skills')
+    : workbuddyDirectory ? path.join(workbuddyDirectory, 'skills')
       : path.join(os.homedir(), '.agents/skills');
   const skillsDirectory = await canonical(options.skillsDirectory || defaultSkills);
   const metadata = { skillsDirectory, layout: host === 'codex' ? 'bundle' : 'flat' };
@@ -103,7 +105,7 @@ export async function hostPlan(options, home, launcher, previous, bundleId) {
     } };
   }
   if (host === 'workbuddy') {
-    const configFile = path.join(await canonical(process.env.WORKBUDDY_CONFIG_DIR || path.join(os.homedir(), '.workbuddy')), 'mcp.json');
+    const configFile = path.join(await canonical(workbuddyDirectory), 'mcp.json');
     // WorkBuddy desktop sends the MCP server key (`openmotion`) as `clientInfo.name`; set an explicit
     // launch-environment tag so native WorkBuddy MCP traffic attributes cleanly to `workbuddy`.
     const workbuddyTransport = { ...transport, env: { OPENMOTION_HOST_AGENT: 'workbuddy' } };

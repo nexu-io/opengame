@@ -28,7 +28,14 @@
     "Generate code animations from one prompt": "1 句提示词生成代码级动效",
     "Animate type & graphics on a timeline": "时间线精细编排文字与图形动效",
     "Pricing": "定价",
-    "Upgrade": "升级"
+    "Upgrade": "升级",
+    "MAGI-2 first launch 7 days unlimited Black Friday offer": "MAGI-2 全网首发 7 天无限用活动弹窗",
+    "7 Days Unlimited!": "7 天无限用！",
+    "First Launch · MAGI-2": "全网首发 MAGI-2",
+    "1080p cinema video with native audio is live on OpenDesign. Unlock **7 days unlimited** on **any annual plan**, with Black Friday plans **up to 50% OFF**.": "全新 1080p 电影级视频模型现已上线 OpenDesign，支持原生音画同步。**任意年付套餐**均享 **7 天无限用**，黑五订阅**低至 5 折**。",
+    "Start Unlimited": "立即无限使用",
+    "Ends in (MAGI-2 modal)": "黑五限时",
+    "Close MAGI-2 launch popup": "关闭活动弹窗"
   },
   "ja": {
     "Black Friday campaign banner": "ブラックフライデーキャンペーンバナー",
@@ -59,7 +66,14 @@
     "Generate code animations from one prompt": "1プロンプトでコードアニメーションを生成",
     "Animate type & graphics on a timeline": "タイムラインで文字と図形を自在にアニメーション",
     "Pricing": "料金",
-    "Upgrade": "アップグレード"
+    "Upgrade": "アップグレード",
+    "MAGI-2 first launch 7 days unlimited Black Friday offer": "MAGI-2 先行公開 7日間使い放題キャンペーン",
+    "7 Days Unlimited!": "7日間使い放題！",
+    "First Launch · MAGI-2": "先行公開 MAGI-2",
+    "1080p cinema video with native audio is live on OpenDesign. Unlock **7 days unlimited** on **any annual plan**, with Black Friday plans **up to 50% OFF**.": "ネイティブ音声対応の1080pシネマ動画モデルがOpenDesignに登場。**すべての年間プラン**で**7日間無制限**、ブラックフライデー**最大50%オフ**。",
+    "Start Unlimited": "今すぐ無制限で使う",
+    "Ends in (MAGI-2 modal)": "期間限定",
+    "Close MAGI-2 launch popup": "キャンペーンポップアップを閉じる"
   },
   "ko": {
     "Black Friday campaign banner": "블랙프라이데이 캠페인 배너",
@@ -90,7 +104,14 @@
     "Generate code animations from one prompt": "한 줄 프롬프트로 코드 애니메이션 생성",
     "Animate type & graphics on a timeline": "타임라인에서 타이포그래피와 그래픽을 정밀하게 애니메이트",
     "Pricing": "요금제",
-    "Upgrade": "업그레이드"
+    "Upgrade": "업그레이드",
+    "MAGI-2 first launch 7 days unlimited Black Friday offer": "MAGI-2 최초 공개 7일 무제한 프로모션",
+    "7 Days Unlimited!": "7일 무제한!",
+    "First Launch · MAGI-2": "최초 공개 MAGI-2",
+    "1080p cinema video with native audio is live on OpenDesign. Unlock **7 days unlimited** on **any annual plan**, with Black Friday plans **up to 50% OFF**.": "네이티브 사운드를 지원하는 1080p 시네마 영상 모델이 OpenDesign에 출시되었습니다. **모든 연간 플랜**에서 **7일 무제한**, 블랙프라이데이 **최대 50% 할인**.",
+    "Start Unlimited": "무제한 시작하기",
+    "Ends in (MAGI-2 modal)": "한정 특가",
+    "Close MAGI-2 launch popup": "프로모션 팝업 닫기"
   },
   "de": {
     "Black Friday campaign banner": "Black-Friday-Aktionsbanner",
@@ -121,7 +142,14 @@
     "Generate code animations from one prompt": "Code-Animationen aus einem Prompt erstellen",
     "Animate type & graphics on a timeline": "Typografie & Grafiken präzise auf der Timeline animieren",
     "Pricing": "Preise",
-    "Upgrade": "Upgrade"
+    "Upgrade": "Upgrade",
+    "MAGI-2 first launch 7 days unlimited Black Friday offer": "MAGI-2 Premiere 7 Tage unbegrenzt Black Friday Angebot",
+    "7 Days Unlimited!": "7 Tage unbegrenzt!",
+    "First Launch · MAGI-2": "Premiere · MAGI-2",
+    "1080p cinema video with native audio is live on OpenDesign. Unlock **7 days unlimited** on **any annual plan**, with Black Friday plans **up to 50% OFF**.": "1080p-Kinovideos mit nativem Audio sind live auf OpenDesign. **7 Tage unbegrenzt** mit **jedem Jahresabo** – zum Black Friday **bis zu 50 % Rabatt**.",
+    "Start Unlimited": "Unbegrenzt starten",
+    "Ends in (MAGI-2 modal)": "Endet in",
+    "Close MAGI-2 launch popup": "Aktions-Popup schließen"
   },
   "fr": {
     "Black Friday campaign banner": "Bannière de la campagne Black Friday",
@@ -152,7 +180,14 @@
     "Generate code animations from one prompt": "Générez des animations en code en un seul prompt",
     "Animate type & graphics on a timeline": "Animez textes et formes sur une timeline",
     "Pricing": "Tarifs",
-    "Upgrade": "Mettre à niveau"
+    "Upgrade": "Mettre à niveau",
+    "MAGI-2 first launch 7 days unlimited Black Friday offer": "Offre Black Friday MAGI-2 illimité pendant 7 jours",
+    "7 Days Unlimited!": "7 jours illimités !",
+    "First Launch · MAGI-2": "Avant-première · MAGI-2",
+    "1080p cinema video with native audio is live on OpenDesign. Unlock **7 days unlimited** on **any annual plan**, with Black Friday plans **up to 50% OFF**.": "La vidéo cinéma 1080p avec audio natif arrive sur OpenDesign. Débloquez **7 jours illimités** sur **tout abonnement annuel**, avec **jusqu’à -50 %** au Black Friday.",
+    "Start Unlimited": "Démarrer en illimité",
+    "Ends in (MAGI-2 modal)": "Offre limitée",
+    "Close MAGI-2 launch popup": "Fermer la fenêtre Black Friday"
   },
   "ru": {
     "Black Friday campaign banner": "Баннер акции «Чёрная пятница»",
@@ -183,7 +218,14 @@
     "Generate code animations from one prompt": "Создавайте кодовые анимации по одному запросу",
     "Animate type & graphics on a timeline": "Анимируйте типографику и графику на таймлайне",
     "Pricing": "Цены",
-    "Upgrade": "Улучшить"
+    "Upgrade": "Улучшить",
+    "MAGI-2 first launch 7 days unlimited Black Friday offer": "Премьера MAGI-2: 7 дней безлимита в Чёрную пятницу",
+    "7 Days Unlimited!": "7 дней безлимита!",
+    "First Launch · MAGI-2": "Премьера · MAGI-2",
+    "1080p cinema video with native audio is live on OpenDesign. Unlock **7 days unlimited** on **any annual plan**, with Black Friday plans **up to 50% OFF**.": "Кинематографическое видео 1080p с нативным звуком уже в OpenDesign. **7 дней безлимита** на **любом годовом тарифе** и **скидки до 50%** в Чёрную пятницу.",
+    "Start Unlimited": "Начать безлимит",
+    "Ends in (MAGI-2 modal)": "До конца",
+    "Close MAGI-2 launch popup": "Закрыть окно акции"
   },
   "es": {
     "Black Friday campaign banner": "Banner de la campaña Black Friday",
@@ -214,7 +256,14 @@
     "Generate code animations from one prompt": "Genera animaciones en código desde un solo prompt",
     "Animate type & graphics on a timeline": "Anima tipografía y gráficos en una línea de tiempo",
     "Pricing": "Precios",
-    "Upgrade": "Mejorar"
+    "Upgrade": "Mejorar",
+    "MAGI-2 first launch 7 days unlimited Black Friday offer": "Estreno MAGI-2: oferta Black Friday 7 días ilimitados",
+    "7 Days Unlimited!": "¡7 días ilimitados!",
+    "First Launch · MAGI-2": "Estreno · MAGI-2",
+    "1080p cinema video with native audio is live on OpenDesign. Unlock **7 days unlimited** on **any annual plan**, with Black Friday plans **up to 50% OFF**.": "Vídeo cinematográfico 1080p con audio nativo ya en OpenDesign. Desbloquea **7 días ilimitados** en **cualquier plan anual**, con **hasta 50 % dto.** en Black Friday.",
+    "Start Unlimited": "Empezar sin límites",
+    "Ends in (MAGI-2 modal)": "Termina en",
+    "Close MAGI-2 launch popup": "Cerrar ventana de Black Friday"
   },
   "pt-BR": {
     "Black Friday campaign banner": "Banner da campanha Black Friday",
@@ -245,7 +294,14 @@
     "Generate code animations from one prompt": "Gere animações em código com um único prompt",
     "Animate type & graphics on a timeline": "Anime tipografia e gráficos na linha do tempo",
     "Pricing": "Preços",
-    "Upgrade": "Fazer upgrade"
+    "Upgrade": "Fazer upgrade",
+    "MAGI-2 first launch 7 days unlimited Black Friday offer": "Estreia MAGI-2: oferta Black Friday 7 dias ilimitados",
+    "7 Days Unlimited!": "7 dias ilimitados!",
+    "First Launch · MAGI-2": "Estreia · MAGI-2",
+    "1080p cinema video with native audio is live on OpenDesign. Unlock **7 days unlimited** on **any annual plan**, with Black Friday plans **up to 50% OFF**.": "Vídeo cinematográfico 1080p com áudio nativo chegou ao OpenDesign. Libere **7 dias ilimitados** em **qualquer plano anual**, com **até 50% OFF** na Black Friday.",
+    "Start Unlimited": "Começar ilimitado",
+    "Ends in (MAGI-2 modal)": "Termina em",
+    "Close MAGI-2 launch popup": "Fechar janela da Black Friday"
   },
   "it": {
     "Black Friday campaign banner": "Banner della campagna Black Friday",
@@ -276,7 +332,14 @@
     "Generate code animations from one prompt": "Genera animazioni in codice da un solo prompt",
     "Animate type & graphics on a timeline": "Anima testi e grafiche su una timeline",
     "Pricing": "Prezzi",
-    "Upgrade": "Upgrade"
+    "Upgrade": "Upgrade",
+    "MAGI-2 first launch 7 days unlimited Black Friday offer": "Anteprima MAGI-2: offerta Black Friday 7 giorni illimitati",
+    "7 Days Unlimited!": "7 giorni illimitati!",
+    "First Launch · MAGI-2": "Anteprima · MAGI-2",
+    "1080p cinema video with native audio is live on OpenDesign. Unlock **7 days unlimited** on **any annual plan**, with Black Friday plans **up to 50% OFF**.": "Video cinema 1080p con audio nativo ora su OpenDesign. Sblocca **7 giorni illimitati** su **qualsiasi piano annuale**, con **fino al 50% di sconto** per il Black Friday.",
+    "Start Unlimited": "Inizia senza limiti",
+    "Ends in (MAGI-2 modal)": "Scade tra",
+    "Close MAGI-2 launch popup": "Chiudi finestra Black Friday"
   },
   "tr": {
     "Black Friday campaign banner": "Black Friday kampanya banner'ı",
@@ -307,6 +370,13 @@
     "Generate code animations from one prompt": "Tek istemle kod animasyonları oluşturun",
     "Animate type & graphics on a timeline": "Zaman çizelgesinde tipografi ve grafikleri canlandırın",
     "Pricing": "Fiyatlar",
-    "Upgrade": "Yükselt"
+    "Upgrade": "Yükselt",
+    "MAGI-2 first launch 7 days unlimited Black Friday offer": "MAGI-2 ilk çıkış 7 gün sınırsız Black Friday kampanyası",
+    "7 Days Unlimited!": "7 Gün Sınırsız!",
+    "First Launch · MAGI-2": "İlk Çıkış · MAGI-2",
+    "1080p cinema video with native audio is live on OpenDesign. Unlock **7 days unlimited** on **any annual plan**, with Black Friday plans **up to 50% OFF**.": "Doğal sesli 1080p sinematik video artık OpenDesign’da. **Tüm yıllık planlarda** **7 gün sınırsız** erişim ve Black Friday’de **%50’ye varan indirim**.",
+    "Start Unlimited": "Sınırsız Başla",
+    "Ends in (MAGI-2 modal)": "Süre sonu",
+    "Close MAGI-2 launch popup": "Kampanya penceresini kapat"
   }
 }

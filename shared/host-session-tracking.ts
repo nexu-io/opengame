@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { uuid } from '../tracking/core.ts';
 import type { HostContext } from '../tracking/host.ts';
 import { withProcessLock } from './process-lock.ts';
+import { workbuddyConfigDirectory } from '../scripts/workbuddy-config.mjs';
 import {
   ERROR_CODE_PATTERN,
   SESSION_ID_PATTERN,
@@ -108,8 +109,8 @@ function resolveClaudeConfigDir(explicit?: string, env: NodeJS.ProcessEnv = proc
 }
 
 function resolveWorkbuddyConfigDir(explicit?: string, env: NodeJS.ProcessEnv = process.env): string {
-  const configured = explicit?.trim() || env.WORKBUDDY_CONFIG_DIR?.trim();
-  return configured ? path.resolve(configured) : path.join(os.homedir(), '.workbuddy');
+  const configured = explicit?.trim();
+  return configured ? path.resolve(configured) : workbuddyConfigDirectory(os.homedir(), env);
 }
 
 function parseTraceIdFromTraceparent(value: unknown): string | undefined {

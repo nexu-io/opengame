@@ -96,7 +96,8 @@ if (args[0] === 'login') {
         console.error('Error: write credentials: private local path');
         process.exit(1);
       }
-      const profile = { controlKey: 'synthetic-private-control-key', controlKeyId: 'fixture-control-key-id', runtimeKey: 'synthetic-private-account-key',
+      const apiUrl = existsSync(path.join(home, 'fixture-api-url')) ? readFileSync(path.join(home, 'fixture-api-url'), 'utf8').trim() : '';
+      const profile = { ...(apiUrl ? { apiUrl } : {}), controlKey: 'synthetic-private-control-key', controlKeyId: 'fixture-control-key-id', runtimeKey: 'synthetic-private-account-key',
         user: { id: 'fixture-user-id', name: 'Fixture user', email: 'fixture@example.test' } };
       if (scenario === 'login-incomplete') delete profile.controlKey;
       confirm(profile, scenario, saved);

@@ -459,10 +459,21 @@ export function classifyRejectionError(error: unknown): {
     return { reason: 'REFERENCE_LIMIT_EXCEEDED', category: 'reference_invalid' };
   }
   if (lower.includes('pinned references or parameters.images')) return { reason: 'REFERENCE_CONFLICT', category: 'reference_invalid' };
+  const upstreamCode = extractUpstreamErrorCode(error);
+  const status = extractHttpStatus(error);
+  if (code === 'REFERENCE_TOO_LARGE' || upstreamCode === 'asset_too_large' || status === 413) {
+    return { reason: 'REFERENCE_TOO_LARGE', category: 'reference_invalid' };
+  }
+  if (code === 'REFERENCE_INVALID_FORMAT' || upstreamCode === 'unsupported_media_type' || status === 415) {
+    return { reason: 'REFERENCE_INVALID_FORMAT', category: 'reference_invalid' };
+  }
+  if (code === 'REFERENCE_ENCODER_UNAVAILABLE') {
+    return { reason: 'NATIVE_RUNTIME_MISSING', category: 'runtime_unavailable' };
+  }
   if (lower.includes('reference') && (lower.includes('png, jpeg') || lower.includes('format'))) {
     return { reason: 'REFERENCE_INVALID_FORMAT', category: 'reference_invalid' };
   }
-  if (lower.includes('reference') && (lower.includes('20 mib') || lower.includes('2 mib') || lower.includes('too large'))) {
+  if (lower.includes('reference') && (lower.includes('30 mib') || lower.includes('20 mib') || lower.includes('20 mb') || lower.includes('2 mib') || lower.includes('upload size limit') || lower.includes('upload limit') || lower.includes('too large'))) {
     return { reason: 'REFERENCE_TOO_LARGE', category: 'reference_invalid' };
   }
   if (lower.includes('asset_not_found') || lower.includes('asset_version_not_found') || lower.includes('asset versions')) {

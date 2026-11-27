@@ -71,10 +71,10 @@ test('reference-image and audio guidance is translated in every interface langua
   }
   const refAnswer = mcpFaq.find(([question]) => question === 'Can I generate from a reference image?')![1];
   assert.match(refAnswer, /OpenDesign Cloud and account video models with first-frame support can animate one image/);
-  assert.match(refAnswer, /2 MiB/);
+  assert.match(refAnswer, /30 MiB/);
   const mediaTool = phase1Tools.find(tool => tool.name === 'openmotion_media_use')!;
-  assert.match(mediaTool.description, /2 MiB for OpenDesign account\/Cloud.*20 MB/);
-  assert.match((mediaTool.inputSchema.properties as Record<string, { description: string }>).referenceAsset.description, /2 MiB for OpenDesign account\/Cloud.*20 MB/);
+  assert.match(mediaTool.description, /30 MiB for OpenDesign account\/Cloud.*20 MB/);
+  assert.match((mediaTool.inputSchema.properties as Record<string, { description: string }>).referenceAsset.description, /30 MiB for OpenDesign account\/Cloud.*20 MB/);
 });
 
 test('connection guidance exposes the maintained media workflow without asking for credentials', () => {
@@ -212,7 +212,7 @@ test('image feature handbook scenarios cover background removal, relight and ima
   for (const scenario of [removeBg, relight, blend]) {
     assert.match(scenario.prompt, /target=providers/);
     assert.match(scenario.prompt, /action=resume/);
-    assert.match(scenario.prompt, /2 MiB/);
+    assert.match(scenario.prompt, /30 MiB/);
     for (const locale of Object.values(translations) as Record<string, string>[]) {
       assert.ok(locale[scenario.title]?.trim());
       assert.ok(locale[scenario.description]?.trim());
@@ -229,7 +229,7 @@ test('video feature handbook scenarios cover camera control and multi-shot with 
   assert.ok(multiShot.prompt.includes(JSON.stringify(videoFeatureParameters('multi-shot', { provider: 'opendesign', modelId: 'doubao-seedance-2-5-260628' }))));
   for (const scenario of [camera, multiShot]) {
     assert.match(scenario.prompt, /target=providers/);
-    assert.match(scenario.prompt, /2 MiB/);
+    assert.match(scenario.prompt, /30 MiB/);
     assert.match(scenario.prompt, /omit fixed ratio/i);
     for (const locale of Object.values(translations) as Record<string, string>[]) {
       assert.ok(locale[scenario.title]?.trim());

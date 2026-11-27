@@ -1,6 +1,6 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { chmod, copyFile, lstat, mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, open, rename, rm, stat } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -20,11 +20,25 @@ import { validHostContext, type HostContext } from '../tracking/host.ts';
 import { readSettings, writeSettings } from './settings-storage.ts';
 import { planMediaEntitlement } from './account-media.ts';
 import { registeredProvider } from '../shared/provider-registry.ts';
-import { defaultVideoAudioEnabled, resolveGenerationParameters } from '../shared/generation-options.ts';
+import { resolveGenerationParameters } from '../shared/generation-options.ts';
 import { isSfxModel } from '../shared/audio-kind.ts';
-import { apiJson, MAX_MEDIA_BYTES, ProviderError, readCappedBytes, retryRead, streamMedia, withErrorMeta, type Fetcher } from './network.ts';
-import { cloudImageParameters, mediaSubmitHeaders, productionApi, uploadInputs } from './opendesign.ts';
+import { apiJson, MAX_MEDIA_BYTES, ProviderError, readCappedBytes, readUpstreamErrorCode, retryRead, streamMedia, withErrorMeta, type Fetcher } from './network.ts';
+import {
+  buildOpenDesignMediaRequest,
+  cloudImageParameters,
+  mediaSubmitHeaders,
+  OPEN_DESIGN_MEDIA_MODELS_PATH,
+  parseOpenDesignMediaCatalog,
+  productionApi,
+  uploadInputs,
+} from './opendesign.ts';
 import type { ProviderContext } from './providers.ts';
+import {
+  detectReferenceImageMime,
+  OPEN_DESIGN_UPLOAD_LIMIT_REJECTED_MESSAGE,
+  ReferencePreparationError,
+  resolveOpenDesignUploadConstraints,
+} from './reference-upload.ts';
 import { resumableDownload, type DownloadProgress } from './resumable-download.ts';
 import { accountDirectory } from './account-directory.ts';
 import { withProcessLock } from '../shared/process-lock.ts';
@@ -167,7 +181,7 @@ const requestMessages: Record<string, string> = {
   provider_error: 'The model provider could not complete this request. Try again later or choose another model.',
   request_state_unknown: 'OpenDesign could not confirm whether this request ran, so it was not resubmitted. Check your OpenDesign history before retrying.',
   media_execution_unknown: 'OpenDesign could not confirm whether this request ran, so it was not resubmitted. Check your OpenDesign history before retrying.',
-  asset_too_large: 'The reference image is larger than the 2 MiB OpenDesign upload limit.',
+  asset_too_large: OPEN_DESIGN_UPLOAD_LIMIT_REJECTED_MESSAGE,
   unsupported_media_type: 'OpenDesign does not accept this reference image format.',
 };
 const jobMessages = {
@@ -246,7 +260,7 @@ function failureCode(attempt: AccountAttempt, cancelled: boolean): AccountErrorC
   return attempt.exitCode === 130 ? 'interrupted' : 'setup_failed';
 }
 
-/** The account media catalogue does not list these audio models yet, though `audio speech` and `audio music` accept them. */
+/** The account media catalogue does not list these audio models yet, though `/api/v1/media/audio/speech` and `/audio/music` accept them. */
 const builtinAccountAudioModels: readonly DirectoryModel[] = [
   { id: 'account:elevenlabs-v3', provider: 'account', modelId: 'elevenlabs-v3', label: 'ElevenLabs Voice', kind: 'audio', enabled: true, source: 'builtin', mode: 'text-to-speech' },
   { id: 'account:byteplus-tts-2', provider: 'account', modelId: 'byteplus-tts-2', label: 'BytePlus Voice', kind: 'audio', enabled: true, source: 'builtin', mode: 'text-to-speech' },
@@ -305,6 +319,7 @@ export class OpenDesignAccount {
   /** In-flight `logout --retry-pending`. The connector rewrites the credentials file, so sign-in and sign-out wait for it. */
   private revoking?: Promise<void>;
   private revocationChecked = false;
+  private revocationRetryPending = false;
   /** The connector exited with confirmed credentials and the session and model catalogue are being set up. */
   private syncing = false;
   /** Times since the sign-in click, for the attempt record. */
@@ -437,14 +452,25 @@ export class OpenDesignAccount {
   private async profile(): Promise<Profile | undefined> { return (await this.credentials()).profiles?.prod; }
   /** Retries revocations the connector could not deliver at sign-out; the file is removed once nothing is left to revoke. */
   private retryRevocations() {
-    if (this.revoking || this.connecting || this.signingOut) return;
+    if (this.connecting || this.signingOut) return;
+    if (this.revoking) { this.revocationRetryPending = true; return; }
     this.revocationChecked = true;
+    this.revocationRetryPending = false;
     const generation = this.generation;
+    let pending = true;
     this.revoking = this.run(['logout', '--retry-pending', '--json']).then(async output => {
-      if (JSON.parse(output).revocationPending !== false || generation !== this.generation || this.connecting || this.signingOut) return;
+      pending = JSON.parse(output).revocationPending !== false;
+      if (pending || generation !== this.generation || this.connecting || this.signingOut) return;
       const file = await this.credentials(), profile = file.profiles?.prod;
       if (!file.pendingRevocations?.length && !profile?.controlKey && !profile?.runtimeKey && !profile?.pendingLogin) await rm(path.join(this.home, 'config.json'), { force: true });
-    }).catch(() => { /* Still queued; retried on the next refresh. */ }).finally(() => { this.revoking = undefined; });
+    }).catch(() => { /* Still queued; retried on the next refresh. */ }).finally(() => {
+      this.revoking = undefined;
+      if (this.revocationRetryPending && pending && generation === this.generation && !this.connecting && !this.signingOut) {
+        this.retryRevocations();
+      } else {
+        this.revocationRetryPending = false;
+      }
+    });
   }
   /** Support logs omit identities; only successful telemetry may carry the confirmed account ID. */
   private finish(attempt: AccountAttempt, outcome: SignInRecord['outcome'], errorCode?: AccountErrorCode, amrUserId?: string, connector?: ConnectorUnavailable, cancelSource?: 'app' | 'browser') {
@@ -671,7 +697,7 @@ export class OpenDesignAccount {
     if (profile.apiUrl?.replace(/\/$/, '') !== productionApi) {
       return JSON.parse(await this.run(['billing', 'summary', '--format', 'json']));
     }
-    const response = await fetch(productionApi + '/api/v1/billing/summary', {
+    const response = await (this.options.fetcher ?? fetch)(productionApi + '/api/v1/billing/summary', {
       headers: { Authorization: 'Bearer ' + profile.controlKey, Accept: 'application/json' },
       redirect: 'error', signal: AbortSignal.timeout(15_000),
     });
@@ -1024,10 +1050,12 @@ export class OpenDesignAccount {
     const generation = this.generation;
     const identity = await this.identity();
     if (!(await this.profile())?.runtimeKey || !identity || generation !== this.generation) return [];
+    const access = await this.mediaAccess();
     if (!refresh) {
       // Another workspace may have signed in again since this catalogue was cached.
       const stored = this.cachedModels.length && this.cachedIdentity === identity ? this.cachedModels : await readSettings<DirectoryModel[]>(path.join(this.root, 'models.json'), []);
-      return generation === this.generation ? withBuiltinAudio(stored) : [];
+      if (generation !== this.generation) return [];
+      return access ? withBuiltinAudio(stored) : stored.filter(model => model.kind === 'text');
     }
     const requestId = ++this.modelRequestId;
     const data = JSON.parse(await this.run(['model', 'list', '--all', '--format', 'json']));
@@ -1035,45 +1063,19 @@ export class OpenDesignAccount {
     const models: DirectoryModel[] = data.data.filter((row: any) => typeof row.id === 'string' && /^[\w./:-]{1,180}$/.test(row.id)).map((row: any) => ({
       id: 'account:' + row.id, provider: 'account', modelId: row.id, label: String(row.label || row.id), kind: 'text', enabled: row.enabled !== false, source: 'live',
     }));
-    const media = JSON.parse(await this.run(['media', 'models', '--json']));
-    if (!Array.isArray(media.models)) throw new Error('OpenDesign media catalogue is unavailable');
-    for (const row of media.models) {
-      // The connector reports speech, music and sound-effects models as `audio_speech`, `audio_music` and `audio_sound_effects`.
-      const kind = ({ image: 'image', video: 'video', audio_speech: 'audio', audio_music: 'audio', audio_sound_effects: 'audio' } as const)[row.kind as 'image' | 'video' | 'audio_speech' | 'audio_music' | 'audio_sound_effects'];
-      if (typeof row.model !== 'string' || !/^[\w./:-]{1,180}$/.test(row.model) || !kind) continue;
-      const mode = row.kind === 'audio_speech' ? 'text-to-speech' : row.kind === 'audio_music' || row.kind === 'audio_sound_effects' ? 'text-to-audio' : `text-to-${kind}`;
-      // An image model publishes `edits` only when this account is entitled to edit input images.
-      const capabilities = row.capabilities && typeof row.capabilities === 'object' && !Array.isArray(row.capabilities) ? row.capabilities as Record<string, unknown> : undefined;
-      const editable = kind === 'image' && capabilities?.edits === true;
-      const maxInputs = capabilities && Number.isInteger(capabilities.max_input_images) && (capabilities.max_input_images as number) > 0 ? capabilities.max_input_images as number : undefined;
-      models.push({
-        id: 'account:' + row.model, provider: 'account', modelId: row.model, label: row.model, kind, enabled: row.enabled !== false, source: 'live', mode,
-        ...(editable ? { supportsImageReference: true, ...(Number.isInteger(capabilities?.max_input_images) && (capabilities!.max_input_images as number) > 0 ? { maxInputImages: capabilities!.max_input_images as number } : {}) } : {}),
-        ...(kind === 'video' && maxInputs ? { maxInputImages: 1 } : {}),
-        ...(capabilities ? { nativeOptions: capabilities } : {}),
-      });
-    }
-    // Older AMR CLI releases call /api/v1/media/models without ?include_audio=true; probe once directly
-    // with controlKey so newly activated audio_sound_effects models light up without waiting for a CLI upgrade.
-    if (!media.models.some((row: any) => row.kind === 'audio_sound_effects')) {
-      const access = await this.controlAccess().catch(() => undefined);
-      if (access) {
-        const directAudio = await apiJson(
-          this.options.fetcher ?? fetch,
-          `${access.baseUrl}/api/v1/media/models?include_audio=true`,
-          { headers: { Authorization: `Bearer ${access.key}` } },
-          { timeoutMs: 8_000, maxBytes: 1024 * 1024 },
-        ).catch(() => undefined);
-        if (Array.isArray(directAudio?.models)) {
-          for (const row of directAudio.models) {
-            if (row?.kind !== 'audio_sound_effects' || typeof row.model !== 'string' || !/^[\w./:-]{1,180}$/.test(row.model)) continue;
-            const capabilities = row.capabilities && typeof row.capabilities === 'object' && !Array.isArray(row.capabilities) ? row.capabilities as Record<string, unknown> : undefined;
-            models.push({
-              id: 'account:' + row.model, provider: 'account', modelId: row.model, label: row.model, kind: 'audio', enabled: row.enabled !== false, source: 'live', mode: 'text-to-audio',
-              ...(capabilities ? { nativeOptions: capabilities } : {}),
-            });
-          }
-        }
+    // Media discovery shares the exact same production access predicate as 3D (`controlAccess`) and media generation (`mediaAccess`).
+    // Non-production/custom connector profiles do not advertise account media models that direct HTTP generation cannot submit.
+    if (access) {
+      const media = await apiJson(
+        this.options.fetcher ?? fetch,
+        `${access.baseUrl}${OPEN_DESIGN_MEDIA_MODELS_PATH}`,
+        { headers: { Authorization: `Bearer ${access.key}` } },
+        { timeoutMs: 15_000, maxBytes: 16 * 1024 * 1024 },
+      );
+      if (!Array.isArray(media.models)) throw new Error('OpenDesign media catalogue is unavailable');
+      for (const parsed of parseOpenDesignMediaCatalog(media.models, 'account')) {
+        const { modality, ...rest } = parsed;
+        models.push({ ...rest, kind: modality });
       }
     }
     if (generation !== this.generation) return [];
@@ -1084,127 +1086,99 @@ export class OpenDesignAccount {
       this.cachedModels = [...new Map(models.map(model => [model.id, model])).values()]; this.cachedIdentity = identity;
       await writeSettings(path.join(this.root, 'models.json'), this.cachedModels);
     });
-    return generation === this.generation ? withBuiltinAudio(this.cachedModels) : [];
+    return generation === this.generation ? (access ? withBuiltinAudio(this.cachedModels) : this.cachedModels) : [];
   }
   async identity() { await this.adopt(); return (await readSettings<{ id?: string }>(path.join(this.root, 'session.json'), {})).id; }
+  private async mediaAccess(): Promise<{ baseUrl: string; key: string; keyId: string } | undefined> {
+    const profile = await this.profile();
+    if (!signedInProfile(profile) || !profile?.controlKey || !profile.controlKeyId) return undefined;
+    if (profile.apiUrl?.trim().replace(/\/$/, '') !== productionApi) return undefined;
+    return { baseUrl: productionApi, key: profile.controlKey, keyId: profile.controlKeyId };
+  }
   async controlAccess(): Promise<{ baseUrl: string; key: string } | undefined> {
-    const profile = await this.profile();
-    if (!signedInProfile(profile) || !profile?.controlKey || profile.apiUrl?.replace(/\/$/, '') !== productionApi) return undefined;
-    return { baseUrl: productionApi, key: profile.controlKey };
+    const access = await this.mediaAccess();
+    return access ? { baseUrl: access.baseUrl, key: access.key } : undefined;
   }
-  async mediaModels(): Promise<Model[]> {
-    return (await this.models()).filter(model => model.enabled && ['image', 'video', 'audio'].includes(model.kind)).map(model => {
-      const maxInputs = model.kind === 'video' && model.maxInputImages === undefined && Number.isInteger(model.nativeOptions?.max_input_images) && (model.nativeOptions!.max_input_images as number) > 0 ? 1 : model.maxInputImages;
-      return { ...model, ...(maxInputs !== undefined ? { maxInputImages: maxInputs } : {}), modality: model.kind as Model['modality'], mode: model.mode! };
-    });
+  private redactSecret(value: unknown, secret: string): unknown {
+    if (!secret) return value;
+    if (typeof value === 'string') return value.replaceAll(secret, '[redacted]');
+    if (Array.isArray(value)) return value.map(item => this.redactSecret(item, secret));
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k.replaceAll(secret, '[redacted]'), this.redactSecret(v, secret)]));
+    }
+    return value;
   }
-  /** `reference` is the job's snapshotted input image; it edits an image or sets a video's first frame. `references` holds every
-   * snapshotted input image for image jobs submitted directly to the media API. */
-  async generate(job: GenerationJob, directory: string, signal: AbortSignal, progress: (phase: string, id?: string, download?: DownloadProgress) => Promise<void>,
-    reference?: string, references: NonNullable<ProviderContext['references']> = []) {
-    const kind = job.modality, params = resolveGenerationParameters(job.model, job.parameters, !!reference || references.length > 0);
-    if (job.providerOrigin !== await this.identity() || (await this.summary()).state !== 'signed-in') throw new Error(jobMessages.accountChangedBeforeSubmit);
-    const music = kind === 'audio' && job.model.mode === 'text-to-audio';
-    const soundEffects = music && isSfxModel(job.model);
-    if ((reference || references.length) && kind !== 'image' && kind !== 'video') throw new Error('Account reference images are supported for image editing and video first frames only');
-    // TODO(OPEND-5839): interim static parameter allowlist until account submission reads schema.properties dynamically and bypasses fixed vela-cli flags.
-    const allowed = kind === 'image'
-      ? ['aspect_ratio', 'resolution', 'quality', 'size', 'background']
-      : kind === 'video'
-        ? ['ratio', 'resolution', 'duration', 'generate_audio']
-        : soundEffects
-          ? ['duration_seconds', 'loop', 'prompt_influence']
-          : music
-            ? ['duration']
-            : ['voice'];
-    if (Object.keys(params).some(key => !allowed.includes(key))) throw new Error('Unsupported account model parameter');
-    if (soundEffects && job.prompt.trim().length > 450) throw new Error('Sound effects prompt must be at most 450 characters');
-    if (kind === 'audio' && !music && (typeof params.voice !== 'string' || !params.voice)) throw new Error('Choose a voice in parameters.voice');
-    // The connector has no background flag and sends one input image; those image jobs and dedicated sound-effects jobs go to the media API with the account key.
-    const direct = kind === 'image' && (params.background !== undefined || references.length > 1);
-    const directSfx = soundEffects;
-    const operation = kind === 'audio' ? music ? 'music' : 'speech' : kind === 'image' && reference ? 'edit' : 'gen';
-    const referenceArgs = reference ? [kind === 'video' ? '--first-frame' : '--image', reference] : [];
-    const args = [kind, operation, '--model', job.model.modelId, '--prompt', job.prompt, ...referenceArgs, '--no-wait', '--json'];
-    // TODO(OPEND-5839): interim workaround for vela-cli@0.1.10 defaulting omitted --generate-audio to false (apps/cli/internal/commands/media.go:160).
-    const generateAudio = kind === 'video' && params.generate_audio === undefined && defaultVideoAudioEnabled(job.model) ? true : params.generate_audio;
-    for (const [key, value] of Object.entries(direct || directSfx ? {} : params)) {
-      if (key === 'generate_audio') continue;
-      if (typeof value === 'string' || typeof value === 'number') args.push('--' + key.replaceAll('_', '-'), String(value));
-      else throw new Error('Invalid account model parameter');
+  private async normalizeReferences(
+    reference: string | undefined,
+    references: NonNullable<ProviderContext['references']>,
+  ): Promise<NonNullable<ProviderContext['references']>> {
+    if (references.length) return references;
+    if (!reference) return [];
+    const info = await stat(reference);
+    let detectedMime: string | undefined;
+    const handle = await open(reference, 'r');
+    try {
+      const header = Buffer.alloc(16);
+      const { bytesRead } = await handle.read(header, 0, header.length, 0);
+      detectedMime = detectReferenceImageMime(header.subarray(0, bytesRead));
+    } finally {
+      await handle.close();
     }
-    if (generateAudio !== undefined) {
-      if (generateAudio === true) args.push('--generate-audio');
-      else if (generateAudio === false) args.push('--generate-audio=false');
-      else throw new Error('Invalid account model parameter');
-    }
-    // Recovery never submits again, even when the draft or reference file has changed.
-    const submitted = job.remoteId
-      ? { task_id: job.remoteId }
-      : direct
-        ? await this.submitImage(job, params, references, signal, progress)
-        : directSfx
-          ? await this.submitSoundEffect(job, params, signal)
-          : JSON.parse(await this.run(args, signal, {
-              VELA_SOURCE_PRODUCT: 'openmotion', VELA_OPENMOTION_JOB_ID: job.id,
-            }));
-    if (typeof submitted.task_id !== 'string' || !/^[\w-]{1,180}$/.test(submitted.task_id)) throw new Error('Account provider did not return a task ID');
-    const taskId = submitted.task_id;
-    await progress('submitted', taskId);
-    if (kind === 'image') return [await this.imageResult(job, taskId, directory, signal, progress)];
-    if (directSfx) return [await this.audioTaskResult(job, taskId, directory, signal, progress)];
-    const output = path.join(directory, 'account-output.bin');
-    for (;;) {
-      await delay(this.options.pollMs ?? 2000, undefined, { signal });
-      if (job.providerOrigin !== await this.identity()) throw new Error(jobMessages.accountChangedAfterSubmit);
-      // The task already exists and may be billed; a failed read or download must not suggest submitting it again.
-      const task = JSON.parse(await this.run([kind, 'get', taskId, '--output', output, '--json'], signal).catch(error => {
-        // A rejected sign-in still needs its sign-out hint: the account keeps reporting signed-in after a media 401.
-        if (error instanceof AccountRequestError) {
-          throw withErrorMeta(
-            new Error(error.status === 401 || error.code === 'unauthorized' ? jobMessages.resultUnauthorized : jobMessages.resultUnreadable, { cause: error }),
-            { status: error.status, upstreamCode: error.code },
-          );
-        }
-        throw error;
-      }));
-      if (task.task_id !== taskId) throw new Error('Account provider returned an unexpected task');
-      if (task.status === 'succeeded') {
-        const info = await lstat(output);
-        if (!info.isFile() || info.isSymbolicLink() || info.size > 256 * 1024 * 1024) throw new Error('Invalid account media output');
-        return [await readFile(output)];
-      }
-      if (['failed', 'cancelled', 'canceled'].includes(task.status)) {
-        await progress('remote_failed');
-        throw withErrorMeta(new Error(jobMessages.taskFailed), {
-          upstreamCode: typeof task.error?.code === 'string' ? task.error.code : undefined,
-        });
-      }
-      if (!['queued', 'pending', 'running', 'processing', 'submitted'].includes(task.status)) throw new Error(jobMessages.unknownTaskStatus);
-      await progress('generating');
-    }
+    const ext = path.extname(reference).toLowerCase();
+    const mimeType = detectedMime ?? (ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.webp' ? 'image/webp' : 'image/png');
+    return [{ file: reference, mimeType, bytes: info.size }];
   }
-  private async submitImage(job: GenerationJob, parameters: Record<string, unknown>, references: NonNullable<ProviderContext['references']>, signal: AbortSignal,
-    progress: (phase: string) => Promise<void>) {
-    const profile = await this.profile();
-    if (!signedInProfile(profile)) throw withErrorMeta(new Error(requestMessages.unauthorized), { errorSource: 'local' });
-    const fetcher = this.options.fetcher ?? fetch, api = productionApi + '/api/v1/media';
-    const headers = { Authorization: `Bearer ${profile!.controlKey}`, 'Content-Type': 'application/json' };
-    const images = await uploadInputs(fetcher, api, headers, job.id, { references, progress, signal }).catch(error => {
+  private async uploadMediaInputs(
+    access: { baseUrl: string; key: string; keyId: string },
+    job: GenerationJob,
+    parameters: Record<string, unknown>,
+    references: NonNullable<ProviderContext['references']>,
+    signal: AbortSignal,
+    progress: (phase: string) => Promise<void>,
+  ): Promise<string[]> {
+    if (!references.length) return [];
+    const fetcher = this.options.fetcher ?? fetch, api = access.baseUrl + '/api/v1/media';
+    const headers = { Authorization: `Bearer ${access.key}`, 'Content-Type': 'application/json' };
+    return uploadInputs(
+      fetcher,
+      api,
+      headers,
+      job.id,
+      { references, progress, signal },
+      resolveOpenDesignUploadConstraints(job, parameters),
+    ).catch(error => {
+      if (error instanceof ReferencePreparationError) throw error;
       // Only AMR API rejections (ProviderError) map to account messages; presigned storage PUT failures stay storage errors.
       if (error instanceof ProviderError) {
         if (error.status === 401 || error.status === 403) throw withErrorMeta(new Error(requestMessages.unauthorized), { status: error.status, upstreamCode: error.upstreamCode, errorSource: 'api' });
         if (error.status === 413) throw withErrorMeta(new Error(requestMessages.asset_too_large), { status: error.status, upstreamCode: error.upstreamCode ?? 'asset_too_large', errorSource: 'api' });
+        if (error.status === 415) throw withErrorMeta(new Error(requestMessages.unsupported_media_type), { status: error.status, upstreamCode: error.upstreamCode ?? 'unsupported_media_type', errorSource: 'api' });
         throw withErrorMeta(new Error(jobMessages.service), { status: error.status, upstreamCode: error.upstreamCode, errorSource: 'api' });
       }
       throw error;
     });
+  }
+  private async postMedia(
+    access: { baseUrl: string; key: string; keyId: string },
+    endpoint: string,
+    payload: Record<string, unknown>,
+    job: GenerationJob,
+    signal: AbortSignal,
+    progress: (phase: string) => Promise<void>,
+  ): Promise<{ task_id?: unknown }> {
+    const fetcher = this.options.fetcher ?? fetch, api = access.baseUrl + '/api/v1/media';
+    const headers = { Authorization: `Bearer ${access.key}`, 'Content-Type': 'application/json' };
     await progress('submitting');
+    signal.throwIfAborted();
+    const currentAccess = await this.mediaAccess();
+    if (job.providerOrigin !== await this.identity() || currentAccess?.keyId !== access.keyId) {
+      throw new Error(jobMessages.accountChangedBeforeSubmit);
+    }
     let response: Response;
     try {
-      response = await fetcher(api + (images.length ? '/images/edits' : '/images/generations'), {
-        method: 'POST', headers: { ...headers, ...mediaSubmitHeaders(productionApi, job.id) }, redirect: 'error', signal,
-        body: JSON.stringify({ ...cloudImageParameters(parameters), model: job.model.modelId, prompt: job.prompt, ...(images.length ? { images } : {}) }),
+      response = await fetcher(api + endpoint, {
+        method: 'POST', headers: { ...headers, ...mediaSubmitHeaders(access.baseUrl, job.id) }, redirect: 'error', signal,
+        body: JSON.stringify(payload),
       });
     } catch (error) { if (signal.aborted) throw error; throw new Error(jobMessages.connection, { cause: error }); }
     // Only the service error code is kept; the response text can echo the prompt.
@@ -1218,42 +1192,174 @@ export class OpenDesignAccount {
     }
     return body ?? {};
   }
-  private async submitSoundEffect(job: GenerationJob, parameters: Record<string, unknown>, signal: AbortSignal) {
-    const access = await this.controlAccess();
-    if (!access) throw withErrorMeta(new Error(requestMessages.unauthorized), { errorSource: 'local' });
-    const fetcher = this.options.fetcher ?? fetch, api = access.baseUrl + '/api/v1/media';
-    const headers = { Authorization: `Bearer ${access.key}`, 'Content-Type': 'application/json' };
-    let response: Response;
-    try {
-      response = await fetcher(api + '/audio/sound-effects', {
-        method: 'POST', headers: { ...headers, ...mediaSubmitHeaders(access.baseUrl, job.id) }, redirect: 'error', signal,
-        body: JSON.stringify({ model: job.model.modelId, parameters: { ...parameters, text: job.prompt } }),
-      });
-    } catch (error) { if (signal.aborted) throw error; throw new Error(jobMessages.connection, { cause: error }); }
-    const body = await response.json().catch(() => undefined) as { task_id?: unknown; error?: string | { code?: unknown }; code?: unknown } | undefined;
-    if (!response.ok) {
-      const code = typeof body?.error === 'string' ? body.error : String(body?.error?.code ?? body?.code ?? '');
-      throw withErrorMeta(
-        new Error((Object.hasOwn(requestMessages, code) ? requestMessages[code] : undefined) ?? (response.status === 401 ? requestMessages.unauthorized : response.status === 429 ? requestMessages.tier_limit_exceeded : jobMessages.service)),
-        { status: response.status, upstreamCode: code || undefined, errorSource: 'api' },
-      );
-    }
-    return body ?? {};
+  async mediaModels(): Promise<Model[]> {
+    return (await this.models()).filter(model => model.enabled && ['image', 'video', 'audio'].includes(model.kind)).map(model => {
+      const maxInputs = model.kind === 'video' && model.maxInputImages === undefined && Number.isInteger(model.nativeOptions?.max_input_images) && (model.nativeOptions!.max_input_images as number) > 0 ? 1 : model.maxInputImages;
+      return { ...model, ...(maxInputs !== undefined ? { maxInputImages: maxInputs } : {}), modality: model.kind as Model['modality'], mode: model.mode! };
+    });
   }
-  private async audioTaskResult(job: GenerationJob, taskId: string, directory: string, signal: AbortSignal,
-    progress: (phase: string, id?: string, download?: DownloadProgress) => Promise<void>) {
+  /** `reference` is the job's snapshotted input image; it edits an image or sets a video's first frame. `references` holds every
+   * snapshotted input image. All account media generation (image, video, speech, music, sound effects) submits, polls, and downloads
+   * directly via the OpenDesign media HTTP API using the account control key. */
+  async generate(
+    job: GenerationJob,
+    directory: string,
+    signal: AbortSignal,
+    progress: (phase: string, id?: string, download?: DownloadProgress) => Promise<void>,
+    reference?: string,
+    references: NonNullable<ProviderContext['references']> = [],
+    onResult?: (data: Record<string, unknown>, remoteTerminal?: boolean) => Promise<void>,
+  ) {
+    const kind = job.modality, params = resolveGenerationParameters(job.model, job.parameters, !!reference || references.length > 0);
+    if (job.providerOrigin !== await this.identity() || (await this.summary()).state !== 'signed-in') throw new Error(jobMessages.accountChangedBeforeSubmit);
+    const music = kind === 'audio' && job.model.mode === 'text-to-audio';
+    const soundEffects = music && isSfxModel(job.model);
+    const speech = kind === 'audio' && !music;
+    if ((reference || references.length) && kind !== 'image' && kind !== 'video') throw new Error('Account reference images are supported for image editing and video first frames only');
+    if ('images' in params) throw new Error('Account reference images must use pinned references');
+    // Speech-only parameters never belong on music or sound-effects models.
+    if (music && 'voice' in params) throw new Error('Unsupported account model parameter');
+    if (soundEffects && job.prompt.trim().length > 450) throw new Error('Sound effects prompt must be at most 450 characters');
+    if (music && !soundEffects && !job.prompt.trim()) throw new Error('Music generation requires a non-empty prompt');
+    if (speech && (typeof params.voice !== 'string' || !params.voice.trim())) throw new Error('Choose a voice in parameters.voice');
+    if (kind === 'video' && params.generate_audio !== undefined && typeof params.generate_audio !== 'boolean') throw new Error('Invalid account model parameter');
+    // Recovery never submits again, even when the draft or reference file has changed.
+    let submitted: { task_id?: unknown };
+    if (job.remoteId) {
+      submitted = { task_id: job.remoteId };
+    } else {
+      const access = await this.mediaAccess();
+      if (!access) throw withErrorMeta(new Error(requestMessages.unauthorized), { errorSource: 'local' });
+      if (job.providerOrigin !== await this.identity()) throw new Error(jobMessages.accountChangedBeforeSubmit);
+      if (kind === 'image') cloudImageParameters(params);
+      const inputReferences = kind === 'audio'
+        ? []
+        : kind === 'video'
+          ? (await this.normalizeReferences(reference, references)).slice(0, 1)
+          : await this.normalizeReferences(reference, references);
+      const uploadedIds = await this.uploadMediaInputs(access, job, params, inputReferences, signal, progress);
+      const { endpoint, payload } = buildOpenDesignMediaRequest(job, params, uploadedIds);
+      submitted = await this.postMedia(access, endpoint, payload, job, signal, progress);
+    }
+    if (typeof submitted.task_id !== 'string' || !/^[\w-]{1,180}$/.test(submitted.task_id)) throw new Error('Account provider did not return a task ID');
+    const taskId = submitted.task_id;
+    await progress('submitted', taskId);
+    if (kind === 'image') return [await this.imageResult(job, taskId, directory, signal, progress)];
+    if (kind === 'video') return [await this.videoTaskResult(job, taskId, signal, progress, onResult)];
+    return [await this.audioTaskResult(job, taskId, directory, signal, progress, onResult)];
+  }
+  private async videoTaskResult(
+    job: GenerationJob,
+    taskId: string,
+    signal: AbortSignal,
+    progress: (phase: string, id?: string, download?: DownloadProgress) => Promise<void>,
+    onResult?: (data: Record<string, unknown>, remoteTerminal?: boolean) => Promise<void>,
+  ) {
     const read = async () => {
       if (job.providerOrigin !== await this.identity()) throw new Error(jobMessages.accountChangedAfterSubmit);
-      const access = await this.controlAccess();
+      const access = await this.mediaAccess();
       if (!access) throw withErrorMeta(new Error(jobMessages.resultUnauthorized), { errorSource: 'local' });
       try {
         const task = await retryRead(() => apiJson(this.options.fetcher ?? fetch,
-          `${access.baseUrl}/api/v1/media/audio/tasks/${encodeURIComponent(taskId)}`,
-          { headers: { Authorization: `Bearer ${access.key}` }, signal }, { timeoutMs: 15_000, maxBytes: 1024 * 1024 }), signal, 3);
+          `${access.baseUrl}/api/v1/media/videos/tasks/${encodeURIComponent(taskId)}`,
+          { headers: { Authorization: `Bearer ${access.key}` }, signal }, { timeoutMs: 30_000, maxBytes: 1024 * 1024 }), signal, 3);
         if (job.providerOrigin !== await this.identity()) throw new Error(jobMessages.accountChangedAfterSubmit);
         if (task.task_id !== taskId || task.model && task.model !== job.model.modelId) throw new Error(jobMessages.resultUnreadable);
         return task;
       } catch (error) {
+        if (error instanceof Error && error.message === jobMessages.accountChangedAfterSubmit) throw error;
+        const status = (error as { status?: number }).status;
+        const upstreamCode = (error as { upstreamCode?: string }).upstreamCode;
+        if (status === 404 && upstreamCode === 'video_task_not_found') {
+          await progress('remote_failed');
+          await onResult?.({ error: { code: upstreamCode } }, true);
+          throw withErrorMeta(new Error(jobMessages.taskFailed, { cause: error }), { status, upstreamCode, errorSource: 'api' });
+        }
+        if (status === 401) throw withErrorMeta(new Error(jobMessages.resultUnauthorized, { cause: error }), { status, upstreamCode, errorSource: 'api' });
+        throw withErrorMeta(new Error(jobMessages.resultUnreadable, { cause: error }), { status, upstreamCode, errorSource: status !== undefined ? 'api' : undefined });
+      }
+    };
+    for (;;) {
+      const task = await read();
+      if (['failed', 'cancelled', 'canceled', 'expired'].includes(task.status)) {
+        const code = typeof task.error?.code === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(task.error.code)
+          ? task.error.code
+          : task.status === 'expired' ? 'video_content_expired' : undefined;
+        await progress('remote_failed');
+        await onResult?.({ error: { ...(code ? { code } : {}), ...(typeof task.error?.retryable === 'boolean' ? { retryable: task.error.retryable } : {}) } }, true);
+        throw withErrorMeta(new Error(jobMessages.taskFailed), { upstreamCode: code });
+      }
+      if (task.status === 'succeeded') break;
+      if (!['queued', 'pending', 'running', 'processing', 'submitted'].includes(task.status)) throw new Error(jobMessages.unknownTaskStatus);
+      await progress('generating'); await delay(this.options.pollMs ?? 2000, undefined, { signal });
+    }
+    await progress('downloading');
+    try {
+      const bytes = await retryRead(async () => {
+        if (job.providerOrigin !== await this.identity()) throw new Error(jobMessages.accountChangedAfterSubmit);
+        const access = await this.mediaAccess();
+        if (!access) throw withErrorMeta(new Error(jobMessages.resultUnauthorized), { status: 401, errorSource: 'local' });
+        const contentUrl = `${access.baseUrl}/api/v1/media/videos/tasks/${encodeURIComponent(taskId)}/content`;
+        const response = await (this.options.fetcher ?? fetch)(contentUrl, {
+          headers: { Authorization: `Bearer ${access.key}` }, redirect: 'manual', signal,
+        });
+        if ([301, 302, 303, 307, 308].includes(response.status) && response.headers.get('location')) {
+          const targetUrl = new URL(response.headers.get('location')!, contentUrl).href;
+          await response.body?.cancel().catch(() => {});
+          const transport = this.options.download ?? streamMedia;
+          const redirected = await transport(targetUrl, { signal });
+          if (!redirected.ok) throw new ProviderError('Video download failed', redirected.status, undefined, 'download');
+          return readCappedBytes(redirected, MAX_MEDIA_BYTES);
+        }
+        if (!response.ok) {
+          const upstreamCode = await readUpstreamErrorCode(response);
+          throw new ProviderError('Video content failed', response.status, upstreamCode, 'api');
+        }
+        return readCappedBytes(response, MAX_MEDIA_BYTES);
+      }, signal, 3);
+      if (job.providerOrigin !== await this.identity()) throw new Error(jobMessages.accountChangedAfterSubmit);
+      if (!bytes.length) throw new Error(jobMessages.resultUnreadable);
+      return bytes;
+    } catch (error) {
+      if (error instanceof Error && error.message === jobMessages.accountChangedAfterSubmit) throw error;
+      const status = (error as { status?: number }).status;
+      const upstreamCode = (error as { upstreamCode?: string }).upstreamCode;
+      const errorSource = (error as { errorSource?: 'api' | 'download' | 'local' | 'storage' }).errorSource;
+      if (errorSource === 'api' && (upstreamCode === 'video_content_expired' || upstreamCode === 'video_task_not_found' || status === 410)) {
+        const code = upstreamCode ?? 'video_content_expired';
+        await progress('remote_failed');
+        await onResult?.({ error: { code } }, true);
+        throw withErrorMeta(new Error(jobMessages.taskFailed, { cause: error }), { status, upstreamCode: code, errorSource: 'api' });
+      }
+      if (status === 401 && errorSource !== 'download') {
+        throw withErrorMeta(new Error(jobMessages.resultUnauthorized, { cause: error }), { status, upstreamCode, errorSource: errorSource ?? 'api' });
+      }
+      throw withErrorMeta(new Error(jobMessages.resultUnreadable, { cause: error }), { status, upstreamCode, errorSource: errorSource ?? (status !== undefined ? 'download' : undefined) });
+    }
+  }
+  private async audioTaskResult(
+    job: GenerationJob,
+    taskId: string,
+    directory: string,
+    signal: AbortSignal,
+    progress: (phase: string, id?: string, download?: DownloadProgress) => Promise<void>,
+    onResult?: (data: Record<string, unknown>, remoteTerminal?: boolean) => Promise<void>,
+  ) {
+    let lastSecret = '';
+    const read = async () => {
+      if (job.providerOrigin !== await this.identity()) throw new Error(jobMessages.accountChangedAfterSubmit);
+      const access = await this.mediaAccess();
+      if (!access) throw withErrorMeta(new Error(jobMessages.resultUnauthorized), { errorSource: 'local' });
+      lastSecret = access.key;
+      try {
+        const task = await retryRead(() => apiJson(this.options.fetcher ?? fetch,
+          `${access.baseUrl}/api/v1/media/audio/tasks/${encodeURIComponent(taskId)}`,
+          { headers: { Authorization: `Bearer ${access.key}` }, signal }, { timeoutMs: 15_000, maxBytes: 3 * 1024 * 1024 }), signal, 3);
+        if (job.providerOrigin !== await this.identity()) throw new Error(jobMessages.accountChangedAfterSubmit);
+        if (task.task_id !== taskId || task.model && task.model !== job.model.modelId) throw new Error(jobMessages.resultUnreadable);
+        return task;
+      } catch (error) {
+        if (error instanceof Error && error.message === jobMessages.accountChangedAfterSubmit) throw error;
         const status = (error as { status?: number }).status;
         const upstreamCode = (error as { upstreamCode?: string }).upstreamCode;
         if (status === 401) throw withErrorMeta(new Error(jobMessages.resultUnauthorized, { cause: error }), { status, upstreamCode, errorSource: 'api' });
@@ -1271,14 +1377,17 @@ export class OpenDesignAccount {
     for (;;) {
       const task = await read();
       if (['failed', 'cancelled', 'canceled'].includes(task.status)) {
+        const code = typeof task.error?.code === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(task.error.code) ? task.error.code : undefined;
         await progress('remote_failed');
-        throw withErrorMeta(new Error(jobMessages.taskFailed), {
-          upstreamCode: typeof task.error?.code === 'string' ? task.error.code : undefined,
-        });
+        await onResult?.({ error: { ...(code ? { code } : {}), ...(typeof task.error?.retryable === 'boolean' ? { retryable: task.error.retryable } : {}) } }, true);
+        throw withErrorMeta(new Error(jobMessages.taskFailed), { upstreamCode: code });
       }
       if (task.status === 'succeeded') { completedTask = task; break; }
       if (!['queued', 'pending', 'running', 'processing', 'submitted'].includes(task.status)) throw new Error(jobMessages.unknownTaskStatus);
       await progress('generating'); await delay(this.options.pollMs ?? 2000, undefined, { signal });
+    }
+    if (completedTask.result && typeof completedTask.result === 'object' && !Array.isArray(completedTask.result) && JSON.stringify(completedTask.result).length <= 2_000_000) {
+      await onResult?.(this.redactSecret(completedTask.result, lastSecret) as Record<string, unknown>);
     }
     const initialAsset = assetFrom(completedTask);
     if (typeof initialAsset.size === 'number' && Number.isSafeInteger(initialAsset.size) && initialAsset.size >= 24) {
@@ -1311,16 +1420,17 @@ export class OpenDesignAccount {
     progress: (phase: string, id?: string, download?: DownloadProgress) => Promise<void>) {
     const read = async () => {
       if (job.providerOrigin !== await this.identity()) throw new Error(jobMessages.accountChangedAfterSubmit);
-      const profile = await this.profile();
-      if (!signedInProfile(profile)) throw withErrorMeta(new Error(jobMessages.resultUnauthorized), { errorSource: 'local' });
+      const access = await this.mediaAccess();
+      if (!access) throw withErrorMeta(new Error(jobMessages.resultUnauthorized), { errorSource: 'local' });
       try {
         const task = await retryRead(() => apiJson(this.options.fetcher ?? fetch,
-          `${productionApi}/api/v1/media/images/tasks/${encodeURIComponent(taskId)}`,
-          { headers: { Authorization: `Bearer ${profile!.controlKey}` }, signal }, { timeoutMs: 15_000, maxBytes: 1024 * 1024 }), signal, 3);
+          `${access.baseUrl}/api/v1/media/images/tasks/${encodeURIComponent(taskId)}`,
+          { headers: { Authorization: `Bearer ${access.key}` }, signal }, { timeoutMs: 15_000, maxBytes: 1024 * 1024 }), signal, 3);
         if (job.providerOrigin !== await this.identity()) throw new Error(jobMessages.accountChangedAfterSubmit);
         if (task.task_id !== taskId || task.model && task.model !== job.model.modelId) throw new Error(jobMessages.resultUnreadable);
         return task;
       } catch (error) {
+        if (error instanceof Error && error.message === jobMessages.accountChangedAfterSubmit) throw error;
         const status = (error as { status?: number }).status;
         const upstreamCode = (error as { upstreamCode?: string }).upstreamCode;
         if (status === 401) throw withErrorMeta(new Error(jobMessages.resultUnauthorized, { cause: error }), { status, upstreamCode, errorSource: 'api' });

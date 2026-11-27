@@ -97,7 +97,8 @@ it('records an explicit editor visit as Studio after its active project resolves
   const root = createRoot(container);
   try {
     await act(async () => root.render(<I18nProvider><MotionApp /></I18nProvider>));
-    expect(trackMotion).toHaveBeenCalledExactlyOnceWith('page_view', expect.objectContaining({ page_name: 'studio', has_project: true }));
+    const pageViewCalls = vi.mocked(trackMotion).mock.calls.filter(([event]) => event === 'page_view');
+    expect(pageViewCalls).toEqual([['page_view', expect.objectContaining({ page_name: 'studio', has_project: true })]]);
   } finally {
     act(() => root.unmount());
     container.remove();

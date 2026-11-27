@@ -34,6 +34,7 @@ import { GITHUB_REPOSITORY } from './githubRepository';
 import { trackMotion } from './tracking';
 import { ApplicationHeader, WorkspaceUtilityActions } from './ApplicationChrome';
 import { BlackFridayTopBanner } from './BlackFridayTopBanner';
+import { Magi2LaunchModal } from './Magi2LaunchModal';
 import { MonetizationGateModal } from './monetization/MonetizationGateModal';
 import { dismissBannerToday, shouldShowBlackFridayBanner, useExploreCampaign, useMinuteCondition } from './campaignAttribution';
 import type { McpEntry } from './pageTracking';
@@ -636,6 +637,7 @@ function WorkspaceFrameInner({ children, waitForSaves, projectId, sessionId, blo
     </Dialog.Root>
     <OverlayLayer {...overlaySharedProps} placement="portal" />
     <MonetizationGateModal />
+    <Magi2LaunchModal trackingPage={navTrackingPage} suppressed={hostChrome || presentation.embedded} />
   </WorkspaceChromeContext.Provider>;
 }
 

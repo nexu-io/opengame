@@ -133,7 +133,7 @@ export async function packageNpm(output = path.join(root, 'dist/npm-local'), ver
     await writeJSON(path.join(application, 'templates/game-downloads.json'), gameTemplates);
     await writeJSON(path.join(application, 'shared/build-info.json'), { commit, product: resolveNodeProductId() });
     const skills = (await readdir(path.join(application, 'skills'))).sort();
-    for (const name of ['runtime-assets.mjs', 'npm-runtime.mjs', 'npm-hosts.mjs', 'npm-installer.mjs', 'check-installed-mcp.mjs', 'mcp-client.mjs', 'diagnostics.mjs', 'diagnostic-redaction.mjs', 'zip.mjs']) await cp(path.join(root, 'scripts', name), path.join(installer, 'scripts', name));
+    for (const name of ['runtime-assets.mjs', 'npm-runtime.mjs', 'npm-hosts.mjs', 'workbuddy-config.mjs', 'npm-installer.mjs', 'check-installed-mcp.mjs', 'mcp-client.mjs', 'diagnostics.mjs', 'diagnostic-redaction.mjs', 'zip.mjs']) await cp(path.join(root, 'scripts', name), path.join(installer, 'scripts', name));
     // Node cannot strip TypeScript inside node_modules. Ship generated JavaScript
     // for this outer npm entry; the application retains the TypeScript source.
     await writeAtomic(path.join(installer, 'scripts/install-public-skill.mjs'),
