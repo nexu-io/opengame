@@ -62,6 +62,51 @@ function chatWithCards(cards: SuperAgentActionCard[]): SuperAgentChat {
   };
 }
 
+describe('ExecutionTimeline Codex writer conflict', () => {
+  const threadId = '11111111-2222-4333-8444-555555555555';
+
+  it.each([
+    { runtimeId: 'local', writerId: threadId, showCodexLink: true },
+    { runtimeId: undefined, writerId: threadId, showCodexLink: true },
+    { runtimeId: 'bridge:remote-host', writerId: threadId, showCodexLink: false },
+    { runtimeId: 'local', writerId: '11111111-2222-4333-8444-666666666666', showCodexLink: false },
+  ])('only links to the original local chat ($runtimeId, $writerId)', async ({ runtimeId, writerId, showCodexLink }) => {
+    const chat: SuperAgentChat = {
+      ...chatWithCards([]),
+      state: 'failed',
+      runtimeId,
+      threadId,
+      error: `thread ${writerId} already has an active writer`,
+    };
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root!.render(
+        <I18nProvider initialLocale="en">
+          <ExecutionTimeline
+            chat={chat}
+            busy={false}
+            sending={false}
+            onOpenArtifactId={vi.fn()}
+            onPreviewAttachment={vi.fn()}
+            onCopyText={vi.fn()}
+            onApprove={vi.fn()}
+            onContinue={vi.fn()}
+          />
+        </I18nProvider>,
+      );
+    });
+
+    const alert = container.querySelector('.om-sa-error-card');
+    expect(alert?.textContent).toContain('Another Codex process has this chat open for writing.');
+    expect(alert?.querySelector('a')?.getAttribute('href')).toBe(
+      showCodexLink ? `codex://threads/${threadId}` : undefined,
+    );
+    expect(alert?.querySelector('button')?.textContent).toBe(showCodexLink ? undefined : 'Continue');
+  });
+});
+
 describe('ExecutionTimeline inline action cards', () => {
   it('renders deduplicated onboarding/top-up action cards and fires callback on click', async () => {
     const onTriggerActionCard = vi.fn();
