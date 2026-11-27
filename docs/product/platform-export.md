@@ -33,7 +33,7 @@ Platform export prepares a project-specific instruction for an external Agent. T
 - [Export panel](../../studio/src/components/renders/PlatformExportPanel.tsx) owns form state and clipboard interaction. It uses the workspace save barrier, shared radio tiles, selects, buttons, Skeletons and Toast layer. Platform vectors and reusable selection/summary styles belong to the design system, including shipped provenance and licenses.
 - [MCP handbook](../../studio/src/motion/McpConnectionPage.tsx) and [capability catalogue](../../studio/src/motion/mcpCapabilities.ts) expose the scenario separately from atomic tool coverage. No new public tool or execution backend is introduced.
 - Existing `openmotion_get_project`, `openmotion_manage_project`, `openmotion_edit_project`, `openmotion_open_preview` and `openmotion_export_request` provide the execution path. Cancellation remains available through `openmotion_export_cancel`. See the [public MCP contract](../mcp-phase1-tools.md).
-- [AGENTS.md](../../AGENTS.md#mcp-onboarding-and-capability-maintenance) and [CLAUDE.md](../../CLAUDE.md#mcp-onboarding) require the handbook to stay aligned with capability changes and scenarios composed from existing tools.
+- [AGENTS.md](../../AGENTS.md#mcp-onboarding-and-capability-maintenance) requires the handbook to stay aligned with capability changes and scenarios composed from existing tools.
 
 ## Direct downloads and existing scenes
 
