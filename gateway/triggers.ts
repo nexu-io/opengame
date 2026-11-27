@@ -131,7 +131,7 @@ export class TriggerService {
   readonly registryFile: string;
   readonly runsFile: string;
   readonly lockPath: string;
-  private runningTriggerIds = new Set<string>();
+  private runningTriggerCounts = new Map<string, number>();
   private tickBusy = false;
   private closed = false;
 
@@ -356,10 +356,11 @@ export class TriggerService {
       state: 'running',
       startedAt,
     };
-    await this.appendRun(run);
-    this.runningTriggerIds.add(trigger.id);
+    // Manual and MCP runs may overlap; reserve activity before persistence can yield.
+    this.runningTriggerCounts.set(trigger.id, (this.runningTriggerCounts.get(trigger.id) ?? 0) + 1);
 
     try {
+      await this.appendRun(run);
       const context = { payload, trigger: { id: trigger.id, name: trigger.name } };
       let output: unknown;
       let outputSummary = 'Completed';
@@ -430,7 +431,9 @@ export class TriggerService {
       });
       return { run };
     } finally {
-      this.runningTriggerIds.delete(trigger.id);
+      const running = this.runningTriggerCounts.get(trigger.id) ?? 1;
+      if (running > 1) this.runningTriggerCounts.set(trigger.id, running - 1);
+      else this.runningTriggerCounts.delete(trigger.id);
     }
   }
 
@@ -447,7 +450,7 @@ export class TriggerService {
           && trigger.enabled
           && trigger.intervalSeconds
           && (trigger.nextRunAt ?? 0) <= now
-          && !this.runningTriggerIds.has(trigger.id)
+          && !this.runningTriggerCounts.has(trigger.id)
         ) {
           await this.fire(trigger.id, { scheduledAt: now }, host, 'schedule');
           fired += 1;

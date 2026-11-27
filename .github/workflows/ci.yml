@@ -282,7 +282,7 @@ jobs:
             tests/provider-settings.test.ts tests/local-agents.test.ts tests/agent-runtimes.test.ts tests/super-agent-adapters.test.ts \
             tests/web-publish.test.ts tests/content-batch.test.ts tests/design-deploy.test.ts tests/e2e-deploy-game-chain.test.ts tests/mcp-http.test.ts \
             tests/wechat-minigame.test.ts tests/local-game-preview.test.ts \
-            tests/performance-lifecycle.test.ts tests/triggers.test.ts tests/mcp-registry.test.ts tests/public-names.test.ts tests/mcp-runtime.test.ts \
+            tests/performance-lifecycle.test.ts tests/triggers.test.ts tests/trigger-concurrency.test.ts tests/mcp-registry.test.ts tests/public-names.test.ts tests/mcp-runtime.test.ts \
             tests/mcp-upgrade.test.ts tests/preview.test.ts tests/editor-urls.test.ts tests/workspace-studio.test.ts tests/preview-fonts.test.ts \
             tests/studio-render-attempts.test.ts tests/sync.test.ts tests/phase1.test.ts tests/project-archive.test.ts tests/project-management.test.ts \
             tests/design-catalog.test.ts tests/design-mcp.test.ts tests/design-import-asset.test.ts tests/scenario-content.test.ts tests/scenario-runs.test.ts \
