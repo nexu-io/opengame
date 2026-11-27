@@ -58,7 +58,8 @@ const number = (key: string, label: string, value?: number, min?: number, max?: 
 const toggle = (key: string, label: string, value = false): GenerationOption => ({ key, label, kind: 'boolean', default: value });
 const text = (key: string, label: string, required = false): GenerationOption => ({ key, label, kind: 'text', required });
 
-/** OpenDesign speech voices published in the OpenDesign Cloud API docs (https://open-design.ai/help/cloud-api);
+/** TODO(OPEND-5839): interim fallback until GET /api/v1/media/models?include_all=true&expand=schema publishes voice enums.
+ * OpenDesign speech voices published in the OpenDesign Cloud API docs (https://open-design.ai/help/cloud-api);
  * the first entry is the default. Other voice IDs pass through unchecked: the media API publishes no voice list.
  * Seed TTS 2.0 accepts only its 2.0 (`*_uranus_bigtts`) speakers; 1.0 speakers fail upstream with a resource mismatch. */
 const cloudSpeechVoices: Record<string, { value: string; label: string; previewUrl?: string }[]> = {
@@ -116,7 +117,8 @@ export function modelDefaults(model: Model): Record<string, unknown> {
   return voice ? { voice, ...model.defaults } : { ...model.defaults };
 }
 
-/** These Cloud models derive first-frame video geometry from the input image. */
+/** TODO(OPEND-5839): interim fallback until expand=schema expresses per-mode first-frame ratio constraints.
+ * These Cloud models derive first-frame video geometry from the input image. */
 export function usesInputImageRatio(model: Model, hasInputImage: boolean, parameters: Record<string, unknown> = {}): boolean {
   const images = { ...model.defaults, ...parameters }.images;
   const firstFrame = Array.isArray(images) && images.some(image => image && typeof image === 'object' && image.role === 'first_frame');
@@ -299,32 +301,48 @@ function sortResolutions(values: string[]): string[] {
     .map(item => item.value);
 }
 
+// TODO(OPEND-5839): interim fallbacks until AMR publishes capabilities/schema audio state and vela-cli stops defaulting omitted --generate-audio to false.
 const seedance25Models = new Set(['doubao-seedance-2-5-260628', 'doubao-seedance-2-5-flash-261115']);
 const alwaysOnVideoAudioModels = new Set(['wan-2.7', 'magi-2']);
 
-function parseAudioBoolean(value: string): boolean | undefined {
+function parseAudioBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return undefined;
   const normalized = value.trim().toLowerCase();
   if (['true', 'on', 'with_audio', 'yes', '1'].includes(normalized)) return true;
   if (['false', 'off', 'without_audio', 'no', '0'].includes(normalized)) return false;
   return undefined;
 }
 
+function publishedAudioValues(raw: unknown): { values: boolean[]; default?: boolean } | undefined {
+  if (isRecord(raw) && raw.const !== undefined) {
+    const parsed = parseAudioBoolean(raw.const);
+    return parsed !== undefined ? { values: [parsed], default: parsed } : undefined;
+  }
+  if (isRecord(raw) && Array.isArray(raw.enum)) {
+    const values = [...new Set(raw.enum.map(parseAudioBoolean).filter((v): v is boolean => v !== undefined))];
+    if (!values.length) return undefined;
+    const def = parseAudioBoolean(raw.default);
+    return { values, ...(def !== undefined ? { default: def } : {}) };
+  }
+  const envelope = publishedStrings(raw, true);
+  if (!envelope) return undefined;
+  const values = [...new Set(envelope.values.map(parseAudioBoolean).filter((v): v is boolean => v !== undefined))];
+  if (!values.length) return undefined;
+  const def = envelope.default !== undefined ? parseAudioBoolean(envelope.default) : undefined;
+  return { values, ...(def !== undefined ? { default: def } : {}) };
+}
+
 function publishedAudioAlwaysOn(model: Model): boolean {
-  const envelope = publishedStrings(model.nativeOptions?.audio, true);
-  if (!envelope) return false;
-  const parsed = [...new Set(envelope.values.map(parseAudioBoolean).filter((v): v is boolean => v !== undefined))];
-  return parsed.length === 1 && parsed[0] === true;
+  const published = publishedAudioValues(model.nativeOptions?.audio);
+  return Boolean(published && published.values.length === 1 && published.values[0] === true);
 }
 
 function publishedAudioToggle(model: Model): { default: boolean } | undefined {
   if (publishedAudioAlwaysOn(model)) return undefined;
-  const envelope = publishedStrings(model.nativeOptions?.audio, true);
-  if (envelope) {
-    const parsed = envelope.values.map(parseAudioBoolean).filter((v): v is boolean => v !== undefined);
-    if (new Set(parsed).size >= 2) {
-      const def = envelope.default ? parseAudioBoolean(envelope.default) : undefined;
-      return { default: def ?? true };
-    }
+  const published = publishedAudioValues(model.nativeOptions?.audio);
+  if (published && published.values.length >= 2) {
+    return { default: published.default ?? true };
   }
   if (seedance25Models.has(model.modelId)) return { default: true };
   return undefined;
@@ -344,7 +362,8 @@ export function defaultVideoAudioEnabled(model: Model): boolean {
 
 const qualityChoiceOrder = ['low', 'medium', 'high'] as const;
 
-/** The fields each production OpenDesign image model honours, measured 2026-11-20 ("OpenDesign API image model
+/** TODO(OPEND-5839): interim fallback until expand=schema publishes background/profiles for GPT Image 2.6 & Seedream.
+ * The fields each production OpenDesign image model honours, measured 2026-11-20 ("OpenDesign API image model
  * capabilities, tested"). GPT Image 2.6 ignores sizes and ratios; Seedream rejects any ratio but 1:1, so neither
  * shows one. `background` offers only "transparent", the value background removal sends. */
 function openDesignImageFields(model: Model): GenerationOption[] | undefined {
@@ -408,6 +427,7 @@ export function generationOptions(model: Model, hasInputImage = false): Generati
     number('duration_seconds', 'Duration (seconds)', undefined, 0.5, 22, 0.5),
     toggle('loop', 'Seamless loop'),
   ];
+  // TODO(OPEND-5839): interim fallback until audio_sound_effects publishes parameter schema instead of `{}`.
   if (isOpenDesignMedia(model) && model.modality === 'audio' && isSfxModel(model)) fields = [
     number('duration_seconds', 'Duration (seconds)', undefined, 0.5, 30, 0.5),
     toggle('loop', 'Seamless loop'),
@@ -436,6 +456,7 @@ export function generationOptions(model: Model, hasInputImage = false): Generati
     }
     const quality = publishedStrings(model.nativeOptions?.quality);
     if (quality) imageFields.push(choice('quality', 'Quality', quality.values, quality.default));
+    // TODO(OPEND-5839): interim fallback until GPT Image 2.6 publishes background="transparent" in schema.
     if (/^gpt-image-2\.6-/.test(model.modelId)) {
       imageFields.push({ ...choice('background', 'Background', []), choices: [{ value: 'transparent', label: 'Transparent' }] });
     }
@@ -462,6 +483,7 @@ export function generationOptions(model: Model, hasInputImage = false): Generati
   }
   // Speech models without checked voices keep a free voice ID: the API publishes no voice list.
   if (cloudSpeech(model)) { const voices = checkedVoices(model); fields = [voices ? { key: 'voice', label: 'Speech voice', kind: 'choice', choices: voices, default: voices[0].value, allowCustom: true } : text('voice', 'Voice ID', true)]; }
+  // TODO(OPEND-5839): interim fallback until audio_music publishes duration range in schema instead of `{}`.
   // Both account (`--duration`) and Cloud API (`duration` -> `music_length_ms`) accept whole-second music durations.
   // Dedicated sound-effects models (e.g. elevenlabs-sound-v3) use /audio/sound-effects with duration_seconds/loop/prompt_influence instead.
   if (isOpenDesignMedia(model) && model.modality === 'audio' && model.mode === 'text-to-audio' && !isSfxModel(model)) {

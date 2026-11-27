@@ -555,7 +555,7 @@ export const defaultCapabilities: readonly CapabilityDefinition[] = [
     executor: {
       kind: 'prompt-preset',
       providers: openDesignFeatureProviders,
-      models: ['doubao-seedance-2-5-260628', 'doubao-seedance-2-5-flash-261115', 'wan-2.7'],
+      models: ['doubao-seedance-2-5-260628', 'magi-2', 'doubao-seedance-2-5-flash-261115', 'wan-2.7'],
       modelRequires: 'video-text-to-video',
       recommendedModel: 'doubao-seedance-2-5-260628',
       mode: 'text-to-video',
@@ -576,7 +576,7 @@ export const defaultCapabilities: readonly CapabilityDefinition[] = [
     executor: {
       kind: 'prompt-preset',
       providers: openDesignFeatureProviders,
-      models: ['doubao-seedance-2-5-260628', 'doubao-seedance-2-5-flash-261115', 'wan-2.7'],
+      models: ['doubao-seedance-2-5-260628', 'magi-2', 'doubao-seedance-2-5-flash-261115', 'wan-2.7'],
       modelRequires: 'video-text-to-video',
       recommendedModel: 'doubao-seedance-2-5-260628',
       mode: 'text-to-video',
@@ -598,7 +598,7 @@ export const defaultCapabilities: readonly CapabilityDefinition[] = [
     executor: {
       kind: 'prompt-preset',
       providers: openDesignFeatureProviders,
-      models: ['doubao-seedance-2-5-260628', 'doubao-seedance-2-5-flash-261115', 'wan-2.7'],
+      models: ['doubao-seedance-2-5-260628', 'magi-2', 'doubao-seedance-2-5-flash-261115', 'wan-2.7'],
       modelRequires: 'video-text-to-video',
       recommendedModel: 'doubao-seedance-2-5-260628',
       mode: 'text-to-video',

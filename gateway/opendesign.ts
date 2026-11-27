@@ -88,6 +88,7 @@ function inputImages(row: any): Partial<Model> {
   const capabilities = row.capabilities && typeof row.capabilities === 'object' && !Array.isArray(row.capabilities) ? row.capabilities as Record<string, unknown> : undefined;
   if (!capabilities) return {};
   const max = Number.isInteger(capabilities.max_input_images) && (capabilities.max_input_images as number) > 0 ? capabilities.max_input_images as number : undefined;
+  // TODO(OPEND-5839): remove openDesignImageReferenceCap fallback once expand=schema guarantees max_input_images on all edit-capable image models.
   if (row.kind === 'image' && capabilities.edits === true) return { nativeOptions: capabilities, supportsImageReference: true, maxInputImages: max ?? openDesignImageReferenceCap(row.model) ?? 1 };
   // Only the first-frame role is implemented; the provider maximum stays visible in nativeOptions.
   if (row.kind === 'video' && max) return { nativeOptions: capabilities, maxInputImages: 1 };

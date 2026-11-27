@@ -1169,3 +1169,70 @@ test('Magi-2 video compatibility: capabilities, always-on audio, first-frame fix
     (err: any) => err.status === 429 && err.upstreamCode === 'video_concurrency_limit_exceeded',
   );
 }));
+
+test('OPEND-5839 forward-compat audio JSON Schema shapes and Magi-2 live-first video feature bounds', async () => {
+  const { defaultVideoAudioEnabled, videoAudioAlwaysOn } = await import('../shared/generation-options.ts');
+  const { videoFeatureParameters } = await import('../shared/video-features.ts');
+  const { capabilitySupportsModel, findCapability } = await import('../shared/capability-registry.ts');
+
+  // JSON Schema const: true and single-value enum: [true] mark unknown video models as always-on audio without hardcoding.
+  for (const audio of [{ const: true }, { enum: [true], default: true }]) {
+    const model: Model = {
+      id: 'opendesign:future-schema-video',
+      provider: 'opendesign',
+      modelId: 'future-schema-video',
+      label: 'Future Schema Video',
+      modality: 'video',
+      mode: 'text-to-video',
+      source: 'live',
+      nativeOptions: { audio, durations: [4, 5] },
+    };
+    assert.equal(videoAudioAlwaysOn(model), true);
+    assert.equal(defaultVideoAudioEnabled(model), true);
+    assert.equal(generationOptions(model)?.fields.some(f => f.key === 'generate_audio'), false);
+    assert.throws(() => validateGenerationOptions(model, { duration: 4, generate_audio: false }), /does not support generate_audio=false/);
+  }
+
+  // JSON Schema enum: [true, false] exposes a toggle honoring its published default.
+  const toggleModel: Model = {
+    id: 'opendesign:future-toggle-video',
+    provider: 'opendesign',
+    modelId: 'future-toggle-video',
+    label: 'Future Toggle Video',
+    modality: 'video',
+    mode: 'text-to-video',
+    source: 'live',
+    nativeOptions: { audio: { enum: [true, false], default: false }, durations: [5, 10] },
+  };
+  assert.equal(videoAudioAlwaysOn(toggleModel), false);
+  assert.equal(defaultVideoAudioEnabled(toggleModel), false);
+  const toggleField = generationOptions(toggleModel)?.fields.find(f => f.key === 'generate_audio');
+  assert.equal(toggleField?.kind, 'boolean');
+  assert.equal(toggleField?.default, false);
+
+  // Magi-2 live 4-5s capabilities and offline fallback do not inject unsupported multi-shot duration=10; live 4-30s wins when published.
+  const magiLiveShort: Model = {
+    id: 'opendesign:magi-2', provider: 'opendesign', modelId: 'magi-2', label: 'Magi-2',
+    modality: 'video', mode: 'text-to-video', source: 'live',
+    nativeOptions: { durations: { values: [4, 5], default: 4 }, resolutions: ['1080p'], ratios: ['16:9'] },
+  };
+  assert.deepEqual(videoFeatureParameters('multi-shot', magiLiveShort), {});
+  const magiOffline: Model = {
+    id: 'opendesign:magi-2', provider: 'opendesign', modelId: 'magi-2', label: 'Magi-2',
+    modality: 'video', mode: 'text-to-video', source: 'builtin',
+  };
+  assert.deepEqual(videoFeatureParameters('multi-shot', magiOffline), {});
+  const magiLiveLong: Model = {
+    id: 'opendesign:magi-2', provider: 'opendesign', modelId: 'magi-2', label: 'Magi-2',
+    modality: 'video', mode: 'text-to-video', source: 'live',
+    nativeOptions: { durations: { values: [4, 5, 6, 7, 8, 9, 10], default: 5 }, resolutions: ['1080p'], ratios: ['16:9'] },
+  };
+  assert.deepEqual(videoFeatureParameters('multi-shot', magiLiveLong), { duration: 10 });
+
+  // Video prompt-preset capabilities include and match live magi-2.
+  for (const id of ['camera-control', 'multi-shot', 'native-audio'] as const) {
+    const cap = findCapability(id)!;
+    assert.ok(cap.executor.kind === 'prompt-preset' && cap.executor.models.includes('magi-2'), `${id} should list magi-2`);
+    assert.equal(capabilitySupportsModel(cap, magiLiveShort), true);
+  }
+});

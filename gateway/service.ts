@@ -568,6 +568,7 @@ export class ModelGateway {
         try {
           const sources: { asset?: { assetId: string; versionId: string }; projectPath?: string }[] = input.referenceAsset ? [{ projectPath: input.referenceAsset }]
             : (input.library?.references ?? []).map(asset => ({ asset }));
+          // TODO(OPEND-5839): interim hardcoded 2 MiB OpenDesign reference upload cap until expand=schema publishes per-model media limits.
           const openDesignUpload = ['account', 'opendesign'].includes(model.provider);
           const maxReferenceBytes = openDesignUpload ? 2 * 1024 * 1024 : 20 * 1024 * 1024;
           for (const [index, item] of sources.entries()) {

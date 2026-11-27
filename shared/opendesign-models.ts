@@ -23,7 +23,8 @@ export const openDesignModels: readonly { modelId: string; label: string; modali
 
 export const openDesignModelLabel = (modelId: string) => openDesignModels.find(model => model.modelId === modelId)?.label;
 
-/** Most reference images each OpenDesign image model accepts on /images/edits, measured 2026-11-20
+/** TODO(OPEND-5839): interim fallback until every image model publishes max_input_images in expand=schema.
+ * Most reference images each OpenDesign image model accepts on /images/edits, measured 2026-11-20
  * ("OpenDesign API image model capabilities, tested"). Seedream 5.5 rejects two or more with HTTP 400. */
 const openDesignImageReferenceCaps: Record<string, number> = {
   'gpt-image-2.6-sunburst': 16, 'gpt-image-2.6-flare': 16, 'seedream-5.0-flash': 10, 'seedream-5.5': 1,

@@ -18,13 +18,15 @@ export type OpenDesignVideoEntry = {
 /**
  * OpenDesign video models verified against core/amr + live API.
  * Order reflects menu priority: flagship & newly onboarded models first.
+ * TODO(OPEND-5839): `durations` and `resolutions` below are offline-only fallback bounds;
+ * live `/api/v1/media/models` capabilities always take precedence in `videoFeatureParameters()`.
  */
 export const openDesignVideoModels: readonly OpenDesignVideoEntry[] = [
   {
     modelId: 'doubao-seedance-2-5-260628',
     label: 'Seedance 2.5',
     badge: 'Popular',
-    tagline: '4–30s cinematic video up to 1080p with native audio.',
+    tagline: 'Cinematic video up to 1080p with native audio.',
     durations: { min: 4, max: 30, default: 5 },
     resolutions: ['480p', '720p', '1080p'],
   },
@@ -32,15 +34,15 @@ export const openDesignVideoModels: readonly OpenDesignVideoEntry[] = [
     modelId: 'magi-2',
     label: 'Magi-2',
     badge: 'New',
-    tagline: '4–30s 1080p cinematic video with built-in synchronized audio.',
-    durations: { min: 4, max: 30, default: 5 },
+    tagline: '1080p cinematic video with built-in synchronized audio.',
+    durations: { min: 4, max: 5, default: 4 },
     resolutions: ['1080p'],
   },
   {
     modelId: 'doubao-seedance-2-5-flash-261115',
     label: 'Seedance 2.5 Flash',
     badge: 'New',
-    tagline: 'Fast 4–30s generation at 480p/720p with native audio.',
+    tagline: 'Fast generation at 480p/720p with native audio.',
     durations: { min: 4, max: 30, default: 5 },
     resolutions: ['480p', '720p'],
   },
@@ -48,7 +50,7 @@ export const openDesignVideoModels: readonly OpenDesignVideoEntry[] = [
     modelId: 'wan-2.7',
     label: 'Wan 2.7',
     badge: 'Popular',
-    tagline: '2–15s 720p/1080p video with built-in synchronized audio.',
+    tagline: '720p/1080p video with built-in synchronized audio.',
     durations: { min: 2, max: 15, default: 5 },
     resolutions: ['720p', '1080p'],
   },
