@@ -1376,6 +1376,166 @@ test('account video and speech recovery resumes polling the original HTTP task w
   assert.equal(media.submissions.length, 2, 'speech resume must not resubmit');
 }));
 
+test('account video 302 redirect works with real Node fetch without leaking Authorization, and expired/CDN-401 errors classify accurately', t => fixture(async store => {
+  const { createServer } = await import('node:http');
+  const { resumableJob } = await import('../shared/gateway.ts');
+  const mp4 = await mediaBytes('video');
+  const cdnAuthHeaders: Array<string | undefined> = [];
+  let mode: 'redirect' | 'expired-status' | 'expired-content' | 'cdn-401' = 'redirect';
+  const server = createServer((req, res) => {
+    if (req.url === '/cdn/video.mp4') {
+      cdnAuthHeaders.push(req.headers.authorization);
+      if (mode === 'cdn-401') {
+        res.writeHead(401, { 'content-type': 'text/plain' });
+        res.end('expired signed cdn url');
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'video/mp4', 'content-length': String(mp4.length) });
+      res.end(mp4);
+      return;
+    }
+    if (req.url === '/api/v1/media/videos/tasks' && req.method === 'POST') {
+      res.writeHead(202, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ task_id: 'vt_real_1', status: 'queued' }));
+      return;
+    }
+    if (req.url === '/api/v1/media/videos/tasks/vt_real_1' && req.method === 'GET') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ task_id: 'vt_real_1', model: 'wan-2.7', status: mode === 'expired-status' ? 'expired' : 'succeeded' }));
+      return;
+    }
+    if (req.url === '/api/v1/media/videos/tasks/vt_real_1/content' && req.method === 'GET') {
+      assert.equal(req.headers.authorization, 'Bearer test-control');
+      if (mode === 'expired-content') {
+        res.writeHead(410, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: { code: 'video_content_expired' } }));
+        return;
+      }
+      const addr = server.address();
+      const port = typeof addr === 'object' && addr ? addr.port : 0;
+      res.writeHead(302, { location: `http://127.0.0.1:${port}/cdn/video.mp4` });
+      res.end();
+      return;
+    }
+    res.writeHead(404).end();
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
+  t.after(() => server.close());
+  const port = (server.address() as { port: number }).port;
+  const localOrigin = `http://127.0.0.1:${port}`;
+
+  // Route productionApi requests to the local HTTP server through REAL Node global fetch (preserving redirect: 'manual' semantics).
+  const realFetch: Fetcher = (input, init) => fetch(String(input).replace('https://amr-api.open-design.ai', localOrigin), init);
+  const account = new OpenDesignAccount(store.directory, {
+    pollMs: 1,
+    fetcher: realFetch,
+    download: (url, init) => fetch(url, init),
+    run: async () => { throw new Error('unexpected connector call'); },
+  });
+  t.after(() => account.close());
+  await mkdir(account.home, { recursive: true });
+  await writeFile(path.join(account.root, 'session.json'), JSON.stringify({ id: 'sess-redirect' }));
+  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({
+    profiles: { prod: { user: { id: 'u1' }, controlKey: 'test-control', controlKeyId: 'key-1', runtimeKey: 'test-rt' } },
+  }));
+  const model = { id: 'account:wan-2.7', provider: 'account', modelId: 'wan-2.7', label: 'Wan 2.7', modality: 'video' as const, mode: 'text-to-video', source: 'live' as const };
+  const baseJob = { id: randomUUID(), model, modality: 'video' as const, prompt: 'waves', providerOrigin: 'sess-redirect', parameters: {} } as any;
+
+  // 1. Real fetch handles 302 with redirect: 'manual' and never sends Authorization to the CDN target.
+  const [bytes] = await account.generate(baseJob, store.directory, new AbortController().signal, async () => {});
+  assert.deepEqual(bytes, mp4);
+  assert.deepEqual(cdnAuthHeaders, [undefined]);
+
+  // 2. CDN 401 maps to resultUnreadable with errorSource='download', NOT resultUnauthorized.
+  mode = 'cdn-401';
+  await assert.rejects(
+    account.generate({ ...baseJob, remoteId: 'vt_real_1' }, store.directory, new AbortController().signal, async () => {}),
+    (err: any) => err.message.includes('result could not be read') && err.status === 401 && err.errorSource === 'download',
+  );
+
+  // 3. AMR 410 video_content_expired marks remoteTerminal so the job is no longer resumable.
+  mode = 'expired-content';
+  let terminalFlag = false;
+  let capturedCode: string | undefined;
+  await assert.rejects(
+    account.generate(
+      { ...baseJob, remoteId: 'vt_real_1' },
+      store.directory,
+      new AbortController().signal,
+      async () => {},
+      undefined,
+      [],
+      async (data, terminal) => { terminalFlag = Boolean(terminal); capturedCode = (data as any)?.error?.code; },
+    ),
+    (err: any) => err.message.includes('Account media task failed') && err.upstreamCode === 'video_content_expired',
+  );
+  assert.equal(terminalFlag, true);
+  assert.equal(capturedCode, 'video_content_expired');
+  assert.equal(resumableJob({ ...baseJob, state: 'failed', remoteId: 'vt_real_1', remoteTerminal: terminalFlag }), false);
+
+  // 4. Task status 'expired' also marks remoteTerminal.
+  mode = 'expired-status';
+  terminalFlag = false;
+  await assert.rejects(
+    account.generate(
+      { ...baseJob, remoteId: 'vt_real_1' },
+      store.directory,
+      new AbortController().signal,
+      async () => {},
+      undefined,
+      [],
+      async (_data, terminal) => { terminalFlag = Boolean(terminal); },
+    ),
+    (err: any) => err.message.includes('Account media task failed') && err.upstreamCode === 'video_content_expired',
+  );
+  assert.equal(terminalFlag, true);
+}));
+
+test('switching OpenDesign account during reference upload aborts before submitting a paid POST', t => fixture(async store => {
+  const refPath = path.join(store.directory, 'ref.png');
+  await writeFile(refPath, png);
+  let submitPosts = 0;
+  let switched = false;
+  const account = new OpenDesignAccount(store.directory, {
+    pollMs: 1,
+    fetcher: (async (input: any, init: any = {}) => {
+      const url = String(input), method = (init.method ?? 'GET').toUpperCase();
+      if (url.startsWith('https://storage.example/')) {
+        // Simulate another workspace signing in as a different user while the reference upload is in flight.
+        if (!switched) {
+          switched = true;
+          await writeFile(path.join(account.root, 'session.json'), JSON.stringify({ id: 'sess-account-B' }));
+          await writeFile(path.join(account.home, 'config.json'), JSON.stringify({
+            profiles: { prod: { user: { id: 'user-B' }, controlKey: 'key-B', controlKeyId: 'key-id-B', runtimeKey: 'rt-B' } },
+          }));
+        }
+        return new Response(null, { status: 200 });
+      }
+      if (url.endsWith('/uploads')) return Response.json({ asset_id: 'upload-1', upload_url: 'https://storage.example/1' });
+      if (url.endsWith('/uploads/upload-1/commit')) return Response.json({ status: 'ready' });
+      if (method === 'POST' && url.endsWith('/videos/tasks')) {
+        submitPosts++;
+        return Response.json({ task_id: 'should-not-happen' });
+      }
+      throw new Error(`unexpected request: ${method} ${url}`);
+    }) as Fetcher,
+    run: async () => { throw new Error('unexpected connector call'); },
+  });
+  t.after(() => account.close());
+  await mkdir(account.home, { recursive: true });
+  await writeFile(path.join(account.root, 'session.json'), JSON.stringify({ id: 'sess-account-A' }));
+  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({
+    profiles: { prod: { user: { id: 'user-A' }, controlKey: 'key-A', controlKeyId: 'key-id-A', runtimeKey: 'rt-A' } },
+  }));
+  const model = { id: 'account:wan-2.7', provider: 'account', modelId: 'wan-2.7', label: 'Wan 2.7', modality: 'video' as const, mode: 'text-to-video', source: 'live' as const, maxInputImages: 1 };
+  const job = { id: randomUUID(), model, modality: 'video' as const, prompt: 'walk forward', providerOrigin: 'sess-account-A', parameters: {} } as any;
+  await assert.rejects(
+    account.generate(job, store.directory, new AbortController().signal, async () => {}, refPath, [{ file: refPath, mimeType: 'image/png', bytes: png.length }]),
+    /Account changed; the queued task was not submitted/,
+  );
+  assert.equal(submitPosts, 0, 'paid POST must never fire after an account switch during upload');
+}));
+
 test('AccountRequestError classifies local CLI flag errors as invalid requests rather than connection failures', () => {
   const cases = [
     'Error: if any flags in the group [aspect-ratio resolution] are set they must all be set; missing [aspect-ratio]\n',
