@@ -1,24 +1,41 @@
 type GuideObject = { body: ReadableStream; text(): Promise<string>; writeHttpMetadata(headers: Headers): void };
 type Environment = { RELEASES: { get(key: string): Promise<GuideObject | null> } };
-const marker = '<!-- openmotion-utm-source-supported -->';
+const motionMarker = '<!-- openmotion-utm-source-supported -->';
+const gameMarker = '<!-- opengame-utm-source-supported -->';
 const sourcePattern = /^[A-Za-z0-9_.-]{1,64}$/;
 
 export function attributeGuide(text: string, source: string | null): string {
-  if (!source || !sourcePattern.test(source) || !text.includes(marker)) return text;
-  return text.replace(/openmotion setup --host (codex|claude|deepseek|workbuddy)\b/g,
-    command => `${command} --utm-source ${source}`);
+  if (!source || !sourcePattern.test(source)) return text;
+  let result = text;
+  if (result.includes(motionMarker)) {
+    result = result.replace(/openmotion setup --host (codex|claude|deepseek|workbuddy)\b/g,
+      command => `${command} --utm-source ${source}`);
+  }
+  if (result.includes(gameMarker)) {
+    result = result.replace(/opengame setup --host (codex|claude|deepseek|workbuddy)\b/g,
+      command => `${command} --utm-source ${source}`);
+  }
+  return result;
 }
 
 export function guideKey(url: URL): string | null {
   if (url.hostname === 'releases.open-design.ai' && ['/motion', '/motion/'].includes(url.pathname)) {
     return 'open-motion/install.md';
   }
+  if (url.hostname === 'releases.open-design.ai' && ['/game', '/game/'].includes(url.pathname)) {
+    return 'open-game/install.md';
+  }
   if (url.pathname === '/motion/install.md') {
     if (url.hostname === 'open-design.powerformer.net') return 'open-motion/dev/install.md';
     if (url.hostname === 'open-design.ai') return 'open-motion/install.md';
     return null;
   }
-  return /^\/open-motion\/(?:dev\/)?install\.md$/.test(url.pathname) ? url.pathname.slice(1) : null;
+  if (url.pathname === '/game/install.md') {
+    if (url.hostname === 'open-design.powerformer.net') return 'open-game/dev/install.md';
+    if (url.hostname === 'open-design.ai') return 'open-game/install.md';
+    return null;
+  }
+  return /^\/open-(?:motion|game)\/(?:dev\/)?install\.md$/.test(url.pathname) ? url.pathname.slice(1) : null;
 }
 
 export default {

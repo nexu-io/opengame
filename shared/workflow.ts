@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { adaptGameWorkflowMarkdown, gameWorkflowReadNext } from './game-workflow-adapt.mjs';
 export { workflowEntryGuide } from './workflow-entry.js';
 
 export const workflowRegistry = {
@@ -145,10 +146,17 @@ export const workflowFiles = workflowRegistry.production.sections;
 export const workflowNames = Object.keys(workflowRegistry);
 export const workflowSections = [...new Set(Object.values(workflowRegistry).flatMap(workflow => Object.keys(workflow.sections)))];
 export const phase1WorkflowNames = ['video', 'production', 'director', 'template', 'recreate', 'video-to-template', 'media', 'design', 'game'];
+export const gameWorkflowNames = ['game', 'media'];
 export const phase1Skills = ['openmotion-video'];
 export const supportingSkills = ['openmotion-media', 'openmotion-design', 'openmotion-game'];
+export const gameSkills = ['openmotion-game', 'openmotion-media'];
 export const packagedSkills = [...phase1Skills, ...supportingSkills];
-export function workflowResources() {
+export function workflowResources(profile?: string) {
+  if (profile === 'game') {
+    return Object.entries(workflowRegistry).filter(([name]) => gameWorkflowNames.includes(name)).flatMap(([workflow, definition]) => Object.keys(definition.sections).map(section => ({
+      uri: `openmotion://workflow/${workflow}/${section}`, name: `${workflow}/${section}`, title: `OpenGame · ${workflow}/${section}`, mimeType: 'application/json',
+    })));
+  }
   return Object.entries(workflowRegistry).filter(([name]) => phase1WorkflowNames.includes(name)).flatMap(([workflow, definition]) => Object.keys(definition.sections).map(section => ({
     uri: `openmotion://workflow/${workflow}/${section}`, name: `${workflow}/${section}`, title: `OpenMotion · ${workflow}/${section}`, mimeType: 'application/json',
   }))).concat([{ uri: 'openmotion://fonts/index', name: 'fonts/index', title: 'OpenMotion · Curated fonts', mimeType: 'application/json' }, { uri: 'openmotion://engine/SKILL.md', name: 'Hyperframes pinned authoring guide', title: 'OpenMotion · Hyperframes authoring guide', mimeType: 'text/markdown' }]);
@@ -165,11 +173,31 @@ export async function resolveGuideFile(root: string, relative: string) {
   return file;
 }
 
-export async function readWorkflowResource(uri: unknown, dataDirectory: string) {
+export async function readWorkflowResource(uri: unknown, dataDirectory: string, profile?: string) {
   if (typeof uri !== 'string') throw new Error('INVALID_RESOURCE_URI');
-  if (/^(?:openmotion|motion):\/\/fonts\//.test(uri)) return { uri, mimeType: 'application/json', text: JSON.stringify(await fontCatalogResource(uri)) };
+  const allowedWorkflows = profile === 'game' ? gameWorkflowNames : phase1WorkflowNames;
+  if (profile !== 'game' && /^(?:openmotion|motion):\/\/fonts\//.test(uri)) return { uri, mimeType: 'application/json', text: JSON.stringify(await fontCatalogResource(uri)) };
   const match = /^(?:openmotion|motion):\/\/workflow\/([a-z]+(?:-[a-z]+)*)\/([a-z]+)$/.exec(uri);
-  if (match && phase1WorkflowNames.includes(match[1])) return { uri, mimeType: 'application/json', text: JSON.stringify({ ...await getWorkflow(match[2], match[1]), workflows: phase1WorkflowNames }) };
+  if (match && allowedWorkflows.includes(match[1])) {
+    const doc = await getWorkflow(match[2], match[1]);
+    if (profile === 'game') {
+      const content = adaptGameWorkflowMarkdown(doc.documentId, doc.content);
+      return {
+        uri,
+        mimeType: 'application/json',
+        text: JSON.stringify({
+          ...doc,
+          content,
+          contentHash: createHash('sha256').update(content).digest('hex'),
+          references: doc.references.filter(ref => gameWorkflowNames.includes(ref.workflow)),
+          readNext: gameWorkflowReadNext,
+          workflows: allowedWorkflows,
+        }),
+      };
+    }
+    return { uri, mimeType: 'application/json', text: JSON.stringify({ ...doc, workflows: allowedWorkflows }) };
+  }
+  if (profile === 'game') throw new Error('INVALID_RESOURCE_URI');
   const engine = /^(?:openmotion|motion):\/\/engine\/([a-zA-Z0-9_/-]+\.md)$/.exec(uri);
   if (!engine) throw new Error('INVALID_RESOURCE_URI');
   const { ensureRuntime } = await import('../hyperframes.ts');

@@ -227,3 +227,11 @@ test('real stdio MCP suppresses telemetry for internalProbe preflights and attri
     assert.equal(events[0].properties.mcp_client_version, '1.0.0');
   } finally { await new Promise<void>(resolve => collector.close(() => resolve())); }
 }, false));
+
+test('identifyHost attributes WorkBuddy opengame placeholder via launch environment', async () => {
+  const { identifyHost } = await import('../tracking/host.ts');
+  const resolved = identifyHost({ name: 'opengame', version: '1.0.0' }, { OPENMOTION_HOST_AGENT: 'workbuddy' });
+  assert.equal(resolved.host_agent, 'workbuddy');
+  assert.equal(resolved.host_agent_source, 'launch_environment');
+  assert.equal(resolved.mcp_client_name, 'opengame');
+});

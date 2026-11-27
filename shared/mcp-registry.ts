@@ -3,7 +3,8 @@ import { workflowEntryGuide, templateDiscoveryGuide, skillDiscoveryGuide } from 
 import { readFileSync } from 'node:fs';
 
 const profiles: Record<string, { tools: string[] | null; instructions: string | null }> = JSON.parse(readFileSync(new URL('./mcp-profiles.json', import.meta.url), 'utf8'));
-export const releaseProfile: string = JSON.parse(readFileSync(new URL('./mcp-release.json', import.meta.url), 'utf8')).profile;
+const configuredProfile: string = JSON.parse(readFileSync(new URL('./mcp-release.json', import.meta.url), 'utf8')).profile;
+export const releaseProfile: string = process.env.OPENGAME_MCP_PROFILE || configuredProfile;
 
 /** The packaged profile controls discovery and dispatch, not the internal business handlers. */
 export function createToolRegistry<T extends { name: string }, E extends { name: string } = never>(implementations: readonly T[], profile = releaseProfile, extensions: readonly E[] = []) {
@@ -21,5 +22,8 @@ export function createToolRegistry<T extends { name: string }, E extends { name:
   assert(extensionNames.every(name => ['openmotion_show_template_recommendations', 'openmotion_show_video'].includes(name)), 'Unknown MCP optional extension');
   assert.equal(new Set(extensionNames).size, extensionNames.length, 'Duplicate MCP optional extensions');
   assert(extensionNames.every(name => !byName.has(name)), 'MCP optional extension shadows an implementation');
-  return { profile, tools: [...names.map(name => byName.get(name)!), ...extensions] as (T | E)[], instructions: definition.instructions === null ? null : workflowEntryGuide + ' ' + (profile === 'phase1' ? templateDiscoveryGuide + ' ' + skillDiscoveryGuide + ' ' : '') + definition.instructions };
+  const instructions = definition.instructions === null ? null
+    : profile === 'game' ? definition.instructions
+      : workflowEntryGuide + ' ' + (profile === 'phase1' ? templateDiscoveryGuide + ' ' + skillDiscoveryGuide + ' ' : '') + definition.instructions;
+  return { profile, tools: [...names.map(name => byName.get(name)!), ...extensions] as (T | E)[], instructions };
 }

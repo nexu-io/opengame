@@ -62,11 +62,16 @@ export function providerSettingsPreview(origin: string, options: { embedded?: bo
   return workspacePagePreview(origin, 'providers', options);
 }
 
+/** Game Studio opens independently without creating or selecting a motion project. */
+export function gameStudioPreview(origin: string, options: { embedded?: boolean; presentation?: string } = {}) {
+  return workspacePagePreview(origin, 'game', options);
+}
+
 export function resolveProviderSetupEntry(entry?: string): ProviderSetupEntry {
   return (providerSetupEntries as readonly string[]).includes(entry ?? '') ? entry as ProviderSetupEntry : 'agent_providers';
 }
 
-function workspacePagePreview(origin: string, target: 'templates' | 'providers' | 'explore', options: { embedded?: boolean; presentation?: string; entry?: string; attributeEntry?: boolean }) {
+function workspacePagePreview(origin: string, target: 'templates' | 'providers' | 'explore' | 'game', options: { embedded?: boolean; presentation?: string; entry?: string; attributeEntry?: boolean }) {
   const query = new URLSearchParams(target === 'templates' ? { templates: '1' } : undefined);
   if (target === 'providers') {
     const entry = resolveProviderSetupEntry(options.entry);
@@ -88,7 +93,9 @@ function workspacePagePreview(origin: string, target: 'templates' | 'providers' 
     ? `${origin}/settings/providers${serialized ? `?${serialized}` : ''}`
     : target === 'explore'
       ? `${origin}/explore${serialized ? `?${serialized}` : ''}`
-      : `${origin}/?${serialized}`;
+      : target === 'game'
+        ? `${origin}/game${serialized ? `?${serialized}` : ''}`
+        : `${origin}/?${serialized}`;
   const presentation = options.presentation ?? 'foreground';
   const background = presentation === 'background';
   return { target, previewUrl, projectCreated: false, openedByHost: false,
@@ -97,7 +104,9 @@ function workspacePagePreview(origin: string, target: 'templates' | 'providers' 
       state: background ? 'background' : 'pending', openedByHost: false, hostActionRequired: !background,
       nextAction: background ? null : { kind: 'host', operation: 'present_preview', previewUrl, placement: 'right', reuseExistingTab: true,
         codex: { tool: 'open_in_codex', arguments: { placement: 'right', target: { type: 'browser', url: previewUrl } } } },
-      instructions: target === 'explore'
+      instructions: target === 'game'
+        ? 'Open previewUrl in the host built-in browser in the calling chat, following the handoff focus policy. Reuse the matching tab and preserve all URL parameters. Confirm Game Studio is visible before reporting it opened; if the host has no browser, report the actual result and provide the link. Do not create a placeholder project. No project record_display receipt is needed for this page.'
+        : target === 'explore'
         ? 'Open previewUrl in the host built-in browser in the calling chat, following the handoff focus policy. Reuse the matching tab and preserve all URL parameters. Confirm Explore is visible before reporting it opened; a prepared URL or queued acknowledgment is not visible delivery. If opening fails or the host has no browser, report the actual result and provide the link. Do not create or select a project. No project record_display receipt is needed for this page.'
         : target === 'providers'
         ? 'Open previewUrl in the host built-in browser in the calling chat and follow the same focus policy. Verify that Model providers is visible before reporting it opened. If the host has no browser, provide the actual link and state the limitation. Guide the user to click Sign in with OpenDesign or Upgrade to Plus directly on the opened OpenDesign page in Model providers; select OpenDesign in the provider list first if needed. OpenDesign Plus or above includes image, video, speech and music generation; Free and Go do not. For API key setup, guide the user to save or replace their OpenDesign Cloud or other supported provider key here in Model providers. Ask them to tell you once done. Keep credentials in settings. Re-inspect providers after confirmation and resume the original request. This page does not create or select a project and needs no project record_display receipt.'

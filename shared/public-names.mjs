@@ -3,14 +3,27 @@ const sessionTools = new Set(['get_session', 'append_message', 'create_session',
 
 export function publicToolName(name) {
   if (typeof name !== 'string') return name;
+  if (name.startsWith('opengame_')) return 'openmotion_game_' + name.slice(9);
   if (name.startsWith('motion_')) return 'openmotion_' + name.slice(7);
   if (name.startsWith('design_') && sessionTools.has(name.slice(7))) return 'openmotion_' + name.slice(7);
   return name;
 }
 
+export function profileToolName(name, profile) {
+  if (typeof name !== 'string') return name;
+  if (profile === 'game') {
+    if (name.startsWith('opengame_')) return name;
+    if (name.startsWith('openmotion_game_')) return 'opengame_' + name.slice(16);
+    if (name.startsWith('motion_game_')) return 'opengame_' + name.slice(12);
+  }
+  return publicToolName(name);
+}
+
 export function legacyToolName(name) {
   if (name === 'openmotion_assets_use' || name === 'motion_assets_use') return 'motion_assets';
-  if (typeof name !== 'string' || !name.startsWith('openmotion_')) return name;
+  if (typeof name !== 'string') return name;
+  if (name.startsWith('opengame_')) return 'motion_game_' + name.slice(9);
+  if (!name.startsWith('openmotion_')) return name;
   const suffix = name.slice(11);
   return (sessionTools.has(suffix) ? 'design_' : 'motion_') + suffix;
 }

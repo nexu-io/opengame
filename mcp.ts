@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { normalizeInlineResult } from './shared/inline-video-result.js';
 import { inlineVideoUri, legacyInlineVideoUri } from './shared/inline-video.ts';
-import { publicToolName, legacyToolName, publicToolResult } from './shared/public-names.mjs';
+import { publicToolName, profileToolName, legacyToolName, publicToolResult } from './shared/public-names.mjs';
 import { assetReadToolResult } from './shared/asset-library.ts';
 import { createInterface } from 'node:readline';
 import type { JSONRPCMessage, Transport } from '@modelcontextprotocol/server';
@@ -12,7 +12,7 @@ import { ensureService, VERSION } from './preview.ts';
 import { tools, callTool } from './mcp-tools.ts';
 export { tools, callTool } from './mcp-tools.ts';
 import { createToolRegistry, releaseProfile } from './shared/mcp-registry.ts';
-import { phase1Tools, finalVideoTool, validateInput, normalizeToolInput, phase1TransportTool } from './shared/phase1-tools.ts';
+import { phase1Tools, gameProfileTools, finalVideoTool, validateInput, normalizeToolInput, phase1TransportTool } from './shared/phase1-tools.ts';
 import { workflowResources, readWorkflowResource, workflowEntryGuide } from './shared/workflow.ts';
 import { ensureEditor, editorRequest, editorHeaders, sharedEditorEnabled } from './editor-runtime.ts';
 import { isMain } from './shared/entry.ts';
@@ -35,7 +35,10 @@ import { hasMcpEnvelope, loadModernMcpSdk, type ModernMcpSdk } from './shared/mc
 import { resolvePublicOrigin } from './gateway/agent-runtimes.ts';
 import { compactRuntimeUpdateNotice, maybeAutoUpdateBeforeCreation, shouldAutoUpdateForToolCall, type RuntimeUpdateNotice, type SourceUpdateApplyResult, type SourceUpdateCheckResult } from './shared/source-update.ts';
 
-export function mcpRegistry(profile = releaseProfile) { return createToolRegistry(profile === 'phase1' ? phase1Tools : tools, profile); }
+const isPhase1Like = (profile: string) => profile === 'phase1' || profile === 'game';
+export function mcpRegistry(profile = releaseProfile) {
+  return createToolRegistry(profile === 'game' ? gameProfileTools : profile === 'phase1' ? phase1Tools : tools, profile);
+}
 export const releaseRegistry = mcpRegistry();
 export const publicTools = releaseRegistry.tools;
 const selections = new WeakMap<WorkspaceStore, { sessionId: string; projectId: string }>();
@@ -97,7 +100,7 @@ export async function rpc(message: any, store = new WorkspaceStore(), registry =
     && (message.method === 'tools/call' || message.method === 'resources/read')
     ? extractHostSessionMeta(message.params, host, process.env) : null;
   if (message?.jsonrpc !== '2.0' || message.id === undefined || message.method !== 'tools/call'
-    || registry.profile !== 'phase1' || !(mcpToolNames as readonly unknown[]).includes(name)) {
+    || !isPhase1Like(registry.profile) || !(mcpToolNames as readonly unknown[]).includes(name)) {
     const response = await invokeRpc(message, store, registry, connection, host, trackingContext, clientState, options);
     if ((codexMeta || hostSessionMeta) && !(response as any)?.error) {
       const resultValue = (response as any)?.result;
@@ -188,8 +191,10 @@ function configureClient(client: object, profile: string, capabilities: any, sta
 
 export function modernMcpServer(sdk: ModernMcpSdk, store: WorkspaceStore, options: McpRpcOptions = {}) {
   const discovery = {
-    serverInfo: { ...baseServerInfo, icons: serverIcons },
-    capabilities: { tools: {}, ...(releaseRegistry.profile === 'phase1' ? { resources: {} } : {}) },
+    serverInfo: releaseRegistry.profile === 'game'
+      ? { name: 'opengame', title: 'OpenGame', version: VERSION, icons: serverIcons }
+      : { ...baseServerInfo, icons: serverIcons },
+    capabilities: { tools: {}, ...(isPhase1Like(releaseRegistry.profile) ? { resources: {} } : {}) },
     ...(releaseRegistry.instructions ? { instructions: releaseRegistry.instructions } : {}),
   };
   return sdk.createModernMcpServer(discovery, (message, capabilities) => {
@@ -219,10 +224,14 @@ async function invokeRpc(message: any, store: WorkspaceStore, registry: ReturnTy
   if (!message || message.jsonrpc !== '2.0' || typeof message.method !== 'string') return { jsonrpc: '2.0', id: message?.id ?? null, error: { code: -32600, message: 'Invalid request' } };
   if (message.id === undefined) return null;
   const result = (value: unknown) => ({ jsonrpc: '2.0', id: message.id, result: value });
+  const phase1Like = isPhase1Like(registry.profile);
   if (message.method === 'initialize') {
     configureClient(clientState ?? connection ?? store, registry.profile, message.params?.capabilities, clientState);
     const protocolVersion = ['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'].includes(message.params?.protocolVersion) ? message.params.protocolVersion : '2025-11-25';
-    return result({ protocolVersion, capabilities: { tools: {}, ...(registry.profile === 'phase1' ? { resources: {} } : {}) }, serverInfo: { ...baseServerInfo, ...(protocolVersion === '2025-11-25' ? { icons: serverIcons } : {}) }, instructions: registry.instructions ?? workflowEntryGuide + ' Load only references needed by the current task and reuse already loaded documentId/contentHash. Reuse saved decisions for small edits. OpenMotion wraps Hyperframes Studio and its renderer. Only for tasks that require working in the editor or authoring a project, call openmotion_open_preview, read its pinned authoringGuide and open previewUrl with the host built-in browser before reporting it opened. Author native HTML compositions with seekable GSAP timelines, never custom shot JSON or canvas recording. Read openmotion_get_project before source edits and pass its revision as expectedRevision; inspect lint/timeline afterwards. Only when the user scope includes export/final delivery, query any applicable existing export to avoid duplicate jobs and export the inspected revision in the background, wait for completed, then call openmotion_verify_export with that job ID/revision and the brief audio policy. Separately inspect final visuals, sound and actual player playback before claiming full verification. MCP previewUrl defaults to embed=1; preserve its query and hash. Use sessionUrl or embedded=false only for the full OpenMotion workspace. Do not restart the host Agent or ask users to start a terminal server.' });
+    const serverInfo = registry.profile === 'game'
+      ? { name: 'opengame', title: 'OpenGame', version: VERSION, ...(protocolVersion === '2025-11-25' ? { icons: serverIcons } : {}) }
+      : { ...baseServerInfo, ...(protocolVersion === '2025-11-25' ? { icons: serverIcons } : {}) };
+    return result({ protocolVersion, capabilities: { tools: {}, ...(phase1Like ? { resources: {} } : {}) }, serverInfo, instructions: registry.instructions ?? workflowEntryGuide + ' Load only references needed by the current task and reuse already loaded documentId/contentHash. Reuse saved decisions for small edits. OpenMotion wraps Hyperframes Studio and its renderer. Only for tasks that require working in the editor or authoring a project, call openmotion_open_preview, read its pinned authoringGuide and open previewUrl with the host built-in browser before reporting it opened. Author native HTML compositions with seekable GSAP timelines, never custom shot JSON or canvas recording. Read openmotion_get_project before source edits and pass its revision as expectedRevision; inspect lint/timeline afterwards. Only when the user scope includes export/final delivery, query any applicable existing export to avoid duplicate jobs and export the inspected revision in the background, wait for completed, then call openmotion_verify_export with that job ID/revision and the brief audio policy. Separately inspect final visuals, sound and actual player playback before claiming full verification. MCP previewUrl defaults to embed=1; preserve its query and hash. Use sessionUrl or embedded=false only for the full OpenMotion workspace. Do not restart the host Agent or ask users to start a terminal server.' });
   }
   const effectiveRegistry = registry.profile === 'phase1'
     ? createToolRegistry(registry.tools, registry.profile, [
@@ -230,6 +239,11 @@ async function invokeRpc(message: any, store: WorkspaceStore, registry: ReturnTy
       ...(videoAppClients.has(clientState ?? connection ?? store) ? [finalVideoTool] : []),
     ]) : registry;
   if (message.method === 'ping') return result({});
+  if (registry.profile === 'game' && message.method === 'resources/list') return result({ resources: workflowResources('game') });
+  if (registry.profile === 'game' && message.method === 'resources/read') {
+    try { return result({ contents: [await readWorkflowResource(message.params?.uri, store.directory, 'game')] }); }
+    catch (error) { return { jsonrpc: '2.0', id: message.id, error: { code: -32602, message: (error as Error).message } }; }
+  }
   if (registry.profile === 'phase1' && message.method === 'resources/list') return result({ resources: [...workflowResources(), { uri: inlineVideoUri, name: 'Final video playback', mimeType: 'text/html;profile=mcp-app' }, ...(clientState?.presentation ? [clientState.presentation.descriptor] : [])] });
   if (registry.profile === 'phase1' && message.method === 'resources/read') {
     if (message.params?.uri === inlineVideoUri || message.params?.uri === legacyInlineVideoUri) {
@@ -252,14 +266,14 @@ async function invokeRpc(message: any, store: WorkspaceStore, registry: ReturnTy
   if (message.method === 'tools/list') return result({ tools: effectiveRegistry.tools });
   if (message.method === 'tools/call') {
     try {
-      if (registry.profile !== 'phase1') {
+      if (!phase1Like) {
         const current = statSync(runtimeRoot, { throwIfNoEntry: false });
         if (!current || current.dev !== runtimeDirectory.dev || current.ino !== runtimeDirectory.ino) throw Object.assign(
           new Error('The OpenMotion plugin directory was replaced or removed. Reload this internal legacy MCP connection before retrying; no project operation was applied.'),
           { code: 'MCP_RUNTIME_RELOAD_REQUIRED' },
         );
       }
-      const name = publicToolName(message.params?.name);
+      const name = profileToolName(message.params?.name, registry.profile);
       const exposed = effectiveRegistry.tools.find(tool => tool.name === name);
       if (!exposed) throw new Error('MCP_TOOL_NOT_EXPOSED: ' + String(message.params?.name));
       const actionAnnotations = gameToolAnnotations(name, message.params?.arguments);
@@ -274,15 +288,16 @@ async function invokeRpc(message: any, store: WorkspaceStore, registry: ReturnTy
           // from an older mounted recommendation retained by the host.
           _meta: { ui: { resourceUri: clientState.presentation.uri }, 'openai/widgetSessionId': value.recommendationId } });
       }
-      if (registry.profile === 'phase1') {
+      if (phase1Like) {
         const internalName = legacyToolName(name);
+        const canonicalName = publicToolName(name);
         const finalVideo = name === finalVideoTool.name;
-        const definition = finalVideo ? finalVideoTool : phase1Tools.find(tool => tool.name === publicToolName(name))!;
+        const definition = finalVideo ? finalVideoTool : (registry.profile === 'game' ? gameProfileTools.find(tool => tool.name === name) : phase1Tools.find(tool => tool.name === canonicalName))!;
         const rawInput = message.params.arguments ?? {};
         const input = normalizeToolInput(definition.inputSchema, rawInput);
         validateInput(definition.inputSchema, input);
         const args = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : input;
-        if (!options?.stateless && internalName === 'motion_open_preview' && args.target !== 'explore' && args.target !== 'templates' && args.target !== 'providers' && !args.projectId && !args.sessionId && args.action !== 'record_review') args.sessionId = selections.get(store)?.sessionId;
+        if (!options?.stateless && internalName === 'motion_open_preview' && args.target !== 'explore' && args.target !== 'templates' && args.target !== 'providers' && args.target !== 'game' && !args.projectId && !args.sessionId && args.action !== 'record_review') args.sessionId = selections.get(store)?.sessionId;
         if (args.sessionId === undefined) delete args.sessionId;
         if (['repository', 'hosted'].includes(templateConfig().source) && ['motion_list_templates', 'motion_get_template', 'motion_list_skills', 'motion_get_skill'].includes(internalName)) {
           const catalog = templateCatalogFor(store.directory);
@@ -290,7 +305,7 @@ async function invokeRpc(message: any, store: WorkspaceStore, registry: ReturnTy
             : internalName === 'motion_list_skills' ? await catalog.skillIndex() : await catalog.skillDetail(args.skillId);
           return result({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value });
         }
-        const transportName = finalVideo ? 'openmotion_get_project' : name;
+        const transportName = finalVideo ? 'openmotion_get_project' : canonicalName;
         const transportArgs = finalVideo ? { projectId: args.projectId, workId: args.workId, includeVideo: true } : args;
         let runtimeUpdate: RuntimeUpdateNotice | undefined;
         if (shouldAutoUpdateForToolCall(transportName, transportArgs)) {
@@ -380,7 +395,7 @@ async function invokeRpc(message: any, store: WorkspaceStore, registry: ReturnTy
 }
 if (isMain(import.meta.url)) {
   const store = new WorkspaceStore();
-  if ((await trackingFor(store)).enabled()) process.stderr.write('OpenMotion collects redacted usage information to improve product and generation quality. Disable in Studio Privacy & data settings or set OPENMOTION_TELEMETRY=0.\n');
+  if ((await trackingFor(store)).enabled()) process.stderr.write(`${releaseRegistry.profile === 'game' ? 'OpenGame' : 'OpenMotion'} collects redacted usage information to improve product and generation quality. Disable in Studio Privacy & data settings or set OPENMOTION_TELEMETRY=0.\n`);
   void syncActiveCodexThreads(store.directory).catch(() => {});
   void syncActiveHostSessions(store.directory).catch(() => {});
   const connection = sharedEditorEnabled ? { selection: {} } : undefined;

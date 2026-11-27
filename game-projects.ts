@@ -783,6 +783,7 @@ export function gameTrailerComposition(game: Pick<GameCard,'title'|'description'
   return {composition,html,files};
 }
 const activeGameTrailers = new Map<string,{runId:string;promise:Promise<void>}>();
+export function activeGameActivityCount() { return activeGameTrailers.size; }
 type StoredTrailer = GameTrailer & {runId:string;ownerPid?:number};
 function trailerOwnerAlive(pid:number|undefined){if(pid===undefined||!Number.isInteger(pid)||pid<=0)return false;try{process.kill(pid,0);return true;}catch(error){return (error as NodeJS.ErrnoException).code==='EPERM';}}
 const trailerRunning = (status:GameTrailerStatus)=>['recording','composing','rendering'].includes(status);

@@ -41,8 +41,8 @@ const names: Record<string, HostContext['host_agent']> = {
   bob: 'bob',
 };
 // Clients whose declared `clientInfo.name` is a bridge or server-key placeholder rather than the true host product.
-// For example, `openmotion-cli` bridges shell invocations and WorkBuddy desktop sends the MCP server key `openmotion`.
-const envFallbackClients = new Set(['openmotion-cli', 'om-cli', 'openmotion']);
+// For example, `openmotion-cli` bridges shell invocations and WorkBuddy desktop sends the MCP server key (`openmotion` / `opengame`).
+const envFallbackClients = new Set(['openmotion-cli', 'om-cli', 'openmotion', 'opengame', 'opengame-cli']);
 
 function normalizeClientName(raw: string): string {
   return raw.trim().toLowerCase().replace(/\s+/g, '-');

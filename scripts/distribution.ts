@@ -1,7 +1,7 @@
 import { lstat, open, readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { packagedSkills } from '../shared/workflow.ts';
+import { gameSkills, packagedSkills } from '../shared/workflow.ts';
 import { designSystemDocuments, designSystemRuntimeFiles } from '../packages/design-system/index.js';
 import { onboardingSourceFiles, onboardingTemplateIds } from '../shared/onboarding-templates.ts';
 
@@ -727,7 +727,7 @@ export const distributionDocuments = [
   'tracking/README.md', 'tracking/INTEGRATION.md', 'tracking/posthog-geoip.hog',
   'docs/agent-adapters.md', 'docs/browser-runtime.md', 'docs/design-system.md', 'docs/design-studio.md', 'docs/editor-fork.md', 'docs/routing.md', 'docs/i18n.md',
   'docs/hyperframes.md', 'docs/mcp-phase1-tools.md', 'docs/capability-center.md', 'docs/model-gateway.md', 'docs/assets.md', 'docs/project-archives.md', 'docs/generation-options.md', 'docs/provider-settings.md', 'docs/local-agents.md', 'docs/agent-runtime-architecture.md', 'docs/cross-platform-mcp-architecture.md', 'docs/openmotion-director.md', 'docs/motion-director.md',
-  'docs/motion-extension-scope.md', 'docs/npm-installation.md', 'docs/install-attribution.md', 'docs/install.md', 'docs/install-onboarding.md', 'docs/release-guide.md', 'docs/release-workflows.md', 'docs/templates/release-record.md', 'docs/project-workspace.md',
+  'docs/motion-extension-scope.md', 'docs/npm-installation.md', 'docs/install-attribution.md', 'docs/install.md', 'docs/opengame-install.md', 'docs/install-onboarding.md', 'docs/release-guide.md', 'docs/release-workflows.md', 'docs/templates/release-record.md', 'docs/project-workspace.md',
   'docs/repository-migration.md', 'docs/session-architecture.md', 'docs/shared-editor.md',
   'docs/README.zh-CN.md', 'docs/README.ja.md',
   'docs/usage.md', 'docs/motion-md.md', 'docs/motion-md.zh-CN.md',
@@ -790,8 +790,25 @@ const multimodalModelsRuntimeFiles = [
 ];
 
 export async function distributionFiles(profile: string, include: (file: string) => boolean = () => true): Promise<string[]> {
-  if (!['phase1', 'legacy'].includes(profile)) throw new Error('Unknown distribution profile: ' + profile);
-  const files = [
+  if (!['phase1', 'legacy', 'game'].includes(profile)) throw new Error('Unknown distribution profile: ' + profile);
+  const gameOnly = profile === 'game';
+  const files = gameOnly ? [
+    ...designSystemRuntimeFiles.map(file => 'packages/design-system/' + file),
+    ...multimodalModelsRuntimeFiles,
+    'packages/motion-package/package.json', 'packages/motion-package/index.mjs', 'packages/motion-package/schema.json',
+    'LICENSE', 'package.json', 'package-lock.json',
+    'docs/opengame-install.md',
+    'docs/readme/opendesign-symbol.svg', 'docs/readme/opendesign-symbol-dark.svg', 'docs/readme/opendesign-symbol-auto.svg', 'docs/readme/opengame-logo.svg',
+    'server.ts', 'browser.ts', 'workspace.ts', 'mcp.ts', 'mcp-tools.ts', 'editor-runtime.ts',
+    'phase1.ts', 'phase1-versions.ts', 'project-archive.ts', 'project-management.ts', 'design-projects.ts', 'game-projects.ts', 'review-comments.ts', 'project-asset-names.ts', 'inline-video.ts', 'preview.ts', 'hyperframes.ts', 'template-library.ts',
+    'template-catalog.ts', 'prism-templates.ts', 'editor-server.ts',
+    'scripts/game-glb-inspect.mjs', 'scripts/runtime-assets.mjs', 'scripts/npm-runtime.mjs', 'scripts/runtime-lock.json', 'scripts/lint-project.mjs',
+    'scripts/opengame-launcher.mjs', 'scripts/opengame-hosts.mjs', 'scripts/opengame-updater.mjs', 'scripts/opengame-check-mcp.mjs', 'scripts/open-game-studio.ts',
+    'scripts/diagnostics.mjs', 'scripts/diagnostic-redaction.mjs', 'scripts/zip.mjs', 'scripts/update.ts', 'scripts/source-build-state.mjs', 'scripts/verify-export.ts', 'scripts/prepare-font.ts', 'scripts/font-specimen.ts',
+    'shared/install-attribution.ts', 'shared/asset-name-ui.json', 'shared/design-mention-titles.zh-CN.json', 'shared/workflow-entry.js', 'shared/inline-video-result.js', 'shared/provider-registry-LICENSE.txt', 'shared/provider-registry-NOTICE.md', 'studio/LICENSE', 'studio/README.md', 'shared/editor-launch.pl',
+    'gateway/brand-capture/LICENSE', 'gateway/brand-capture/NOTICE.md',
+    'tracking/core.ts', 'tracking/node.ts', 'tracking/browser.ts', 'tracking/events.ts', 'tracking/tool-fields.ts', 'tracking/studio-events.ts', 'tracking/studio-properties.ts', 'tracking/host.ts', 'tracking/device.ts', 'tracking/task-ledger.ts',
+  ] : [
     ...onboardingSourceFiles,
     ...designSystemRuntimeFiles.map(file => 'packages/design-system/' + file),
     ...multimodalModelsRuntimeFiles,
@@ -803,6 +820,7 @@ export async function distributionFiles(profile: string, include: (file: string)
     'template-catalog.ts', 'prism-templates.ts', 'editor-server.ts',
     'scripts/game-glb-inspect.mjs', 'scripts/runtime-assets.mjs', 'scripts/vision-runtime.mjs', 'scripts/npm-runtime.mjs', 'scripts/runtime-lock.json', 'scripts/lint-project.mjs',
     'scripts/npm-installer.mjs', 'scripts/npm-hosts.mjs', 'scripts/install-public-skill.ts', 'scripts/recover-workspace-lock.ts', 'scripts/cleanup-harness-bundles.mjs', 'scripts/check-installed-mcp.mjs', 'scripts/mcp-client.mjs',
+    'scripts/opengame-launcher.mjs', 'scripts/opengame-hosts.mjs', 'scripts/opengame-updater.mjs', 'scripts/opengame-check-mcp.mjs', 'scripts/open-game-studio.ts',
     'scripts/install-onboarding.mjs', 'scripts/inline-onboarding.mjs', 'scripts/codex-host-handoff.mjs', 'scripts/onboarding-catalog.ts', 'scripts/open-template-library.ts', 'scripts/install-library-skill.mjs',
     'scripts/inline-storyboard.mjs', 'mcp-ui/storyboard/inline.css', 'mcp-ui/storyboard/inline.js',
     'scripts/diagnostics.mjs', 'scripts/diagnostic-redaction.mjs', 'scripts/zip.mjs',
@@ -850,20 +868,22 @@ export async function distributionFiles(profile: string, include: (file: string)
     }
   }
   for (const directory of ['shared', 'gateway']) await walk(directory, /\.(?:ts|mjs|json)$/);
-  // Public, pinned design-system references; generated local kits stay outside the checkout.
-  const brandRoot = 'library/brand-kits';
-  files.push(...['catalog.json', 'websites.json', 'NOTICE.md', 'OPENDESIGN-LICENSE.txt', 'THIRD-PARTY-NOTICES.txt', 'assets/gsap.min.js'].map(file => brandRoot + '/' + file));
-  const brandCatalog = JSON.parse(await readFile(path.join(root, brandRoot, 'catalog.json'), 'utf8'));
-  for (const entry of brandCatalog.entries) {
-    if (!/^[a-z][a-z0-9-]*$/.test(entry.id)) throw new Error('Invalid packaged Brand Kit ID');
-    files.push(...['manifest.json', 'DESIGN.md', 'tokens.css'].map(file => `${brandRoot}/sources/${entry.id}/${file}`));
+  if (!gameOnly) {
+    // Public, pinned design-system references; generated local kits stay outside the checkout.
+    const brandRoot = 'library/brand-kits';
+    files.push(...['catalog.json', 'websites.json', 'NOTICE.md', 'OPENDESIGN-LICENSE.txt', 'THIRD-PARTY-NOTICES.txt', 'assets/gsap.min.js'].map(file => brandRoot + '/' + file));
+    const brandCatalog = JSON.parse(await readFile(path.join(root, brandRoot, 'catalog.json'), 'utf8'));
+    for (const entry of brandCatalog.entries) {
+      if (!/^[a-z][a-z0-9-]*$/.test(entry.id)) throw new Error('Invalid packaged Brand Kit ID');
+      files.push(...['manifest.json', 'DESIGN.md', 'tokens.css'].map(file => `${brandRoot}/sources/${entry.id}/${file}`));
+    }
+    await walk('library/design', /\.(?:html|css|js|mjs|ts|json|md|txt|ya?ml|py|png|svg)$|^(?:LICENSE|LICENSE-open-design)$/);
   }
-  await walk('library/design', /\.(?:html|css|js|mjs|ts|json|md|txt|ya?ml|py|png|svg)$|^(?:LICENSE|LICENSE-open-design)$/);
   await walk('web', /\.(?:ts|js|json|html|css|svg|jpg|png|webp|ttf|woff2?|txt)$/);
-  for (const directory of ['templates', 'template-library']) await walk(directory, /\.(?:html|js|json|css|svg|jpg|png|webp|md|txt|ttf|woff2?)$/);
-  files.push('template-library/openmotion-welcome/assets/soundtrack.m4a');
+  for (const directory of gameOnly ? ['templates'] : ['templates', 'template-library']) await walk(directory, /\.(?:html|js|json|css|svg|jpg|png|webp|md|txt|ttf|woff2?)$/);
+  if (!gameOnly) files.push('template-library/openmotion-welcome/assets/soundtrack.m4a');
   files.push('skills/openmotion-game/LICENSE-HIGGSFIELD');
-  for (const skill of packagedSkills) await walk('skills/' + skill, /\.(?:md|mjs|ts|py|json|ya?ml)$/);
+  for (const skill of gameOnly ? gameSkills : packagedSkills) await walk('skills/' + skill, /\.(?:md|mjs|ts|py|json|ya?ml)$/);
   await walk('studio/build', /\.(?:html|js|css|json|svg|png|jpg|webp|woff2?|ttf|txt)$/);
   await walk('studio/public', /\.(?:html|js|css|json|svg|png|jpg|webp|woff2?|ttf|txt)$/);
   // A lightweight application must not require optional showcase bytes that its

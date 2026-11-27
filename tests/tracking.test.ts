@@ -158,7 +158,11 @@ test('tool dimensions use only the published actions, defaults and schema field 
   }
   assert.deepEqual(toolInputFields('openmotion_export_request', {}), { action: 'request' });
   assert.deepEqual(toolInputFields('openmotion_open_preview', {}), { action: 'open', target: 'project' });
+  assert.deepEqual(toolInputFields('openmotion_open_preview', { target: 'game' }), { action: 'open', target: 'game' });
   assert.deepEqual(toolInputFields('openmotion_open_preview', { action: 'begin', target: 'PRIVATE' }), { action: 'begin' });
+  assert.deepEqual(toolInputFields('opengame_trailer', { action: 'start' }), { action: 'start' });
+  assert.deepEqual(toolInputFields('opengame_wechat', { action: 'status' }), { action: 'status' });
+  assert(validProperties(omEvents, 'mcp_tool_started', { tool_name: 'motion_open_preview', call_id: crypto.randomUUID(), accepted: true, action: 'open', target: 'game' }));
   assert.equal(toolInputFields('openmotion_assets', { action: 'read' }).action, undefined);
   assert.equal(toolInputFields('openmotion_media_use', { action: 'read' }).action, undefined);
   for (const event of ['mcp_tool_started', 'mcp_tool_finished', 'webmcp_tool_started', 'webmcp_tool_finished']) {

@@ -26,3 +26,19 @@ zone_name = "open-design.ai"
 [[routes]]
 pattern = "releases.open-design.ai/motion*"
 zone_name = "open-design.ai"
+
+[[routes]]
+pattern = "open-design.powerformer.net/game/install.md*"
+zone_name = "powerformer.net"
+
+[[routes]]
+pattern = "releases.open-design.ai/open-game/install.md*"
+zone_name = "open-design.ai"
+
+[[routes]]
+pattern = "releases.open-design.ai/open-game/dev/install.md*"
+zone_name = "open-design.ai"
+
+[[routes]]
+pattern = "releases.open-design.ai/game*"
+zone_name = "open-design.ai"

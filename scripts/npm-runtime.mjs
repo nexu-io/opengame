@@ -22,7 +22,7 @@ export async function nativeConfiguration(root) {
 function configuration(config) {
   assert.equal(config.schemaVersion, 1, 'Unsupported npm installation');
   const found = Object.entries(config.runtime.targets).find(([, value]) => value.platform === process.platform && value.arch === process.arch);
-  assert(found, `No pinned native runtime for ${process.platform}-${process.arch}`);
+  if (!found) return null;
   const [target, info] = found;
   assert(/^[a-z0-9-]+$/.test(target), 'Invalid native target');
   const components = nativeComponents(info);
@@ -176,11 +176,15 @@ export async function ensureNativeRuntime(root, components) {
   if (failed) throw failed.reason;
 }
 
-export async function startNativePreparation(root, retry = false) {
-  if (launching.has(root)) return launching.get(root);
+export async function startNativePreparation(root, retry = false, requestedComponents) {
+  const key = Array.isArray(requestedComponents) ? `${root}:${[...requestedComponents].sort().join(',')}` : root;
+  if (launching.has(key)) return launching.get(key);
   const task = (async () => {
     const status = await nativeRuntimeStatus(root);
-    const components = status.components.filter(component => component.stage === 'idle' || retry && component.stage === 'failed').map(component => component.id);
+    const allowed = Array.isArray(requestedComponents) ? new Set(requestedComponents) : null;
+    const components = status.components
+      .filter(component => (!allowed || allowed.has(component.id)) && (component.stage === 'idle' || retry && component.stage === 'failed'))
+      .map(component => component.id);
     if (!components.length) return status;
     const native = await nativeConfiguration(root);
     await mkdir(native.cache, { recursive: true });
@@ -194,8 +198,8 @@ export async function startNativePreparation(root, retry = false) {
     } finally { await log.close(); }
     return status;
   })();
-  launching.set(root, task);
-  try { return await task; } finally { launching.delete(root); }
+  launching.set(key, task);
+  try { return await task; } finally { launching.delete(key); }
 }
 
 export async function requireNativeRuntime(root, capability) {

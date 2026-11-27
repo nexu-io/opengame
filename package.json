@@ -18,6 +18,7 @@
     "package:phase1": "npm run build:studio && node --experimental-strip-types scripts/package.ts --mcp-profile=phase1",
     "package:test": "node scripts/test-package.mjs",
     "package:npm": "npm run build:studio && node scripts/package-npm.mjs",
+    "package:opengame": "npm run build:studio && node scripts/package-opengame.mjs",
     "build:studio": "npm run build:inline && npm run build:template-cards && vite build --config studio/vite.config.ts && node scripts/build-template-guide.mjs",
     "build:tracking": "tsc -p tracking/tsconfig.json",
     "typecheck:studio": "tsc -p studio/tsconfig.json",

@@ -42,9 +42,16 @@ export const gameTools = [
       confirmMissing:{type:'boolean'}, present:{type:'boolean'} },['id','action']), annotations:{...writes,openWorldHint:true} },
 ];
 
+export const openGameTools = gameTools.map(tool => ({
+  ...tool,
+  name: 'opengame_' + tool.name.slice('openmotion_game_'.length),
+  title: tool.title.replace(/^OpenMotion\b/, 'OpenGame'),
+  description: tool.description.replaceAll('openmotion_game_', 'opengame_'),
+}));
+
 /** MCP discovery describes the most permissive action; authorization uses the actual action. */
 export function gameToolAnnotations(name: string, args: unknown) {
-  if (name !== 'openmotion_game_wechat') return undefined;
+  if (name !== 'openmotion_game_wechat' && name !== 'opengame_wechat') return undefined;
   const action = (args as { action?: unknown } | null)?.action;
   return action === 'status' ? reads : { ...writes, openWorldHint: ['ip_check','preview','upload'].includes(String(action)) };
 }

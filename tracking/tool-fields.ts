@@ -21,7 +21,7 @@ const actionSets = {
   openmotion_design_edit: ['read_file', 'write', 'list_versions', 'restore_version', 'import_asset'],
   openmotion_design_comments: ['list', 'create', 'update', 'delete'],
 } as const;
-const targets = ['project', 'templates', 'providers'] as const;
+const targets = ['project', 'templates', 'providers', 'game'] as const;
 export const capabilityExecutorKinds = ['model', 'prompt-preset', 'dedicated-model', 'service', 'script'] as const;
 export const mediaModalities = ['image', 'video', 'audio', '3d'] as const;
 export type MediaTelemetryModality = typeof mediaModalities[number];
@@ -230,10 +230,11 @@ export const toolDimensions = {
 } as const;
 
 export function toolInputFields(tool: string, input: unknown) {
+  const canonicalTool = tool.startsWith('opengame_') ? 'openmotion_game_' + tool.slice(9) : tool;
   const args = input && typeof input === 'object' && !Array.isArray(input)
     ? input as { action?: unknown; target?: unknown; modality?: unknown; capabilityId?: unknown; dryRun?: unknown; model?: unknown; templateId?: unknown; copyAttemptId?: unknown; templateEntry?: unknown }
     : {};
-  const actions: readonly typeof toolDimensions.action[number][] = Object.hasOwn(actionSets, tool) ? actionSets[tool as keyof typeof actionSets] : [];
+  const actions: readonly typeof toolDimensions.action[number][] = Object.hasOwn(actionSets, canonicalTool) ? actionSets[canonicalTool as keyof typeof actionSets] : [];
   const defaultAction =
     tool === 'openmotion_export_request'
       ? 'request'
@@ -577,19 +578,19 @@ type GameToolFields = { game_id?: string; game_status?: typeof gameStatuses[numb
  * (set_status, publish, get, create), not the tool outcome. Titles, briefs, files and URLs are never read.
  */
 export function gameToolFields(tool: string, input: unknown, result?: unknown): GameToolFields {
-  if (!/^(?:openmotion|motion)_game_/.test(tool)) return {};
+  if (!/^(?:(?:openmotion|motion)_game|opengame)_/.test(tool)) return {};
   const args = input && typeof input === 'object' && !Array.isArray(input) ? input as { id?: unknown } : {};
   const value = result && typeof result === 'object' && !Array.isArray(result) ? result as { id?: unknown; status?: unknown; game?: unknown } : {};
   const card = value.game && typeof value.game === 'object' ? value.game as { id?: unknown; status?: unknown } : undefined;
-  const id = [args.id, card?.id, /_game_(?:get|set_status|update_meta)$/.test(tool) ? value.id : undefined]
+  const id = [args.id, card?.id, /(?:_game|opengame)_(?:get|set_status|update_meta)$/.test(tool) ? value.id : undefined]
     .find(candidate => typeof candidate === 'string' && gameIdPattern.test(candidate)) as string | undefined;
   // Only GameCard shapes carry a lifecycle status; trailer results carry a job status that must not be reported here.
-  const statusSource = card ? card.status : /_game_(?:get|set_status|update_meta)$/.test(tool) ? value.status : undefined;
+  const statusSource = card ? card.status : /(?:_game|opengame)_(?:get|set_status|update_meta)$/.test(tool) ? value.status : undefined;
   const status = gameStatuses.find(candidate => candidate === statusSource);
   return { ...(id ? { game_id: id } : {}), ...(status ? { game_status: status } : {}) };
 }
 
 /** Game tools return a GameCard whose `status: 'failed'` is the game's lifecycle, not a failed tool call. */
 export function gameResultStatusIsLifecycle(tool: string) {
-  return /^(?:openmotion|motion)_game_(?:create|get|set_status|update_meta|publish)$/.test(tool);
+  return /^(?:(?:openmotion|motion)_game|opengame)_(?:create|get|set_status|update_meta|publish)$/.test(tool);
 }

@@ -1,5 +1,6 @@
-import { gameHttp, attachGameRooms } from './game-projects.ts';
+import { gameHttp, attachGameRooms, activeGameActivityCount } from './game-projects.ts';
 import { startLocalGamePreview } from './gateway/local-game-preview.ts';
+import { releaseProfile } from './shared/mcp-registry.ts';
 import type { ExportFailure } from './tracking/tool-fields.ts';
 import { toolFailureFields } from './tracking/tool-fields.ts';
 import { transcriptsFor, closeTranscripts } from './gateway/transcription.ts';
@@ -82,7 +83,7 @@ import { scenarioHttp } from './gateway/scenario-http.ts';
 import { designHttp } from './design-projects.ts';
 
 const sharedStore = new WorkspaceStore();
-export type Service = { trackingHosts?: Map<string, { host: HostContext; createdAt: number }>; diagnostics?: { running: boolean; lastExport: number; events: number; window: number }; studio?: Studio; runtimeRoot?: string; nativeRoot?: string; ffmpeg?: boolean; ffmpegPromise?: Promise<boolean>; poller?: AdaptivePoller; switching?: boolean; studioPort?: number; browser?: WorkspaceBrowser; editorToken?: string; ensureStudio?: (projectId?: string) => Promise<Studio>; launchStudio?: (directory: string, port: number) => Promise<Studio>; phase1?: Phase1Service; phase1Mutation?: Promise<void>; tracking?: OmTracking; localGamePreview?: (id: string, search?: string) => string };
+export type Service = { trackingHosts?: Map<string, { host: HostContext; createdAt: number }>; diagnostics?: { running: boolean; lastExport: number; events: number; window: number }; studio?: Studio; runtimeRoot?: string; nativeRoot?: string; ffmpeg?: boolean; ffmpegPromise?: Promise<boolean>; poller?: AdaptivePoller; switching?: boolean; studioPort?: number; browser?: WorkspaceBrowser; editorToken?: string; ensureStudio?: (projectId?: string) => Promise<Studio>; launchStudio?: (directory: string, port: number) => Promise<Studio>; phase1?: Phase1Service; phase1Mutation?: Promise<void>; tracking?: OmTracking; localGamePreview?: (id: string, search?: string) => string; retire?: () => void; activeToolCalls?: () => number };
 const service: Service = {};
 const working = new Set<string>();
 const runningExports = new Map<string, AbortController>();
@@ -495,7 +496,8 @@ export async function handler(req: IncomingMessage, res: ServerResponse, store =
       /^\/(?:motion|design)-api\/triggers\/[a-f0-9-]{36}\/fire$/.test(rawPath)
       && ((typeof req.headers.authorization === 'string' && /^Bearer\s+/i.test(req.headers.authorization))
         || typeof req.headers['x-openmotion-signature'] === 'string');
-    if (!['GET', 'HEAD'].includes(req.method || '') && !isBridgeDaemonRoute && !isTriggerWebhookRoute && (!req.headers.origin || new URL(req.headers.origin).host !== host)) {
+    const isPrivateRuntimeRetire = rawPath === '/api/runtime/retire' && !req.headers.origin && !req.headers['sec-fetch-site'];
+    if (!['GET', 'HEAD'].includes(req.method || '') && !isBridgeDaemonRoute && !isTriggerWebhookRoute && !isPrivateRuntimeRetire && (!req.headers.origin || new URL(req.headers.origin).host !== host)) {
       return json(res, 403, { error: '仅允许当前预览页面发起修改' });
     }
     const projectHeader = req.headers['x-opendesign-project-id'];
@@ -1304,6 +1306,34 @@ export async function handler(req: IncomingMessage, res: ServerResponse, store =
         ...(context.runtimeRoot ? { hyperframesCli: cliPath(context.runtimeRoot), authoringGuide: path.join(context.runtimeRoot, 'node_modules/hyperframes/dist/skills/hyperframes/SKILL.md') } : {}),
       });
     }
+    if ((url.pathname === '/api/runtime/activity' && req.method === 'GET')
+      || (url.pathname === '/api/runtime/retire' && req.method === 'POST')) {
+      const remote = req.socket?.remoteAddress || '';
+      const loopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
+      let hostOk = false;
+      try { hostOk = ['127.0.0.1', 'localhost'].includes(new URL(`http://${req.headers.host || ''}`).hostname); } catch { hostOk = false; }
+      if (!loopback || !hostOk || req.headers.origin || req.headers['sec-fetch-site']) {
+        return json(res, 403, { error: 'Loopback private runtime access only' });
+      }
+      if (url.pathname === '/api/runtime/retire' && context.editorToken && req.headers.authorization !== `Bearer ${context.editorToken}`) {
+        return json(res, 401, { error: 'Editor runtime authorization required' });
+      }
+      const rootStore = store.workspaceStore ?? store;
+      const job = await rootStore.job().catch(() => null);
+      const exportsCount = runningExports.size + (job && ['pending', 'running', 'cancelling'].includes(job.state) && !runningExports.has(job.id) ? 1 : 0);
+      const mediaJobs = (await gatewayFor(rootStore, context.tracking).listJobs()).filter(item => ['queued', 'running'].includes(item.state)).length;
+      const gameTrailers = activeGameActivityCount();
+      const toolCalls = context.activeToolCalls ? context.activeToolCalls() : (context.phase1?.pending ?? 0);
+      const active = { exports: exportsCount, mediaJobs, gameTrailers, toolCalls };
+      const idle = exportsCount === 0 && mediaJobs === 0 && gameTrailers === 0 && toolCalls === 0;
+      if (url.pathname === '/api/runtime/activity') {
+        return json(res, 200, { service: 'motion-preview', version: VERSION, pid: process.pid, dataDirectory: rootStore.directory, idle, active });
+      }
+      if (!idle) return json(res, 409, { retired: false, busy: true, active });
+      json(res, 200, { retired: true, pid: process.pid, standalone: Boolean(context.retire) });
+      if (context.retire) setImmediate(() => context.retire!());
+      return;
+    }
     if (motionRequest && url.pathname === '/api/preview/open' && req.method === 'POST') {
       await openEditor(store, context);
       return json(res, 200, { studioUrl: editorUrl, ...(await store.status()) });
@@ -1701,7 +1731,7 @@ export function bindHost(environment: NodeJS.ProcessEnv = process.env) {
   return value;
 }
 
-export async function startServer(store = sharedStore, port = Number(process.env.PORT || 4173), options: { editor?: boolean; fallbackIfPortBusy?: boolean; editorToken?: string; privateHandler?: (req: IncomingMessage, res: ServerResponse) => Promise<boolean> } = { editor: process.env.MOTION_HEADLESS !== '1' }) {
+export async function startServer(store = sharedStore, port = Number(process.env.PORT || 4173), options: { editor?: boolean; fallbackIfPortBusy?: boolean; editorToken?: string; onRetire?: () => void; privateHandler?: (req: IncomingMessage, res: ServerResponse) => Promise<boolean> } = { editor: process.env.MOTION_HEADLESS !== '1' }) {
   // Resolve the address before any child process starts, so an invalid value leaves no editor running.
   const host = bindHost();
   await access(path.join(pluginRoot, 'studio/build/index.html')).catch(() => { throw new Error('编辑器尚未构建，请先运行 npm run build:studio。'); });
@@ -1711,12 +1741,14 @@ export async function startServer(store = sharedStore, port = Number(process.env
     recoverProjectTransactions(store, runtimeRoot),
     createAppTracking(store.directory, 'mcp'),
   ]);
-  void startNativePreparation(pluginRoot).catch(error => console.error('Native preparation could not start: ' + error.message));
+  void startNativePreparation(pluginRoot, false, releaseProfile === 'game' ? ['browser'] : undefined).catch(error => console.error('Native preparation could not start: ' + error.message));
   const context: Service = {
     runtimeRoot,
     nativeRoot: pluginRoot,
     studioPort: !port || port === 65535 ? 4174 : port + 1,
     editorToken: options.editorToken,
+    retire: options.onRetire,
+    activeToolCalls: () => (context.phase1?.pending ?? 0) + assetConversations(store).pending + superAgentConversations(store).pending,
     tracking,
   };
   const ffmpegPromise = execute(
@@ -1901,10 +1933,9 @@ if (isMain(import.meta.url)) {
       const editor = await ensureEditor(sharedStore.directory);
       console.log(JSON.stringify(await editorRequest(editor, '/editor-api/preview', {}), null, 2));
     } else {
-      const running = await startServer();
-      console.log(`Motion + Hyperframes Studio: http://localhost:${process.env.PORT || 4173}`);
       let stopping = false;
       let parentWatchdog: ReturnType<typeof setInterval> | undefined;
+      let running: Awaited<ReturnType<typeof startServer>>;
       const stop = async () => {
         if (stopping) return;
         stopping = true;
@@ -1913,9 +1944,11 @@ if (isMain(import.meta.url)) {
           parentWatchdog = undefined;
         }
         stopCommands();
-        await running.close();
+        await running?.close();
         process.exit(0);
       };
+      running = await startServer(sharedStore, Number(process.env.PORT || 4173), { editor: process.env.MOTION_HEADLESS !== '1', onRetire: () => { void stop(); } });
+      console.log(`Motion + Hyperframes Studio: http://localhost:${process.env.PORT || 4173}`);
       const parentPid = Number(process.env.MOTION_PARENT_PID || 0);
       if (Number.isInteger(parentPid) && parentPid > 1 && parentPid !== process.pid) {
         parentWatchdog = setInterval(() => {

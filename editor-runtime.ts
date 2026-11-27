@@ -10,6 +10,7 @@ import { WorkspaceStore, Conflict } from './workspace.ts';
 import { isMain } from './shared/entry.ts';
 import { templateConfig } from './shared/template-config.ts';
 import { phase1McpCapabilities, supportsPhase1Tool } from './shared/phase1-tools.ts';
+import { activeGameActivityCount } from './game-projects.ts';
 
 export const sharedEditorEnabled =
   process.platform === 'darwin'
@@ -164,14 +165,23 @@ export async function serveEditor(directory: string) {
       const host = new URL(`http://${req.headers.host || ''}`);
       if (!['localhost', '127.0.0.1'].includes(host.hostname) || host.port !== String(running.server.address() && (running.server.address() as any).port) || req.headers.origin) { json(403, { error: '仅允许本机私有调用' }); return true; }
       if (req.headers.authorization !== `Bearer ${token}`) { json(401, { error: '需要编辑器凭据' }); return true; }
+      const activity = async () => {
+        const job = await store.job();
+        const { gatewayFor } = await import('./gateway/service.ts');
+        const mediaJobs = (await gatewayFor(store).listJobs()).filter(item => ['queued', 'running'].includes(item.state)).length;
+        const exports = job && ['pending', 'running', 'cancelling'].includes(job.state) ? 1 : 0;
+        const gameTrailers = activeGameActivityCount();
+        const toolCalls = running.activeToolCalls;
+        const idle = !active && !toolCalls && !mediaJobs && !exports && !gameTrailers;
+        return { service, version, pid: process.pid, dataDirectory: data, idle, active: { requests: active, toolCalls, mediaJobs, exports, gameTrailers } };
+      };
       if (req.method === 'GET' && req.url === '/editor-api/health') { json(200, identity()); return true; }
+      if (req.method === 'GET' && req.url === '/editor-api/activity') { json(200, await activity()); return true; }
       if (req.method === 'POST' && (req.url === '/editor-api/shutdown' || req.url === '/editor-api/retire-broker')) {
         if (stopping) { json(200, { stopping: true }); return true; }
         if (req.url === '/editor-api/retire-broker' && (!broker || await brokerReachable(broker))) { json(409, { error: 'Editor belongs to another active WorkBuddy session' }); return true; }
-        const job = await store.job();
-        const { gatewayFor } = await import('./gateway/service.ts');
-        const busy = (await gatewayFor(store).listJobs()).some(item => ['queued', 'running'].includes(item.state));
-        if (active || running.activeToolCalls || busy || job && ['pending', 'running', 'cancelling'].includes(job.state)) { json(409, { error: 'Editor has active work' }); return true; }
+        const status = await activity();
+        if (!status.idle) { json(409, { error: 'Editor has active work', active: status.active }); return true; }
         json(200, { stopping: true }); setImmediate(() => { void stop(); }); return true;
       }
       if (stopping) { json(503, { error: 'Editor is stopping' }); return true; }
