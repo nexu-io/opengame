@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { atomicJson, jsonFile } from '../phase1-versions.ts';
 import { withProcessLock } from '../shared/process-lock.ts';
 import type { AccountSummary } from '../shared/provider-directory.ts';
@@ -241,7 +242,7 @@ function normalizeStoredRecord(
   };
 }
 
-function fromLegacyCloudShareRecord(raw: LegacyCloudShareFile): StoredPublishFile | null {
+function fromLegacyCloudShareRecord(raw: LegacyCloudShareFile, fallbackTimestamp = Date.now()): StoredPublishFile | null {
   if (!raw || typeof raw !== 'object') return null;
   if (raw.kind !== 'game-project' && raw.kind !== 'design-project') return null;
   const targetKind: WebPublishTargetKind = raw.kind === 'game-project' ? 'game' : 'design';
@@ -287,8 +288,8 @@ function fromLegacyCloudShareRecord(raw: LegacyCloudShareFile): StoredPublishFil
       versionId: raw.versionId || '',
       status: raw.status === 'stopped' ? 'stopped' : 'published',
       url: raw.url ?? null,
-      publishedAt: raw.publishedAt ?? raw.updatedAt ?? Date.now(),
-      updatedAt: raw.updatedAt ?? Date.now(),
+      publishedAt: raw.publishedAt ?? raw.updatedAt ?? fallbackTimestamp,
+      updatedAt: raw.updatedAt ?? fallbackTimestamp,
       fileCount: 1,
       totalBytes: 0,
       contentFingerprint: raw.contentFingerprint,
@@ -355,8 +356,8 @@ export class WebPublishService {
     return path.join(this.storeRoot, `${storageKey(target.kind, target.id)}-${entry}.operation.lock`);
   }
 
-  private async readState(kind: WebPublishTargetKind, targetId: string): Promise<StoredPublishFile> {
-    const state = await this.readStoredState(kind, targetId);
+  private async readState(kind: WebPublishTargetKind, targetId: string, legacyTimestamp = Date.now()): Promise<StoredPublishFile> {
+    const state = await this.readStoredState(kind, targetId, legacyTimestamp);
     if (kind !== 'game') return state;
     for (const record of Object.values(state.publications)) {
       record.url = shareViewerUrlForTarget(kind, record.url);
@@ -364,7 +365,7 @@ export class WebPublishService {
     return state;
   }
 
-  private async readStoredState(kind: WebPublishTargetKind, targetId: string): Promise<StoredPublishFile> {
+  private async readStoredState(kind: WebPublishTargetKind, targetId: string, legacyTimestamp: number): Promise<StoredPublishFile> {
     const primary = this.stateFile(kind, targetId);
     if (!existsSync(primary)) {
       if (kind === 'design' && existsSync(this.legacyStateFile(targetId))) {
@@ -374,7 +375,7 @@ export class WebPublishService {
       const legacyCloud = this.legacyCloudShareFile(kind, targetId);
       if (legacyCloud && existsSync(legacyCloud)) {
         const raw = await jsonFile<LegacyCloudShareFile>(legacyCloud, {});
-        return fromLegacyCloudShareRecord(raw) ?? { schemaVersion: 1, reservations: {}, publications: {} };
+        return fromLegacyCloudShareRecord(raw, legacyTimestamp) ?? { schemaVersion: 1, reservations: {}, publications: {} };
       }
     }
     const raw = await jsonFile<Partial<StoredPublishFile>>(primary, {});
@@ -565,7 +566,10 @@ export class WebPublishService {
       accountSummary?.state ?? (accountSignedIn ? 'signed-in' : 'signed-out');
     const accountEmail = accountSummary?.user?.email;
 
-    const state = await this.readState(target.kind, target.id);
+    // Legacy records may omit timestamps. Keep their synthesized fallback stable
+    // across this refresh while still comparing every persisted publication field.
+    const legacyTimestamp = Date.now();
+    const state = await this.readState(target.kind, target.id, legacyTimestamp);
     const targetEntry = options.filePath
       ? normalizeEntryPath(options.filePath, target.entryPath)
       : normalizeEntryPath(target.entryPath, 'index.html');
@@ -587,9 +591,10 @@ export class WebPublishService {
               parseShareLinkFromRecord(remote, remoteProjectId, current.slug) ?? current.url,
             );
             await withProcessLock(this.lockFile(target.kind, target.id), async () => {
-              const latest = await this.readState(target.kind, target.id);
+              const latest = await this.readState(target.kind, target.id, legacyTimestamp);
               const entry = latest.publications[targetEntry];
-              if (entry && entry.slug === current.slug) {
+              // A delayed status response must not overwrite a later publication operation.
+              if (entry && isDeepStrictEqual(entry, current)) {
                 entry.status = nextStatus;
                 entry.url = refreshedUrl;
                 entry.updatedAt = Date.now();
@@ -603,7 +608,7 @@ export class WebPublishService {
       }
     }
 
-    const updated = await this.readState(target.kind, target.id);
+    const updated = await this.readState(target.kind, target.id, legacyTimestamp);
     const publications = Object.values(updated.publications).sort((a, b) => b.updatedAt - a.updatedAt);
     const active =
       publications.find(item => item.filePath === targetEntry && item.status === 'published')
