@@ -137,6 +137,14 @@ is reported only after the connector completes credential acceptance and the
 local account setup finishes; browser opening or approval alone is not success.
 Successful completion also reports the confirmed account ID as `amr_user_id`,
 so account counts can deduplicate across installations and join AMR account facts.
+For sign-in and export results, `diagnostics_version=1` identifies the reporting producer. Count sign-in failures with `outcome=failure`; both the app cancel action and the connector's browser cancellation receipt emit `cancelled`. Exit 130 alone is an interruption, not evidence of cancellation. `failed_stage` identifies the stage associated with `error_kind` independently of the last observed stage.
+
+Export requests, worker results and Studio results are separate populations. Use `check_code` for the first failing rule or technical check, `verification_reason` for the observed failure mode, and `render_reason` for recognized renderer signatures. An absent optional diagnostic means the producer had no corresponding evidence. Source paths, command output and activation URLs are excluded.
+
+Connector failures can include an allowlisted system or npm error code.
+An interrupted login and an installation timeout have distinct codes.
+A failed authorization request can include its numeric HTTP status when the
+connector reports one. Raw connector output stays out of telemetry.
 Failures and cancellations omit that ID. The existing collection controls apply;
 `distinct_id` remains the installation ID, without identify/alias or person merging.
 Email, names, activation URLs, authorization codes and credentials are omitted.
@@ -747,7 +755,7 @@ All plugin login and upgrade touchpoints share the closed `entitlementHookIds` e
 - Backend join: `POST /api/settings/account/login` forwards `{ hookId, entryId }` (plus optional `studioId`, `modality`,
   and `entryFrom`) to `account_sign_in_result` and passes `OPEN_DESIGN_AMR_ORIGIN`, `OPEN_DESIGN_AMR_ENTRY_ID`,
   `OPEN_DESIGN_AMR_ENTRY_SOURCE`, `OPEN_DESIGN_AMR_ENTRY_AT`, and `OPEN_DESIGN_AMR_PLACEMENT_ID` into the spawned
-  `vela login` connector process so AMR attributes browser activation to the originating touchpoint;
+  `vela login` connector process. Local failures, including a device authorization request that fails before a browser opens, retain the click UUID. The pinned 0.1.10 connector only appends attribution to the browser URL for the `open_design` origin, so OpenGame browser-side correlation also requires connector support;
   `POST /api/settings/account/subscription` forwards the 4D `od_*` query parameters (`od_origin`, `od_entry_source`,
   `od_entry_id` prefixed with `opengame-` in OpenGame builds, `od_entry_at`, and `od_placement_id`) to the OpenDesign
   dashboard billing page without `utm_*` parameters.

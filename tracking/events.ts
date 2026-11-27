@@ -1,5 +1,5 @@
 import {
-  assetImportErrorCodes,
+  assetImportErrorCodes, connectorCauseCodes, exportSystemErrorCodes, renderFailureReasons, verifyFailureReasons,
   exportFailureCodes,
   exportFailureStages,
   mediaGenerationAccountPlans,
@@ -207,7 +207,7 @@ export const omEvents = {
   asset_import_result: { producers: ['mcp'], fields: { ...business, requested_count: 'integer', added_count: 'integer', reused_count: 'integer', failed_count: 'integer' }, required: ['outcome'] },
   asset_import_item_failure: { producers: ['mcp'], fields: { project_id: 'uuid', operation_id: 'uuid', failed_count: 'integer',
     error_code: [...toolFailureDimensions.error_code, ...assetImportErrorCodes] }, required: ['failed_count', 'error_code'] },
-  export_request_result: { producers: ['mcp'], fields: { ...business, job_id: 'uuid', queue_state: ['pending', 'running', 'cancelling', 'cancelled', 'completed', 'failed'] }, required: ['outcome'] },
+  export_request_result: { producers: ['mcp'], fields: { ...business, diagnostics_version: 'integer', blocking_job_id: 'uuid', blocking_state: ['pending', 'running', 'cancelling'], blocking_age_ms: 'integer', job_id: 'uuid', queue_state: ['pending', 'running', 'cancelling', 'cancelled', 'completed', 'failed'] }, required: ['outcome'] },
   export_cancel_result: { producers: ['mcp'], fields: { ...business, job_id: 'uuid', state_after: ['pending', 'running', 'cancelling', 'cancelled', 'completed', 'failed'] }, required: ['outcome'] },
   media_generation_requested: { producers: ['worker'], fields: {
     ...generation, request_id: 'uuid', capability_id: 'code',
@@ -268,15 +268,15 @@ export const omEvents = {
     previous_error_code: mediaGenerationErrorCodes,
     previous_failure_phase: mediaGenerationFailurePhases,
   }, required: ['modality', 'job_id', 'job_state', 'asset_count'] },
-  export_result: { producers: ['worker'], fields: { job_id: 'uuid', job_state: ['completed', 'failed', 'cancelled'], duration_ms: 'integer', technical_check: ['passed', 'failed', 'unknown'], failure_stage: exportFailureStages, error_code: exportFailureCodes }, required: ['job_id', 'job_state', 'duration_ms', 'technical_check'] },
+  export_result: { producers: ['worker'], fields: { job_id: 'uuid', job_state: ['completed', 'failed', 'cancelled'], duration_ms: 'integer', technical_check: ['passed', 'failed', 'unknown'], diagnostics_version: 'integer', check_code: 'code', rule_count: 'integer', verification_reason: verifyFailureReasons, system_error: exportSystemErrorCodes, terminal_signal: ['SIGKILL', 'SIGTERM', 'SIGINT', 'SIGABRT', 'SIGSEGV', 'other'], render_reason: renderFailureReasons, renderer_exit_code: 'integer', stage_duration_ms: 'integer', queue_duration_ms: 'integer', failure_stage: exportFailureStages, error_code: exportFailureCodes }, required: ['job_id', 'job_state', 'duration_ms', 'technical_check'] },
   // One per finished OpenDesign sign-in attempt. `replaced` is an interrupted attempt the service refused; the same
   // sign-in continues with a new attempt. Times are milliseconds since the click. Stage values come from the connector
   // protocol; only confirmed account IDs are allowed, never links, authorization codes or credentials.
   account_sign_in_result: { producers: ['mcp'], fields: { attempt_id: 'uuid', outcome: ['success', 'failure', 'cancelled', 'replaced'],
     source_product: ['openmotion', 'opengame'], source_detail: ['openmotion_editor_login', 'opengame_editor_login', ...entitlementHookIds], hook_id: entitlementHookIds, entry_id: 'uuid', entry_occurred_at: 'timestamp',
     entry_from: providerSetupEntries, studio_id: 'slug', modality: attributionModality, amr_user_id: 'code',
-    error_code: ['connector_unavailable', 'setup_failed', 'authorization_expired', 'credentials_rejected'],
-    connector_problem: ['npm_missing', 'install_failed', 'start_failed'], connector_version: 'code', resumed: 'boolean',
+    error_code: ['connector_unavailable', 'setup_failed', 'interrupted', 'authorization_expired', 'credentials_rejected'],
+    diagnostics_version: 'integer', cancel_source: ['app', 'browser'], failed_stage: accountStages, network_reason: ['dns', 'connection_refused', 'connection_reset', 'timeout'], connector_cause: connectorCauseCodes, http_status: { min: 100, max: 599, integer: true }, connector_problem: ['npm_missing', 'install_timeout', 'install_failed', 'start_failed'], connector_version: 'code', resumed: 'boolean',
     last_stage: accountStages, last_result: ['started', 'success', 'failed'], error_kind: accountErrorKinds, browser_opened: 'boolean',
     receipt: ['accepted', 'rejected'], exit_code: 'integer', duration_ms: 'integer', prepare_ms: 'integer', link_ms: 'integer', approved_ms: 'integer' },
     required: ['attempt_id', 'outcome', 'connector_version', 'resumed', 'duration_ms'] },
@@ -338,7 +338,7 @@ export const omEvents = {
   check_completed: { producers: ['mcp', 'worker'], fields: { ...check, result: ['pass', 'fail', 'unreviewed', 'error'], evidence_ref: 'code', duration_ms: 'integer' }, required: ['check_id', 'check_type', 'project_id', 'version_id', 'subject_id', 'checklist_version', 'checker_type', 'result'] },
   queue_snapshot: { producers: ['worker'], fields: { instance_id: 'uuid', task_type: ['asset_import', 'export', 'all'], queued_count: 'integer', running_count: 'integer', available_slots: 'integer', counts_complete: 'boolean' }, required: ['instance_id', 'task_type', 'queued_count', 'running_count', 'available_slots', 'counts_complete'] },
   worker_heartbeat: { producers: ['worker'], fields: { collector_id: 'uuid', instance_id: 'uuid', active: 'boolean', queue_count: 'integer' }, required: ['collector_id', 'instance_id', 'active', 'queue_count'] },
-  incident_confirmed: { producers: ['mcp', 'worker'], fields: { incident_id: 'uuid', incident_type: ['false_success', 'duplicate_charge', 'content_loss', 'cross_project_write', 'wrong_version_delivery', 'other'], severity: ['sev1', 'sev2', 'sev3'], subject_id: 'code', evidence_ref: 'code' }, required: ['incident_id', 'incident_type', 'severity', 'subject_id'] },
+  incident_confirmed: { producers: ['mcp', 'worker'], fields: { incident_id: 'uuid', incident_type: ['false_success', 'duplicate_charge', 'content_loss', 'cross_project_write', 'wrong_version_delivery', 'other'], severity: ['sev1', 'sev2', 'sev3'], subject_id: 'code', persist_reason: ['ownership_changed', 'permission_denied', 'out_of_space', 'missing_file', 'unknown'], evidence_ref: 'code' }, required: ['incident_id', 'incident_type', 'severity', 'subject_id'] },
   recovery_recorded: { producers: ['mcp', 'worker'], fields: { incident_id: 'uuid', test_case_id: 'code', fault_type: 'code', data_integrity: ['preserved', 'lost', 'unknown'], duplicate_charge_check: ['clear', 'found', 'unknown'], recovery_result: ['success', 'failure', 'unknown'] }, required: ['incident_id', 'test_case_id', 'fault_type', 'data_integrity', 'duplicate_charge_check', 'recovery_result'] },
   page_view: { producers: ['studio'], fields: { page_name: pages, view_id: 'uuid', embedded: 'boolean', has_project: 'boolean', brand_collection: brandCollection, entry_from: entryFrom, mcp_client: mcpClient, settings_section: settingsSection,
     studio_id: creative.studio_id, scene_id: creative.scene_id, model_provider: creative.model_provider, model_id: creative.model_id, explore_community: creative.explore_community, medium: creative.medium, landing: creative.landing, hub_id: modelHub.hub_id, signed_in: modelHub.signed_in }, required: ['page_name', 'view_id', 'embedded', 'has_project'] },
@@ -416,10 +416,10 @@ export const omEvents = {
     ...game, game_option_kind: ['genre', 'style', 'setting', 'orientation', 'playable_ad', 'multiplayer'], game_view: ['preview', 'code', 'trailer'], publish_target: webPublishTargets },
     required: ['page_name', 'area', 'element'] },
   // Studio UI exports run in the editor's own render pipeline, not the worker that owns export_result.
-  studio_export_request_result: { producers: ['studio'], fields: { export_id: 'uuid', outcome: ['accepted', 'rejected', 'unknown'], ...exportSettings,
+  studio_export_request_result: { producers: ['studio'], fields: { export_id: 'uuid', diagnostics_version: 'integer', outcome: ['accepted', 'rejected', 'unknown'], ...exportSettings,
     error_code: ['FFMPEG_MISSING', 'SERVER_UNREACHABLE', 'SERVICE_UNAVAILABLE', 'REQUEST_REJECTED', 'SERVER_ERROR', 'INVALID_RESPONSE', 'RUNTIME_NOT_READY'], ...videoDuration, ...projectScale, ...project, ...template },
     required: ['export_id', 'outcome', 'origin', 'format', 'quality', 'resolution', 'fps'] },
-  studio_export_result: { producers: ['studio'], fields: { export_id: 'uuid', job_state: ['completed', 'failed', 'cancelled'], duration_ms: 'integer',
+  studio_export_result: { producers: ['studio'], fields: { export_id: 'uuid', diagnostics_version: 'integer', render_reason: renderFailureReasons, job_state: ['completed', 'failed', 'cancelled'], duration_ms: 'integer',
     ...exportSettings, error_code: ['RENDER_FAILED', 'CONNECTION_LOST'], ...videoDuration, ...project, ...template },
     required: ['export_id', 'job_state', 'duration_ms', 'origin', 'format', 'quality', 'resolution', 'fps'] },
   studio_notice_shown: { producers: ['studio'], fields: { notice: ['ffmpeg_missing', 'external_file_conflict', 'project_unreachable'], ...project }, required: ['notice'] },

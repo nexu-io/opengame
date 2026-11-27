@@ -335,3 +335,16 @@ test('capability-center handbook documents live sound-effects, 3d-asset (.glb), 
   assert.match(faq![1], /elevenlabs-sound-v3/);
   assert.match(faq![1], /requestId/);
 });
+
+test('export handbook localizes the guarded recovery example', () => {
+  const entry = mcpCapabilities.find(item => item.id === 'export')!;
+  assert.match(entry.prompt, /compare exportJob\.error with any lintFindings and the source/);
+  assert.match(entry.prompt, /diagnostics are unavailable, use the original error/);
+  assert.match(entry.prompt, /expectedRevision and expectedVersionId/);
+  assert.match(entry.prompt, /Retry once .*new requestId/);
+  const translations = JSON.parse(readFileSync(new URL('../studio/src/i18n/mcp-ui.json', import.meta.url), 'utf8'));
+  for (const locale of Object.values(translations) as Record<string, string>[]) {
+    assert.ok(locale[entry.description]);
+    assert.match(locale[entry.prompt], /openmotion_edit_project .*expectedRevision, expectedVersionId/);
+  }
+});

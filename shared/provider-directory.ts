@@ -44,10 +44,10 @@ export type ProviderDirectory = {
   defaults: Partial<Record<ModelKind, string>>;
 };
 /** Why the latest sign-in attempt ended without an account session. */
-export type AccountErrorCode = 'connector_unavailable' | 'setup_failed' | 'authorization_expired' | 'credentials_rejected';
+export type AccountErrorCode = 'connector_unavailable' | 'setup_failed' | 'interrupted' | 'authorization_expired' | 'credentials_rejected';
 /** Non-secret progress of one connector sign-in: stages are `stage:result[:errorKind]`. */
 export type AccountAttempt = {
-  id: string; stages: string[]; persisted: boolean; receipt?: 'accepted' | 'rejected'; exitCode?: number | null;
+  id: string; stages: string[]; persisted: boolean; receipt?: 'accepted' | 'rejected'; exitCode?: number | null; httpStatus?: number; networkReason?: 'dns' | 'connection_refused' | 'connection_reset' | 'timeout';
   /** Confirms credentials an interrupted attempt had already saved; the connector shows no activation link for it. */
   resumed?: boolean;
 };

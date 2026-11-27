@@ -148,8 +148,12 @@ export function trackPhase1Result(tracking: OmTracking | undefined, name: string
       }, undefined, undefined, host);
     }
   }
-  if (name === 'motion_export_request') tracking.track('export_request_result', { ...fields,
+  if (name === 'motion_export_request') {
+    const busy = error as { blockingJobId?: string; blockingState?: 'pending' | 'running' | 'cancelling'; blockingAgeMs?: number } | undefined;
+    tracking.track('export_request_result', { ...fields, diagnostics_version: 1,
+      ...(busy?.blockingJobId && uuid.test(busy.blockingJobId) ? { blocking_job_id: busy.blockingJobId, blocking_state: busy.blockingState, blocking_age_ms: busy.blockingAgeMs } : {}),
     ...(uuid.test(result?.job?.id) ? { job_id: result.job.id, queue_state: result.job.state } : {}) }, undefined, undefined, host);
+  }
   if (name === 'motion_export_cancel') tracking.track('export_cancel_result', { ...fields,
     ...(uuid.test(result?.job?.id) ? { job_id: result.job.id, state_after: result.job.state } : {}) }, undefined, undefined, host);
 }

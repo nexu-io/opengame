@@ -29,7 +29,7 @@ A Skills CLI failure or timeout does not block Studio or MCP setup: report it br
 git -c filter.lfs.process= -c filter.lfs.smudge= -c filter.lfs.required=false clone --depth 1 --single-branch --branch main https://github.com/nexu-io/opengame.git
 cd opengame
 git lfs install --local --skip-smudge
-npm ci
+npm ci --include=optional
 npm run build:studio
 ```
 
@@ -42,13 +42,16 @@ Keep project data outside the checkout. Use the same absolute data directory for
 macOS / Linux:
 
 ```sh
-MOTION_DATA_DIR="$HOME/.opengame/workspace" npm start
+export MOTION_DATA_DIR="$HOME/.opengame/workspace"
+npm run prepare:account
+npm start
 ```
 
 Windows PowerShell:
 
 ```powershell
 $env:MOTION_DATA_DIR = Join-Path $env:USERPROFILE '.opengame\workspace'
+npm run prepare:account
 npm start
 ```
 

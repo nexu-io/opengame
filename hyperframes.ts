@@ -33,7 +33,7 @@ export function runtimeEnv(): NodeJS.ProcessEnv {
     ...(!process.env.HYPERFRAMES_FFPROBE_PATH && process.env.FFPROBE_PATH ? { HYPERFRAMES_FFPROBE_PATH: process.env.FFPROBE_PATH } : {}) };
 }
 
-export type CommandResult = { code: number; stdout: string; stderr: string };
+export type CommandResult = { code: number; signal?: NodeJS.Signals; stdout: string; stderr: string };
 export function execute(command: string, args: string[], cwd: string, timeout = 120_000, environment: NodeJS.ProcessEnv = {}, signal?: AbortSignal): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) { reject(new Error('COMMAND_CANCELLED')); return; }
@@ -49,11 +49,11 @@ export function execute(command: string, args: string[], cwd: string, timeout = 
     child.stdout.on('data', data => { stdout = (stdout + data).slice(-4 * 1024 * 1024); });
     child.stderr.on('data', data => { stderr = (stderr + data).slice(-32 * 1024); });
     child.on('error', error => { cleanup(); reject(error); });
-    child.on('close', code => {
+    child.on('close', (code, signalName) => {
       cleanup();
       if (signal?.aborted) reject(new Error('COMMAND_CANCELLED'));
       else if (timedOut) reject(Object.assign(new Error('Hyperframes 执行超时：' + stderr.slice(-1000)), { code: 'COMMAND_TIMEOUT' }));
-      else resolve({ code: code ?? 1, stdout, stderr });
+      else resolve({ code: code ?? 1, ...(signalName ? { signal: signalName } : {}), stdout, stderr });
     });
   });
 }

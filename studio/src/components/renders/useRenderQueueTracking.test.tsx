@@ -95,6 +95,7 @@ describe("Studio export tracking", () => {
     expect(events("studio_export_request_result")).toHaveLength(1);
     expect(results).toHaveLength(1);
     expect(request).toEqual({
+      diagnostics_version: 1,
       export_id: expect.stringMatching(/^[0-9a-f-]{36}$/), outcome: "accepted", origin: "export_panel",
       format: "webm", quality: "high", resolution: "4k", fps: "60", project_scope: "managed", project_id: PROJECT,
       // Nothing about the project is loaded in this harness; the buckets say so rather than being absent.

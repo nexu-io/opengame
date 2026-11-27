@@ -1,3 +1,4 @@
+import { classifyRenderFailure } from '../shared/render-failure.ts';
 import test from 'node:test';
 import { legacyToolName } from '../shared/public-names.mjs';
 import assert from 'node:assert/strict';
@@ -1043,3 +1044,10 @@ test('Phase1 export acceptance, display observation and review checks retain cal
     }
   } finally { tracking.close(); }
 }));
+
+test('renderer telemetry emits bounded reasons instead of renderer output', () => {
+  assert.equal(classifyRenderFailure('listen EPERM: operation not permitted 127.0.0.1'), 'local_port_denied');
+  assert.equal(classifyRenderFailure('Chrome cannot start'), 'browser_start');
+  assert.equal(classifyRenderFailure('Unknown encoder libx264'), 'encoder');
+  assert.equal(classifyRenderFailure('private input.mp4: other failure'), 'unclassified');
+});

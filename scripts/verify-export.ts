@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { validateExportExpectation } from '../shared/export-spec.ts';
 import type { ExportExpectation } from '../shared/export-spec.ts';
 export type { ExportExpectation } from '../shared/export-spec.ts';
+import type { VerifyFailureReason } from '../tracking/tool-fields.ts';
 import { isMain } from '../shared/entry.ts';
 
 const execute = promisify(execFile);
@@ -19,7 +20,8 @@ export function verificationBinaries() {
   return { ffmpeg, ffprobe };
 }
 
-type Check = { name: string; status: 'passed' | 'failed' | 'not_run'; details: string };
+
+type Check = { name: string; status: 'passed' | 'failed' | 'not_run'; details: string; reason?: VerifyFailureReason };
 type Binaries = { ffmpeg: string; ffprobe: string };
 export type VerificationReport = {
   scope: 'technical';
@@ -38,10 +40,11 @@ function rate(value: unknown): number {
   const parts = value.split('/').map(Number);
   return parts.length === 2 ? parts[0] / parts[1] : parts[0];
 }
-function processFailure(error: unknown): { unavailable: boolean; message: string } {
+function processFailure(error: unknown) {
   const e = error as Error & { code?: string | number; killed?: boolean; stderr?: string };
-  return { unavailable: e.code === 'ENOENT' || e.code === 'EACCES',
-    message: e.killed ? 'Verification process timed out (60 seconds).' : (e.stderr || e.message || String(error)).slice(-1600) };
+  const timedOut = e.killed === true && e.code == null;
+  return { timedOut, unavailable: e.code === 'ENOENT' || e.code === 'EACCES',
+    message: timedOut ? 'Verification process timed out (60 seconds).' : (e.stderr || e.message || String(error)).slice(-1600) };
 }
 
 // This verifies encoded media, not creative quality or whether the soundtrack fits the brief.
@@ -57,10 +60,14 @@ export async function verifyExport(filename: string, expectation: number | Expor
     expected, checks: [],
     remainingChecks: ['Inspect final-file frames against the brief and storyboard.', 'Play the exported MP4 through, seek, and replay in the target browser/player.',
       'Check intended sound, audible content and synchronization against the brief; optional audio does not prove a requested soundtrack exists.'] };
-  const check = (name: string, passed: boolean, details: string) => report.checks.push({ name, status: passed ? 'passed' : 'failed', details });
+  const check = (name: string, passed: boolean, details: string, reason: VerifyFailureReason = 'expectation_mismatch') => report.checks.push({ name, status: passed ? 'passed' : 'failed', details, ...(passed ? {} : { reason }) });
   const failure = (name: string, error: unknown) => {
     const detail = processFailure(error);
-    report.checks.push({ name, status: detail.unavailable ? 'not_run' : 'failed', details: detail.message });
+    let reason: VerifyFailureReason = 'process_error';
+    if (detail.unavailable) reason = 'tool_unavailable';
+    else if (detail.timedOut) reason = 'timeout';
+    else if (name === 'full-decode' && /error while decoding|invalid data found|decoding error/i.test(detail.message)) reason = 'decoder_error';
+    report.checks.push({ name, status: detail.unavailable ? 'not_run' : 'failed', details: detail.message, reason });
   };
   const finish = () => {
     report.status = report.checks.some(c => c.status === 'failed') ? 'failed' : report.checks.some(c => c.status === 'not_run') ? 'blocked' : 'passed';
@@ -73,7 +80,7 @@ export async function verifyExport(filename: string, expectation: number | Expor
     check('file', before.isFile() && before.size > 0, `${before.size} bytes`);
     if (!before.isFile() || !before.size) return finish();
   } catch (error) {
-    check('file', false, (error as Error).message);
+    check('file', false, (error as Error).message, 'io_error');
     return finish();
   }
 
@@ -98,7 +105,10 @@ export async function verifyExport(filename: string, expectation: number | Expor
   check('frame-rate', Math.abs(rate(video[0]?.r_frame_rate) - fps) < 0.001 && Math.abs(rate(video[0]?.avg_frame_rate) - fps) < 0.001,
     `nominal=${video[0]?.r_frame_rate}; average=${video[0]?.avg_frame_rate}`);
   check('audio', (expected.audio === 'silent' ? audio.length === 0 : expected.audio === 'required' ? audio.length > 0 : true)
-    && audio.every((stream: any) => stream.codec_name === 'aac'), `${audio.length} audio stream(s); policy=${expected.audio}; codecs=${audio.map((stream: any) => stream.codec_name).join(',')}`);
+    && audio.every((stream: any) => stream.codec_name === 'aac'), expected.audio === 'required' && audio.length === 0
+      ? 'Missing required audio track: the MP4 contains no audio streams.'
+      : `${audio.length} audio stream(s); policy=${expected.audio}; codecs=${audio.map((stream: any) => stream.codec_name).join(',')}`,
+    audio.length === 0 ? 'missing_audio' : expected.audio === 'silent' ? 'unexpected_audio' : 'audio_codec');
   const containerSeconds = Number(probe.format?.duration ?? NaN);
   const seconds = Number(video[0]?.duration ?? containerSeconds);
   const tolerance = Math.max(0.1, 1 / fps);
@@ -114,7 +124,7 @@ export async function verifyExport(filename: string, expectation: number | Expor
     if (decoded.stderr.trim()) throw new Error(decoded.stderr);
     const counts = [...decoded.stdout.matchAll(/^frame=(\d+)\s*$/gm)];
     const count = Number(counts.at(-1)?.[1]);
-    check('full-decode', count > 0, `${count} video frames and all audio streams decoded without reported errors.`);
+    check('full-decode', count > 0, `${count} video frames and all audio streams decoded without reported errors.`, 'no_frames');
     check('decoded-duration', count > 0 && Math.abs(count / fps - expectedDuration) <= tolerance + 1e-6,
       `${count} decoded frames; expected=${Math.ceil(expectedDuration * fps - 1e-8)}`);
   } catch (error) { failure('full-decode', error); }

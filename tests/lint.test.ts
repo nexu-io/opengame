@@ -6,6 +6,7 @@ import { lintProject } from '@hyperframes/core/lint';
 import { fixture } from './fixtures.ts';
 import { Phase1Service } from '../phase1.ts';
 import { inspectProject, pluginRoot, runHyperframes } from '../hyperframes.ts';
+import { diagnoseFailedRender, type ExportLintFinding } from '../shared/export-lint-diagnostics.ts';
 import { renderNext } from '../server.ts';
 
 test('Motion lint and preview reject the same structural errors as Studio before opening or rendering', () => fixture(async store => {
@@ -36,6 +37,9 @@ test('Motion lint and preview reject the same structural errors as Studio before
   const failed = await store.job(requested.job.id);
   assert.equal(failed?.state, 'failed');
   assert.match(failed?.error || '', /nested_structure_needs_subcomposition/);
+  const { exportJob } = await service.call('openmotion_get_project', { projectId: project.projectId, exportJobId: requested.job.id });
+  assert.equal(exportJob.versionId, saved.version.versionId);
+  assert.ok(exportJob.lintFindings.some((item: ExportLintFinding) => item.code === 'nested_structure_needs_subcomposition' && item.file === 'index.html' && item.line && item.fixHint));
   const fixed = await service.call('openmotion_edit_project', { projectId: project.projectId, requestId: 'fixed', expectedRevision: saved.revision,
     expectedVersionId: saved.version.versionId, files: [
       { path: 'index.html', content: original.replace('</div>', '<div id="scene" data-composition-id="scene" data-composition-src="compositions/scene.html" data-start="0" data-duration="10" data-track-index="1"></div></div>').replace('</style>', '#main{transition:opacity 1s}</style>') },
@@ -49,4 +53,14 @@ test('Motion lint and preview reject the same structural errors as Studio before
 
 test('Motion lint retains cancellation before starting its isolated worker', () => fixture(async store => {
   await assert.rejects(inspectProject(pluginRoot, store.projectDirectory, 'lint', AbortSignal.abort()), /COMMAND_CANCELLED/);
+}));
+
+test('post-render diagnostics inspect the selected entry under the renderer CLI policy', () => fixture(async store => {
+  const directory = store.projectDirectory;
+  const source = await readFile(path.join(directory, 'index.html'), 'utf8');
+  const { mkdir, writeFile } = await import('node:fs/promises');
+  await mkdir(path.join(directory, 'scenes'));
+  await writeFile(path.join(directory, 'scenes', 'scene.html'), source.replace(/data-width="[0-9]+"/, ''));
+  const findings = await diagnoseFailedRender(pluginRoot, directory, 'scenes/scene.html');
+  assert.ok(findings.some(item => item.code === 'root_missing_dimensions' && item.file === 'scenes/scene.html'));
 }));

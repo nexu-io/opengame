@@ -64,10 +64,10 @@ if (args[0] === 'login') {
     const { pendingLogin, ...profile } = saved;
     stage('device_authorization_result', 'success'); stage('token_exchange_result', 'success');
     confirm(profile, scenario === 'resume-rejected' ? 'login-complete-failure' : scenario, pendingLogin.previous);
-  } else if (scenario === 'login-create-failure') {
+  } else if (['login-create-failure', 'login-interrupted'].includes(scenario)) {
     stage('device_auth_create_result', 'failed', 'network_error');
-    console.error('Error: start device authorization: private upstream data');
-    process.exit(1);
+    console.error('Error: start device authorization: API request failed with status 503: private upstream data');
+    process.exit(scenario === 'login-interrupted' ? 130 : 1);
   } else {
     stage('device_auth_create_result', 'success');
     console.log('Open this URL to continue:\nhttps://open-design.ai/activate?code=TEST-123\n\nCode: TEST-123');

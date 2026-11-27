@@ -245,8 +245,8 @@ export function exportSettings(origin: ExportOrigin | undefined, options: { form
 export function exportRejection(status: number): NonNullable<Fields<'studio_export_request_result'>['error_code']> {
   return status === 503 ? 'SERVICE_UNAVAILABLE' : status >= 400 && status < 500 ? 'REQUEST_REJECTED' : 'SERVER_ERROR';
 }
-export function reportExportRequest(fields: Fields<'studio_export_request_result'>) { void trackMotion('studio_export_request_result', fields); }
-export function reportExportResult(fields: Fields<'studio_export_result'>) { void trackMotion('studio_export_result', fields); }
+export function reportExportRequest(fields: Fields<'studio_export_request_result'>) { void trackMotion('studio_export_request_result', { ...fields, diagnostics_version: 1 }); }
+export function reportExportResult(fields: Fields<'studio_export_result'>) { void trackMotion('studio_export_result', { ...fields, diagnostics_version: 1 }); }
 export function reportNoticeShown(notice: Fields<'studio_notice_shown'>['notice'], projectId?: string | null) {
   void trackMotion('studio_notice_shown', { notice, ...projectFields(projectId ?? activeProjectId) });
 }

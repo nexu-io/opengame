@@ -1,0 +1,37 @@
+name: Windows sign-in component
+on:
+  pull_request:
+    paths:
+      - gateway/account*.ts
+      - scripts/prepare-account.ts
+      - package-lock.json
+      - .github/workflows/connector-windows.yml
+permissions:
+  contents: read
+jobs:
+  connector:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          lfs: false
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '26.11.1'
+      - run: npm ci --include=optional --no-audit --no-fund
+      - run: npm run prepare:account
+      - name: Repair a missing managed Windows executable
+        shell: pwsh
+        run: |
+          node --input-type=module -e "
+            import assert from 'node:assert/strict';
+            import { unlink } from 'node:fs/promises';
+            import path from 'node:path';
+            import { installConnector } from './gateway/account-connector.ts';
+            const root = path.join(process.env.RUNNER_TEMP, 'connector repair');
+            const binary = await installConnector(root);
+            assert.ok(binary.startsWith(root + path.sep));
+            await unlink(binary);
+            assert.equal(await installConnector(root), binary);"

@@ -1,3 +1,4 @@
+import { classifyRenderFailure } from '../../../../shared/render-failure.ts';
 import { useEmptyPreview } from "../nle/useEmptyPreview";
 import { useMvpEditor } from "../../motion/StudioHost";
 import { buildProjectApiPath } from "../../utils/projectRouting";
@@ -535,7 +536,7 @@ export function useRenderQueue(
       reportExportResult({ export_id: started.exportId,
         job_state: job.status === "complete" ? "completed" : job.status === "cancelled" ? "cancelled" : "failed",
         duration_ms: Math.min(86_400_000, Math.max(0, Math.round(job.durationMs ?? Date.now() - job.createdAt))),
-        ...started.settings, ...(job.status === "failed" ? { error_code: "RENDER_FAILED" as const } : {}),
+        ...started.settings, ...(job.status === "failed" ? { error_code: "RENDER_FAILED" as const, render_reason: classifyRenderFailure(job.error ?? "") } : {}),
         ...projectFields(projectId) });
     }
     for (const job of jobs) {

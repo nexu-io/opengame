@@ -188,6 +188,8 @@ openmotion_edit_project and openmotion_restore_version accept the same optional 
 
 ### openmotion_export_request
 
+Failed MCP jobs may return `lintFindings` beside `error` when queried by `projectId` and `exportJobId`. Failed preflight uses existing Studio findings. After a nonzero render exit, the worker inspects the selected snapshot entry using the native CLI lint policy. Findings guide guarded edits and one retry. See [recovery](../skills/openmotion-video/references/shared/verification.md#recover-a-failed-mcp-render).
+
 默认 action=request，必填 projectId、requestId、expectedRevision、versionId，可选 audio=required/silent/optional。仅允许导出当前经双重校验的版本；先恢复历史版本，再导出它。局部文件冻结成私有快照，外部 URL 仍是外部依赖。
 
 返回原 job（id/projectId/versionId/revision/expected/state/stage 等）和自动技术校验说明。用 openmotion_get_project 的 exportJobId 追踪。只输出 MP4；自动执行 lint、原生 render、FFprobe 规格、视频/音频全解码和代表时间点 seek。检查失败返回 failed，不把渲染退出0当成功。队列一期同数据目录只允许一个待执行/运行中的导出。

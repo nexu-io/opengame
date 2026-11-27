@@ -42,7 +42,7 @@ import {
 import { resumableDownload, type DownloadProgress } from './resumable-download.ts';
 import { accountDirectory } from './account-directory.ts';
 import { withProcessLock } from '../shared/process-lock.ts';
-import { connectorRuntime, connectorVersion, ConnectorUnavailable, installConnector, manualInstallCommand, verifyConnector, type ConnectorProblem } from './account-connector.ts';
+import { connectorAdvice, connectorRuntime, connectorVersion, ConnectorUnavailable, installConnector, manualInstallCommand, verifyConnector, type ConnectorProblem } from './account-connector.ts';
 
 const execute = promisify(execFile);
 /** The launcher for the system default browser, which is also where the connector opens sign-in. */
@@ -124,6 +124,7 @@ const stagePrefix = 'OPEN_DESIGN_AMR_AUTH_STAGE\t', completionPrefix = 'OPEN_DES
 const stageNames: readonly string[] = accountStages;
 const failureMessages: Record<AccountErrorCode, string> = {
   connector_unavailable: "Couldn't download the OpenDesign sign-in component. Check your network or proxy, then select Retry. If it keeps failing, run this command in a terminal, then select Retry:",
+  interrupted: 'Sign-in was interrupted. Sign in again.',
   setup_failed: "Can't connect to OpenDesign right now. Check your network and try again.",
   authorization_expired: 'Browser authorization expired or was cancelled. Sign in again.',
   credentials_rejected: 'Account credentials could not be verified. Sign in again, and contact us if this keeps happening.',
@@ -131,13 +132,14 @@ const failureMessages: Record<AccountErrorCode, string> = {
 // A connector that cannot be prepared explains why; each message ends with the manual installation command.
 const connectorMessages: Record<ConnectorProblem, string> = {
   npm_missing: "OpenMotion couldn't find npm to set up the OpenDesign sign-in component. Run this command in a terminal, then select Retry:",
+  install_timeout: connectorAdvice.installTimeout,
   install_failed: failureMessages.connector_unavailable,
   start_failed: "The OpenDesign sign-in component couldn't start on this device. Run this command in a terminal to reinstall it, then select Retry:",
 };
 // A connector named by OPENMOTION_ACCOUNT_CLI is used as is, so no install command is offered for it.
 const explicitConnectorMessage = "The OpenDesign sign-in component set by OPENMOTION_ACCOUNT_CLI couldn't start. Check or clear that path, then select Retry.";
 /** Sign-in failure messages Studio translates by exact text. */
-export const accountSignInMessages = [...new Set([...Object.values(failureMessages), ...Object.values(connectorMessages), explicitConnectorMessage])];
+export const accountSignInMessages = [...new Set([...Object.values(failureMessages), ...Object.values(connectorMessages), ...Object.values(connectorAdvice), explicitConnectorMessage])];
 // Billing, media and sign-out use the control key; models use the runtime key. Accept only a complete pair.
 const hasCredentials = (profile?: Profile) => Boolean(profile?.controlKey && profile.controlKeyId && profile.runtimeKey && profile.user?.id);
 const signedInProfile = (profile?: Profile) => hasCredentials(profile) && !profile!.pendingLogin;
@@ -255,7 +257,7 @@ function failureCode(attempt: AccountAttempt, cancelled: boolean): AccountErrorC
   if (cancelled || (stage === 'device_authorization_result' && errorKind !== 'network_error')) return 'authorization_expired';
   // Approved in the browser, then stopped before reporting a later stage (for example incomplete issued credentials).
   if (!stage && attempt.stages.includes('device_authorization_result:success')) return 'credentials_rejected';
-  return 'setup_failed';
+  return attempt.exitCode === 130 ? 'interrupted' : 'setup_failed';
 }
 
 /** The account media catalogue does not list these audio models yet, though `/api/v1/media/audio/speech` and `/audio/music` accept them. */
@@ -471,7 +473,7 @@ export class OpenDesignAccount {
     });
   }
   /** Support logs omit identities; only successful telemetry may carry the confirmed account ID. */
-  private finish(attempt: AccountAttempt, outcome: SignInRecord['outcome'], errorCode?: AccountErrorCode, amrUserId?: string, connector?: ConnectorUnavailable) {
+  private finish(attempt: AccountAttempt, outcome: SignInRecord['outcome'], errorCode?: AccountErrorCode, amrUserId?: string, connector?: ConnectorUnavailable, cancelSource?: 'app' | 'browser') {
     if (this.reported.has(attempt)) return;
     this.reported.add(attempt);
     // The connector detail (npm output or start error) stays in the local log for support; telemetry gets only the problem.
@@ -480,10 +482,12 @@ export class OpenDesignAccount {
     const { start, prepared, link, approved } = this.clock, since = (mark?: number) => mark === undefined ? undefined : Math.round(mark - start);
     const [lastStage, lastResult] = attempt.stages.at(-1)?.split(':') ?? [];
     // Whether the browser opened is its own field; the error kind belongs to the stage that stopped the attempt.
-    const errorKind = attempt.stages.findLast(entry => entry.split(':')[1] === 'failed' && !entry.startsWith('browser_open_result'))?.split(':')[2];
+    const failedEntry = (attempt.stages.findLast(entry => entry.split(':')[1] === 'failed' && !entry.startsWith('browser_open_result'))
+      ?? attempt.stages.findLast(entry => entry.startsWith('browser_open_result:failed')))?.split(':');
+    const [failedStage, , errorKind] = failedEntry ?? [];
     const browser = attempt.stages.find(entry => entry.startsWith('browser_open_result:'))?.split(':')[1];
     const product = currentProductId();
-    const record = { attempt_id: attempt.id, outcome, error_code: errorCode, connector_problem: connector?.problem, connector_version: connectorVersion, resumed: Boolean(attempt.resumed),
+    const record = { attempt_id: attempt.id, outcome, error_code: errorCode, diagnostics_version: 1, cancel_source: cancelSource, failed_stage: failedStage, connector_cause: connector?.causeCode, http_status: attempt.httpStatus, network_reason: attempt.networkReason, connector_problem: connector?.problem, connector_version: connectorVersion, resumed: Boolean(attempt.resumed),
       source_product: product, source_detail: this.clock.hookId ?? `${product}_editor_login`,
       ...(this.clock.hookId ? { hook_id: this.clock.hookId } : {}),
       entry_id: this.clock.entryId, entry_occurred_at: this.clock.occurredAt,
@@ -800,7 +804,7 @@ export class OpenDesignAccount {
       this.errorCode = error instanceof SignInFailure ? error.code : failureCode(this.attempt!, false);
       this.connectorProblem = error instanceof SignInFailure ? error.connector?.problem : undefined;
       // The message offers the manual command only when the summary shows one.
-      this.error = !this.connectorProblem ? failureMessages[this.errorCode] : this.explicitBinary() ? explicitConnectorMessage : connectorMessages[this.connectorProblem];
+      this.error = !this.connectorProblem ? failureMessages[this.errorCode] : this.explicitBinary() ? explicitConnectorMessage : (error instanceof SignInFailure && error.connector?.advice) || connectorMessages[this.connectorProblem];
       this.finish(this.attempt!, 'failure', this.errorCode, undefined, error instanceof SignInFailure ? error.connector : undefined);
     });
     return this.summary();
@@ -821,6 +825,11 @@ export class OpenDesignAccount {
     if (generation !== this.generation) return;
     let attempt = this.attempt!, result = await this.connect(binary, generation, attempt);
     if (generation !== this.generation) return;
+    const finishDeclined = () => {
+      this.finish(attempt, 'cancelled', undefined, undefined, undefined, 'browser');
+      this.connecting = false; this.syncing = false; this.authorizationUrl = undefined; this.userCode = undefined;
+    };
+    if (result.cancelled) return finishDeclined();
     const rolledBack = result.exitCode !== 0 && attempt.resumed && !(await this.profile())?.pendingLogin;
     if (generation !== this.generation) return;
     if (rolledBack) {
@@ -829,6 +838,7 @@ export class OpenDesignAccount {
       attempt = this.attempt = { id: randomUUID(), stages: [], persisted: false };
       result = await this.connect(binary, generation, attempt);
       if (generation !== this.generation) return;
+      if (result.cancelled) return finishDeclined();
     }
     // The connector keeps saved credentials unconfirmed only when the service could not be reached (5xx, 408, 429,
     // network). The next sign-in confirms them, so this is reported as a connection failure, not a rejection.
@@ -905,7 +915,10 @@ export class OpenDesignAccount {
     // A receipt written while the connector exits fails with EPIPE; the exit itself decides the attempt.
     child.stdin?.on('error', () => {});
     // CLI stderr is private: it can include account details and request bodies.
-    child.stderr?.on('data', () => {});
+    let stderrTail = '';
+    child.stderr?.on('data', chunk => {
+      stderrTail = (stderrTail + chunk.toString()).slice(-4096);
+    });
     attempt.exitCode = await new Promise<number | null>((resolve, reject) => {
       // The connector waits until the service's own authorization expiry (15 minutes) and exits; this is only a backstop.
       // A shorter limit here would cancel authorizations the user is still completing in the browser.
@@ -913,6 +926,16 @@ export class OpenDesignAccount {
       child.once('error', error => { clearTimeout(timer); reject(child.pid === undefined ? new SignInFailure('connector_unavailable', new ConnectorUnavailable('start_failed', error)) : new SignInFailure(failureCode(attempt, cancelled))); });
       child.once('close', code => { clearTimeout(timer); resolve(code); });
     });
+    if (attempt.exitCode && stderrTail) {
+      if (attempt.stages.some(entry => entry.endsWith(':failed:network_error'))) {
+        if (/no such host|temporary failure in name resolution/i.test(stderrTail)) attempt.networkReason = 'dns';
+        else if (/connection refused/i.test(stderrTail)) attempt.networkReason = 'connection_refused';
+        else if (/connection reset by peer/i.test(stderrTail)) attempt.networkReason = 'connection_reset';
+        else if (/i\/o timeout|deadline exceeded/i.test(stderrTail)) attempt.networkReason = 'timeout';
+      }
+      const status = /API request failed with status ([45]\d{2})\b/.exec(stderrTail);
+      if (status) attempt.httpStatus = Number(status[1]);
+    }
     if (generation === this.generation) {
       if (partial) record(partial);
       this.child = undefined; this.authorizationUrl = undefined; this.userCode = undefined;
@@ -990,7 +1013,7 @@ export class OpenDesignAccount {
       await new Promise<void>(resolve => { child.once('close', () => { clearTimeout(timer); resolve(); }); const timer = setTimeout(() => { child.kill('SIGKILL'); resolve(); }, 3000); child.kill(); });
     }
     if (connecting) {
-      if (this.attempt) this.finish(this.attempt, 'cancelled');
+      if (this.attempt) this.finish(this.attempt, 'cancelled', undefined, undefined, undefined, 'app');
       await this.commit(generation, async () => {
         await writeSettings(path.join(this.root, 'session.json'), {});
         await writeSettings(path.join(this.root, 'models.json'), []);

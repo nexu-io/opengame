@@ -82,8 +82,10 @@ test('wrong dimensions/fps, truncated media, and missing tools cannot silently p
 test('soundtracks are decoded and required/silent audio policies cannot silently pass mismatches', { skip: !available }, () => fixture(async directory => {
   const silent = path.join(directory, 'silent.mp4'); clip(silent);
   const required = await verifyExport(silent, { ...spec, audio: 'required' });
+  assert.equal(required.checks.find(c => c.name === 'audio')?.reason, 'missing_audio');
   assert.equal(required.status, 'failed'); assert.equal(required.checks.find(c => c.name === 'audio')?.status, 'failed');
   const audible = path.join(directory, 'audible.mp4'); clip(audible, '320x180', '30', 1);
+  for (const file of [silent, audible]) assert.equal((await verifyExport(file, { ...spec, audio: 'optional' })).status, 'passed');
   const report = await verifyExport(audible, { ...spec, audio: 'required' });
   assert.equal(report.status, 'passed', JSON.stringify(report));
   assert.equal(report.checks.find(c => c.name === 'full-decode')?.status, 'passed');

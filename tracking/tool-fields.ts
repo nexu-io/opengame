@@ -565,12 +565,17 @@ export function assetImportError(error: unknown) {
   return assetImportErrorCodes.find(value => value === code) ?? trackingError(error);
 }
 
+export const connectorCauseCodes: readonly string[] = ['ENOENT', 'MODULE_NOT_FOUND', 'EACCES', 'EPERM', 'ENOEXEC', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ENOSPC', 'EINTEGRITY', 'VERSION_MISMATCH'];
+export const exportSystemErrorCodes: readonly string[] = ['ENOENT', 'EACCES', 'EPERM', 'ENOEXEC', 'ETIMEDOUT', 'ENOSPC', 'ENOMEM', 'EBUSY', 'EMFILE', 'EIO'];
+export const renderFailureReasons = ['browser_start', 'local_port_denied', 'encoder', 'process_signalled', 'unclassified'] as const;
+export const verifyFailureReasons = ['timeout', 'tool_unavailable', 'process_error', 'decoder_error', 'no_frames', 'expectation_mismatch', 'missing_audio', 'unexpected_audio', 'audio_codec', 'io_error'] as const;
+export type VerifyFailureReason = typeof verifyFailureReasons[number];
 export const exportFailureStages = ['queued', 'lint', 'render', 'output', 'verification', 'finalize', 'unknown'] as const;
 export const exportFailureCodes = ['EXPORT_LINT_FAILED', 'EXPORT_RENDER_FAILED', 'EXPORT_RENDER_TIMEOUT',
   'EXPORT_OUTPUT_MISSING', 'EXPORT_OUTPUT_INVALID', 'EXPORT_VERIFICATION_FAILED', 'EXPORT_VERIFICATION_BLOCKED',
   'EXPORT_FINALIZE_FAILED', 'EXPORT_DEADLINE_EXCEEDED', 'EXPORT_WORKER_INTERRUPTED', 'EXPORT_FAILED'] as const;
 
-export type ExportFailure = { failureStage: typeof exportFailureStages[number]; failureCode: typeof exportFailureCodes[number] };
+export type ExportFailure = { systemError?: string; terminalSignal?: 'SIGKILL' | 'SIGTERM' | 'SIGINT' | 'SIGABRT' | 'SIGSEGV' | 'other'; verificationReason?: VerifyFailureReason; checkCode?: string; ruleCount?: number; renderReason?: typeof renderFailureReasons[number]; rendererExitCode?: number; failureStage: typeof exportFailureStages[number]; failureCode: typeof exportFailureCodes[number] };
 
 const gameIdPattern = /^[A-Za-z0-9_.-]{1,128}$/;
 const gameStatuses = ['draft', 'building', 'ready', 'published', 'failed'] as const;

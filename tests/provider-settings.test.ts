@@ -575,8 +575,9 @@ test('the manual connector command quotes the private directory for the shell, a
   t.after(() => account.close());
   await account.login(); await until(async () => (await account.summary()).state !== 'authorizing');
   assert.equal(records.length, 1); assert.equal(records[0].error_code, 'connector_unavailable'); assert.equal(records[0].connector_problem, 'start_failed');
+  assert.equal(records[0].connector_cause, 'ENOENT');
   assert(validProperties(omEvents, 'account_sign_in_result', records[0]), JSON.stringify(records[0]));
-  assert.doesNotMatch(JSON.stringify(records[0]), /missing-connector|ENOENT/);
+  assert.doesNotMatch(JSON.stringify(records[0]), /missing-connector/);
 }));
 
 test('the connector installation reports why it failed and reuses a working installation', { skip: process.platform === 'win32' }, async t => {
@@ -640,13 +641,15 @@ test('sign-in failures are classified by the stage reached and logged without ac
   const created = await attempt('login-create-failure', { authorize: false });
   assert.equal(created.errorCode, 'setup_failed'); assert.equal(created.error, "Can't connect to OpenDesign right now. Check your network and try again.");
   assert.deepEqual(created.attempt?.stages, ['attempt_started:started', 'device_auth_create_result:failed:network_error']); assert.equal(created.attempt?.exitCode, 1);
+  assert.equal(created.attempt?.httpStatus, 503);
+  assert.equal((await attempt('login-interrupted', { authorize: false })).errorCode, 'interrupted');
   const missing = await attempt('', { binary: path.join(store.directory, 'missing-connector'), authorize: false });
   assert.equal(missing.errorCode, 'connector_unavailable');
   assert.equal(missing.error, "The OpenDesign sign-in component set by OPENMOTION_ACCOUNT_CLI couldn't start. Check or clear that path, then select Retry.");
   // An explicit connector path is used as is, so the private-directory command would not help it.
   assert.equal(missing.connectorInstall, undefined);
   const denied = await attempt('login-denied');
-  assert.equal(denied.errorCode, 'authorization_expired'); assert.equal(denied.attempt?.stages.at(-1), 'device_authorization_result:failed:oauth_denied');
+  assert.equal(denied.errorCode, undefined); assert.equal(denied.attempt?.stages.at(-1), 'device_authorization_result:failed:oauth_denied');
   assert.equal((await attempt('', { authorize: false, authorizationMs: 300 })).errorCode, 'authorization_expired');
   const incomplete = await attempt('login-incomplete');
   assert.equal(incomplete.errorCode, 'credentials_rejected'); assert.equal(incomplete.attempt?.receipt, 'rejected'); assert.equal(incomplete.attempt?.persisted, true);
@@ -770,23 +773,44 @@ test('finished sign-in reports the confirmed account only on success, without cr
   await writeFile(file('fixture-mode'), 'login-denied');
   await account.login(); await until(async () => Boolean((await account.summary()).authorizationUrl));
   await writeFile(file('authorize'), 'yes'); await until(async () => (await account.summary()).state !== 'authorizing');
-  assert.deepEqual(records.map(record => record.outcome), ['success', 'cancelled', 'failure']);
+  assert.deepEqual(records.map(record => record.outcome), ['success', 'cancelled', 'cancelled']);
   const [success, cancelled, failure] = records;
   const { attempt_id: _id, entry_id, entry_occurred_at, duration_ms, prepare_ms, link_ms, approved_ms, ...fixed } = success;
-  assert.deepEqual(fixed, { outcome: 'success', connector_version: '0.1.10', resumed: false, last_stage: 'credential_persist_result', last_result: 'success',
+  assert.deepEqual(fixed, { diagnostics_version: 1, outcome: 'success', connector_version: '0.1.10', resumed: false, last_stage: 'credential_persist_result', last_result: 'success',
     source_product: currentProductId(), source_detail: `${currentProductId()}_editor_login`, amr_user_id: 'fixture-user-id',
     browser_opened: true, receipt: 'accepted', exit_code: 0 });
   assert.match(entry_id!, /^[0-9a-f-]{36}$/); assert.notEqual(entry_id, success.attempt_id);
   assert.equal(new Date(entry_occurred_at!).toISOString(), entry_occurred_at);
   assert.equal(new Set(records.map(record => record.entry_id)).size, 3);
   assert(prepare_ms! <= link_ms! && link_ms! <= approved_ms! && approved_ms! <= duration_ms);
+  assert.equal(cancelled.cancel_source, 'app'); assert.equal(failure.cancel_source, 'browser');
   assert.equal(cancelled.error_code, undefined); assert.equal(cancelled.last_stage, 'browser_open_result'); assert.equal(cancelled.approved_ms, undefined);
-  assert.equal(failure.error_code, 'authorization_expired'); assert.equal(failure.error_kind, 'oauth_denied');
+  assert.equal(failure.error_code, undefined); assert.equal(failure.failed_stage, 'device_authorization_result'); assert.equal(failure.error_kind, 'oauth_denied');
   assert.equal(failure.last_stage, 'device_authorization_result'); assert.equal(failure.last_result, 'failed'); assert.equal(failure.exit_code, 1);
   assert.equal(cancelled.amr_user_id, undefined); assert.equal(failure.amr_user_id, undefined);
   assert.equal(new Set(records.map(record => record.attempt_id)).size, 3);
   for (const record of records) assert(validProperties(omEvents, 'account_sign_in_result', record), JSON.stringify(record));
   assert.doesNotMatch(JSON.stringify(records), /synthetic-private|TEST-123|open-design\.ai|fixture@example|Fixture user/);
+}));
+
+test('AMR authorization failure preserves the originating click ID and observed HTTP status', t => fixture(async store => {
+  const records: SignInRecord[] = [];
+  const account = new OpenDesignAccount(store.directory, { binary, track: record => records.push(record) });
+  t.after(() => account.close());
+  await chmod(binary, 0o755);
+  await mkdir(account.home, { recursive: true });
+  await writeFile(path.join(account.home, 'fixture-mode'), 'login-create-failure');
+  const entryId = randomUUID();
+  await account.login({ hookId: 'settings_signin', entryId });
+  await until(async () => records.length > 0);
+  assert.equal(records.length, 1);
+  const [failure] = records;
+  assert.equal(failure.outcome, 'failure');
+  assert.equal(failure.entry_id, entryId);
+  assert.equal(failure.hook_id, 'settings_signin');
+  assert.equal(failure.failed_stage, 'device_auth_create_result');
+  assert.equal(failure.http_status, 503);
+  assert(validProperties(omEvents, 'account_sign_in_result', failure));
 }));
 
 test('sign-in injects OpenGame attribution env vars into vela login and clears inherited attribution keys', t => fixture(async store => {

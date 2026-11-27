@@ -396,7 +396,12 @@
     "Auto-generate multimodal assets": "自动生成多模态素材",
     "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "创作任务中默认自动调用多模态模型生成图片、视频和音频；关闭后每次生成前需手动确认。",
     "Settings saved": "设置已保存",
-    "Could not save setting.": "无法保存设置。"
+    "Could not save setting.": "无法保存设置。",
+    "Sign-in was interrupted. Sign in again.": "登录已中断，请重新登录。",
+    "OpenDesign could not access the sign-in component. Check folder permissions and device security settings, then select Retry.": "OpenDesign 无法访问登录组件。请检查文件夹权限和设备安全设置，然后点击“重试”。",
+    "Preparing the OpenDesign sign-in component timed out. Check the network and try again.": "准备 OpenDesign 登录组件时超时。请检查网络连接后重试。",
+    "The OpenDesign sign-in component does not support this Node platform and architecture. Install a supported Node runtime, then select Retry.": "OpenDesign 登录组件不支持当前 Node.js 平台和架构。请安装受支持的 Node.js 运行时，然后点击“重试”。",
+    "The sign-in component installation timed out. Check your connection and select Retry.": "登录组件安装超时。请检查网络连接后重试。"
   },
   "ja": {
     "Go back": "戻る",
@@ -564,7 +569,12 @@
     "Auto-generate multimodal assets": "マルチモーダル素材を自動生成",
     "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "タスク内で AI 画像・動画・音声を自動生成します。オフにすると毎回生成前に確認します。",
     "Settings saved": "設定を保存しました",
-    "Could not save setting.": "設定を保存できませんでした。"
+    "Could not save setting.": "設定を保存できませんでした。",
+    "Sign-in was interrupted. Sign in again.": "ログインが中断されました。もう一度ログインしてください。",
+    "OpenDesign could not access the sign-in component. Check folder permissions and device security settings, then select Retry.": "OpenDesign がログイン用コンポーネントにアクセスできませんでした。フォルダーの権限とデバイスのセキュリティ設定を確認し、「再試行」を選択してください。",
+    "Preparing the OpenDesign sign-in component timed out. Check the network and try again.": "OpenDesign のログイン用コンポーネントの準備がタイムアウトしました。ネットワーク接続を確認して再試行してください。",
+    "The OpenDesign sign-in component does not support this Node platform and architecture. Install a supported Node runtime, then select Retry.": "OpenDesign のログイン用コンポーネントは、現在の Node.js のプラットフォームとアーキテクチャに対応していません。対応する Node.js ランタイムをインストールし、「再試行」を選択してください。",
+    "The sign-in component installation timed out. Check your connection and select Retry.": "ログイン用コンポーネントのインストールがタイムアウトしました。接続を確認して再試行してください。"
   },
   "ko": {
     "Go back": "뒤로",
@@ -627,7 +637,12 @@
     "Auto-generate multimodal assets": "멀티모달 에셋 자동 생성",
     "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "작업 중 AI 이미지, 동영상, 오디오를 자동으로 생성합니다. 끄면 생성할 때마다 확인을 요청합니다.",
     "Settings saved": "설정이 저장되었습니다",
-    "Could not save setting.": "설정을 저장할 수 없습니다."
+    "Could not save setting.": "설정을 저장할 수 없습니다.",
+    "Sign-in was interrupted. Sign in again.": "로그인이 중단되었습니다. 다시 로그인하세요.",
+    "OpenDesign could not access the sign-in component. Check folder permissions and device security settings, then select Retry.": "OpenDesign에서 로그인 구성 요소에 접근할 수 없습니다. 폴더 권한과 기기의 보안 설정을 확인한 후 다시 시도를 선택하세요.",
+    "Preparing the OpenDesign sign-in component timed out. Check the network and try again.": "OpenDesign 로그인 구성 요소를 준비하는 중에 시간이 초과되었습니다. 네트워크 연결을 확인한 후 다시 시도하세요.",
+    "The OpenDesign sign-in component does not support this Node platform and architecture. Install a supported Node runtime, then select Retry.": "OpenDesign 로그인 구성 요소는 현재 Node.js 플랫폼과 아키텍처를 지원하지 않습니다. 지원되는 Node.js 런타임을 설치한 후 다시 시도를 선택하세요.",
+    "The sign-in component installation timed out. Check your connection and select Retry.": "로그인 구성 요소 설치 시간이 초과되었습니다. 연결을 확인하고 다시 시도하세요."
   },
   "de": {
     "Go back": "Zurück",
@@ -690,7 +705,12 @@
     "Auto-generate multimodal assets": "Multimodale Assets automatisch generieren",
     "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "KI-Bilder, -Videos und -Audio in Aufgaben automatisch generieren. Deaktivieren, um vor jeder Generierung zu bestätigen.",
     "Settings saved": "Einstellungen gespeichert",
-    "Could not save setting.": "Einstellung konnte nicht gespeichert werden."
+    "Could not save setting.": "Einstellung konnte nicht gespeichert werden.",
+    "Sign-in was interrupted. Sign in again.": "Die Anmeldung wurde unterbrochen. Melden Sie sich erneut an.",
+    "OpenDesign could not access the sign-in component. Check folder permissions and device security settings, then select Retry.": "OpenDesign konnte nicht auf die Anmeldekomponente zugreifen. Prüfen Sie die Ordnerberechtigungen und die Sicherheitseinstellungen des Geräts und wählen Sie „Erneut versuchen“.",
+    "Preparing the OpenDesign sign-in component timed out. Check the network and try again.": "Die Vorbereitung der OpenDesign-Anmeldekomponente hat zu lange gedauert. Prüfen Sie die Netzwerkverbindung und versuchen Sie es erneut.",
+    "The OpenDesign sign-in component does not support this Node platform and architecture. Install a supported Node runtime, then select Retry.": "Die OpenDesign-Anmeldekomponente unterstützt diese Node.js-Plattform und -Architektur nicht. Installieren Sie eine unterstützte Node.js-Laufzeit und wählen Sie „Erneut versuchen“.",
+    "The sign-in component installation timed out. Check your connection and select Retry.": "Die Installation der Anmeldekomponente dauerte zu lange. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut."
   },
   "fr": {
     "Go back": "Retour",
@@ -753,7 +773,12 @@
     "Auto-generate multimodal assets": "Générer automatiquement les médias multimodaux",
     "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "Génère automatiquement les images, vidéos et pistes audio IA pendant les tâches. Désactivez pour confirmer avant chaque génération.",
     "Settings saved": "Paramètres enregistrés",
-    "Could not save setting.": "Impossible d’enregistrer le paramètre."
+    "Could not save setting.": "Impossible d’enregistrer le paramètre.",
+    "Sign-in was interrupted. Sign in again.": "La connexion a été interrompue. Reconnectez-vous.",
+    "OpenDesign could not access the sign-in component. Check folder permissions and device security settings, then select Retry.": "OpenDesign ne peut pas accéder au composant de connexion. Vérifiez les autorisations du dossier et les paramètres de sécurité de votre appareil, puis sélectionnez « Réessayer ».",
+    "Preparing the OpenDesign sign-in component timed out. Check the network and try again.": "La préparation du composant de connexion OpenDesign a expiré. Vérifiez votre connexion réseau et réessayez.",
+    "The OpenDesign sign-in component does not support this Node platform and architecture. Install a supported Node runtime, then select Retry.": "Le composant de connexion OpenDesign ne prend pas en charge cette plateforme et cette architecture Node.js. Installez un environnement Node.js compatible, puis sélectionnez « Réessayer ».",
+    "The sign-in component installation timed out. Check your connection and select Retry.": "Le délai d’installation du composant de connexion a expiré. Vérifiez votre connexion et réessayez."
   },
   "ru": {
     "Go back": "Назад",
@@ -816,7 +841,12 @@
     "Auto-generate multimodal assets": "Автогенерация мультимодальных материалов",
     "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "Автоматически генерировать ИИ-изображения, видео и аудио в задачах. Отключите, чтобы подтверждать каждую генерацию.",
     "Settings saved": "Настройки сохранены",
-    "Could not save setting.": "Не удалось сохранить настройку."
+    "Could not save setting.": "Не удалось сохранить настройку.",
+    "Sign-in was interrupted. Sign in again.": "Вход прерван. Войдите снова.",
+    "OpenDesign could not access the sign-in component. Check folder permissions and device security settings, then select Retry.": "OpenDesign не удалось получить доступ к компоненту входа. Проверьте права доступа к папке и настройки безопасности устройства, затем нажмите «Повторить».",
+    "Preparing the OpenDesign sign-in component timed out. Check the network and try again.": "Время ожидания подготовки компонента входа OpenDesign истекло. Проверьте подключение к сети и повторите попытку.",
+    "The OpenDesign sign-in component does not support this Node platform and architecture. Install a supported Node runtime, then select Retry.": "Компонент входа OpenDesign не поддерживает текущую платформу и архитектуру Node.js. Установите совместимую среду выполнения Node.js и нажмите «Повторить».",
+    "The sign-in component installation timed out. Check your connection and select Retry.": "Время установки компонента входа истекло. Проверьте подключение и повторите попытку."
   },
   "es": {
     "Go back": "Volver",
@@ -879,7 +909,12 @@
     "Auto-generate multimodal assets": "Generar recursos multimodales automáticamente",
     "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "Genera automáticamente imágenes, vídeo y audio con IA en las tareas. Desactívalo para confirmar antes de cada generación.",
     "Settings saved": "Configuración guardada",
-    "Could not save setting.": "No se pudo guardar el ajuste."
+    "Could not save setting.": "No se pudo guardar el ajuste.",
+    "Sign-in was interrupted. Sign in again.": "Se interrumpió el inicio de sesión. Vuelve a iniciar sesión.",
+    "OpenDesign could not access the sign-in component. Check folder permissions and device security settings, then select Retry.": "OpenDesign no pudo acceder al componente de inicio de sesión. Comprueba los permisos de la carpeta y los ajustes de seguridad del dispositivo y selecciona «Reintentar».",
+    "Preparing the OpenDesign sign-in component timed out. Check the network and try again.": "Se agotó el tiempo de preparación del componente de inicio de sesión de OpenDesign. Comprueba la conexión de red y vuelve a intentarlo.",
+    "The OpenDesign sign-in component does not support this Node platform and architecture. Install a supported Node runtime, then select Retry.": "El componente de inicio de sesión de OpenDesign no admite esta plataforma y arquitectura de Node.js. Instala un entorno de ejecución de Node.js compatible y selecciona «Reintentar».",
+    "The sign-in component installation timed out. Check your connection and select Retry.": "La instalación del componente de acceso agotó el tiempo de espera. Comprueba la conexión y vuelve a intentarlo."
   },
   "pt-BR": {
     "Go back": "Voltar",
@@ -942,7 +977,12 @@
     "Auto-generate multimodal assets": "Gerar recursos multimodais automaticamente",
     "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "Gera automaticamente imagens, vídeos e áudios de IA nas tarefas. Desative para confirmar antes de cada geração.",
     "Settings saved": "Configurações salvas",
-    "Could not save setting.": "Não foi possível salvar a configuração."
+    "Could not save setting.": "Não foi possível salvar a configuração.",
+    "Sign-in was interrupted. Sign in again.": "O login foi interrompido. Entre novamente.",
+    "OpenDesign could not access the sign-in component. Check folder permissions and device security settings, then select Retry.": "O OpenDesign não conseguiu acessar o componente de login. Verifique as permissões da pasta e as configurações de segurança do dispositivo e selecione “Tentar novamente”.",
+    "Preparing the OpenDesign sign-in component timed out. Check the network and try again.": "O tempo de preparação do componente de login do OpenDesign se esgotou. Verifique a conexão de rede e tente novamente.",
+    "The OpenDesign sign-in component does not support this Node platform and architecture. Install a supported Node runtime, then select Retry.": "O componente de login do OpenDesign não oferece suporte a esta plataforma e arquitetura do Node.js. Instale um ambiente de execução do Node.js compatível e selecione “Tentar novamente”.",
+    "The sign-in component installation timed out. Check your connection and select Retry.": "A instalação do componente de login excedeu o tempo limite. Verifique a conexão e tente novamente."
   },
   "it": {
     "Go back": "Indietro",
@@ -1005,7 +1045,12 @@
     "Auto-generate multimodal assets": "Genera automaticamente risorse multimodali",
     "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "Genera automaticamente immagini, video e audio IA nelle attività. Disattiva per confermare prima di ogni generazione.",
     "Settings saved": "Impostazioni salvate",
-    "Could not save setting.": "Impossibile salvare l’impostazione."
+    "Could not save setting.": "Impossibile salvare l’impostazione.",
+    "Sign-in was interrupted. Sign in again.": "Accesso interrotto. Accedi di nuovo.",
+    "OpenDesign could not access the sign-in component. Check folder permissions and device security settings, then select Retry.": "OpenDesign non è riuscito ad accedere al componente di accesso. Verifica i permessi della cartella e le impostazioni di sicurezza del dispositivo, quindi seleziona «Riprova».",
+    "Preparing the OpenDesign sign-in component timed out. Check the network and try again.": "Il tempo a disposizione per preparare il componente di accesso di OpenDesign è scaduto. Verifica la connessione di rete e riprova.",
+    "The OpenDesign sign-in component does not support this Node platform and architecture. Install a supported Node runtime, then select Retry.": "Il componente di accesso di OpenDesign non supporta questa piattaforma e architettura di Node.js. Installa un runtime Node.js compatibile, quindi seleziona «Riprova».",
+    "The sign-in component installation timed out. Check your connection and select Retry.": "Installazione del componente di accesso scaduta. Controlla la connessione e riprova."
   },
   "tr": {
     "Go back": "Geri",
@@ -1068,6 +1113,11 @@
     "Auto-generate multimodal assets": "Çok modlu varlıkları otomatik oluştur",
     "Automatically generate AI images, video, and audio in tasks. Turn off to confirm before each generation.": "Görevlerde yapay zeka görsellerini, videolarını ve seslerini otomatik oluşturur. Her oluşturma öncesi onaylamak için kapatın.",
     "Settings saved": "Ayarlar kaydedildi",
-    "Could not save setting.": "Ayar kaydedilemedi."
+    "Could not save setting.": "Ayar kaydedilemedi.",
+    "Sign-in was interrupted. Sign in again.": "Oturum açma kesintiye uğradı. Yeniden oturum açın.",
+    "OpenDesign could not access the sign-in component. Check folder permissions and device security settings, then select Retry.": "OpenDesign oturum açma bileşenine erişemedi. Klasör izinlerini ve cihazın güvenlik ayarlarını kontrol edip Yeniden dene seçeneğini seçin.",
+    "Preparing the OpenDesign sign-in component timed out. Check the network and try again.": "OpenDesign oturum açma bileşenini hazırlama işlemi zaman aşımına uğradı. Ağ bağlantınızı kontrol edip yeniden deneyin.",
+    "The OpenDesign sign-in component does not support this Node platform and architecture. Install a supported Node runtime, then select Retry.": "OpenDesign oturum açma bileşeni bu Node.js platformunu ve mimarisini desteklemiyor. Desteklenen bir Node.js çalışma zamanı yükleyip Yeniden dene seçeneğini seçin.",
+    "The sign-in component installation timed out. Check your connection and select Retry.": "Oturum açma bileşeninin kurulumu zaman aşımına uğradı. Bağlantınızı kontrol edip yeniden deneyin."
   }
 }

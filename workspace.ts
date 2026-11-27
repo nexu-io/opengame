@@ -40,8 +40,8 @@ export type SavedProject = { id: string; title: string; titleKey?: 'OpenMotion S
 export type ProjectCatalog = { activeId: string; projects: SavedProject[]; sessions?: CreativeSession[]; activeSessionId?: string };
 export type ProjectMutationResult = { projectId: string; title: string; trashed?: boolean; deleted?: boolean; activeProjectId: string; replayed?: boolean };
 type ProjectTrashIntent = { action: 'trash' | 'restore'; projectId: string; requestId: string };
-export type ExportJob = Partial<ExportFailure> & { id: string; projectId?: string; versionId?: string; requestId?: string; workId?: string; phase1?: boolean; compositionPath?: string; stage?: string; verification?: unknown; trackingHost?: HostContext; revision: string; state: 'pending' | 'running' | 'cancelling' | 'cancelled' | 'completed' | 'failed';
-  createdAt: number; acceptedAt?: number; deadlineAt?: number; terminalAt?: number; observedOutcome?: 'success' | 'failure' | 'unknown' | 'cancelled'; expiresAt: number; token?: string; workerPid?: number; file?: string; outputName?: string; error?: string; expected?: ExportExpectation };
+export type ExportJob = Partial<ExportFailure> & { id: string; projectId?: string; versionId?: string; requestId?: string; workId?: string; phase1?: boolean; compositionPath?: string; stage?: string; verification?: unknown; lintFindings?: import('./shared/export-lint-diagnostics.ts').ExportLintFinding[]; trackingHost?: HostContext; revision: string; state: 'pending' | 'running' | 'cancelling' | 'cancelled' | 'completed' | 'failed';
+  createdAt: number; claimedAt?: number; stageStartedAt?: number; acceptedAt?: number; deadlineAt?: number; terminalAt?: number; observedOutcome?: 'success' | 'failure' | 'unknown' | 'cancelled'; expiresAt: number; token?: string; workerPid?: number; file?: string; outputName?: string; error?: string; expected?: ExportExpectation };
 export class Conflict extends Error { readonly code = 'VERSION_CONFLICT'; constructor() { super('工程已经被 Studio 或 Agent 更新，请重新读取 revision 后再修改。'); } }
 
 // Portable names are rejected on every platform so a Linux-authored project cannot produce an
@@ -66,9 +66,17 @@ export function trackExportResult(tracking: OmTracking | undefined, job: ExportJ
   if (!tracking || (job.state !== 'completed' && job.state !== 'failed' && job.state !== 'cancelled')) return;
   const status = (job.verification as { status?: string } | undefined)?.status;
   tracking.track('export_result', {
-    job_id: job.id, job_state: job.state, duration_ms: Math.min(86_400_000, Math.max(0, Date.now() - job.createdAt)),
+    diagnostics_version: 1, job_id: job.id, job_state: job.state, duration_ms: Math.min(86_400_000, Math.max(0, Date.now() - job.createdAt)),
     technical_check: status === 'passed' || status === 'failed' ? status : 'unknown',
-    ...(job.state === 'failed' ? { failure_stage: job.failureStage ?? 'unknown', error_code: job.failureCode ?? 'EXPORT_FAILED' } : {}),
+    ...(job.state === 'failed' ? { failure_stage: job.failureStage ?? 'unknown', error_code: job.failureCode ?? 'EXPORT_FAILED',
+      ...(job.systemError ? { system_error: job.systemError } : {}),
+      ...(job.terminalSignal ? { terminal_signal: job.terminalSignal } : {}),
+      ...(job.verificationReason ? { verification_reason: job.verificationReason } : {}),
+      ...(job.ruleCount !== undefined ? { rule_count: job.ruleCount } : {}),
+      ...(job.stageStartedAt ? { stage_duration_ms: Math.min(86_400_000, Math.max(0, (job.terminalAt ?? Date.now()) - job.stageStartedAt)) } : {}),
+      ...(job.claimedAt ? { queue_duration_ms: Math.min(86_400_000, Math.max(0, job.claimedAt - job.createdAt)) } : {}),
+      ...(job.checkCode ? { check_code: job.checkCode } : {}),
+      ...(job.renderReason ? { render_reason: job.renderReason } : {}), ...(job.rendererExitCode !== undefined ? { renderer_exit_code: job.rendererExitCode } : {}) } : {}),
   }, undefined, 'worker', validHostContext(job.trackingHost) ? job.trackingHost : undefined);
 }
 
@@ -574,7 +582,7 @@ export class WorkspaceStore {
       if (current.revision !== expectedRevision) throw new Conflict();
       if (!current.project) throw new Error('还没有 Hyperframes 工程');
       const previous = await this.job();
-      if (previous && ['pending', 'running', 'cancelling'].includes(previous.state) && previous.expiresAt > Date.now() && (previous.state === 'pending' || alive(previous.workerPid))) throw new Error('EXPORT_BUSY: 已有导出任务正在等待或运行');
+      if (previous && ['pending', 'running', 'cancelling'].includes(previous.state) && previous.expiresAt > Date.now() && (previous.state === 'pending' || alive(previous.workerPid))) throw Object.assign(new Error('EXPORT_BUSY: 已有导出任务正在等待或运行'), { blockingJobId: previous.id, blockingState: previous.state, blockingAgeMs: Math.max(0, Date.now() - previous.createdAt) });
       const { audio, ...identity } = options;
       if (identity.compositionPath !== undefined) {
         identity.compositionPath = projectPath(identity.compositionPath);
@@ -652,11 +660,11 @@ export class WorkspaceStore {
     return this.lock(async () => {
       const job = await this.job();
       if (!job || job.state !== 'pending' || job.expiresAt < Date.now()) return null;
-      job.state = 'running'; job.token = crypto.randomUUID(); job.workerPid = process.pid;
+      job.state = 'running'; job.claimedAt = Date.now(); job.token = crypto.randomUUID(); job.workerPid = process.pid;
       await this.saveJob(job); return job;
     });
   }
-  async finishExport(id: string, token: string, error?: string, failure?: ExportFailure) {
+  async finishExport(id: string, token: string, error?: string, failure?: ExportFailure & Pick<ExportJob, 'lintFindings'>) {
     return this.lock(async () => {
       const job = await this.job(id) ?? await this.job();
       if (!job || job.id !== id || job.token !== token || !['running', 'cancelling'].includes(job.state)) throw new Error('无效的导出任务凭据');

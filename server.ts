@@ -34,6 +34,7 @@ import { createReadStream } from 'node:fs';
 import { access, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { diagnoseFailedRender, exportLintErrors } from './shared/export-lint-diagnostics.ts';
 import { WorkspaceStore, Conflict, createBlankProject, validateProjectTitle, interruptedExport, trackExportResult } from './workspace.ts';
 import type { ExportJob } from './workspace.ts';
 import { cliPath, ensureRuntime, execute, HYPERFRAMES_VERSION, inspectProject, pluginRoot, runHyperframes, startStudio, stopCommands } from './hyperframes.ts';
@@ -59,6 +60,8 @@ import { WorkspaceBrowser } from './browser.ts';
 import { Phase1Service } from './phase1.ts';
 import { phase1McpCapabilities } from './shared/phase1-tools.ts';
 import { recoverProjectTransactions } from './phase1-versions.ts';
+import { classifyRenderFailure } from './shared/render-failure.ts';
+import { exportSystemErrorCodes } from './tracking/tool-fields.ts';
 import { verifyExport } from './scripts/verify-export.ts';
 import { createAppTracking, closeTracking, saveTrackingPreference, trackingPreference, trackingLockReason, type OmTracking } from './shared/tracking.ts';
 import { flushCodexSessionTracking, syncActiveCodexThreads } from './shared/codex-session-tracking.ts';
@@ -155,6 +158,7 @@ export async function renderNext(store: WorkspaceStore, runtimeRoot: string, tra
   working.add(key);
   let job;
   let control: AbortController | undefined;
+  let lintFindings: ExportJob['lintFindings'];
   let failure: ExportFailure = { failureStage: 'lint', failureCode: 'EXPORT_LINT_FAILED' };
   try {
     // A queued job whose deadline passed, or a claimed job whose worker vanished, is closed before claiming.
@@ -173,13 +177,21 @@ export async function renderNext(store: WorkspaceStore, runtimeRoot: string, tra
     const stage = async (value: string, verification?: unknown) => store.lock(async () => {
       const current = await store.job(job!.id);
       if (!current || current.state !== 'running') throw new Error('COMMAND_CANCELLED');
+      if (value !== 'verified') current.stageStartedAt = Date.now();
       current.stage = value; if (verification) current.verification = verification;
       await store.saveJob(current);
     });
     const directory = store.snapshotDirectory(job.id);
     await stage('checking');
     const lint = await inspectProject(runtimeRoot, directory, 'lint', control.signal);
-    if (lint.exitCode) throw new Error('Hyperframes lint 失败：' + JSON.stringify(lint.result));
+    if (lint.exitCode) {
+      const findings = lint.result?.findings?.filter((entry: { severity: string }) => entry.severity === 'error');
+      if (job.phase1 && findings) lintFindings = exportLintErrors(directory, findings);
+      const finding = findings?.[0];
+      if (findings) failure.ruleCount = findings.length;
+      if (typeof finding?.code === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(finding.code)) failure.checkCode = finding.code;
+      throw new Error('Hyperframes lint 失败：' + JSON.stringify(lint.result));
+    }
     failure = { failureStage: 'output', failureCode: 'EXPORT_OUTPUT_INVALID' };
     const output = store.exportPath(job);
     await mkdir(path.dirname(output), { recursive: true });
@@ -189,7 +201,15 @@ export async function renderNext(store: WorkspaceStore, runtimeRoot: string, tra
     // Let the engine read the snapshot's exact data-fps (including rational rates).
     const result = await runHyperframes(runtimeRoot, directory, ['render', '.', ...(job.compositionPath ? ['--composition', job.compositionPath] : []), '--output', output, '--format', 'mp4', '--json'], 25 * 60_000, { HYPERFRAMES_RENDER_DETACHED: '1' }, control.signal);
     await writeFile(path.join(store.directory, 'jobs', job.id, 'render.log'), result.stdout + '\n' + result.stderr, { mode: 0o600 });
-    if (result.code) throw new Error('Hyperframes render 失败：' + (result.stderr || result.stdout).slice(-1800));
+    if (result.code) {
+      if (result.signal) failure.terminalSignal = (['SIGKILL', 'SIGTERM', 'SIGINT', 'SIGABRT', 'SIGSEGV'] as const).find(signal => signal === result.signal) ?? 'other';
+      else failure.rendererExitCode = result.code;
+      failure.renderReason = result.signal ? 'process_signalled' : classifyRenderFailure(result.stderr + '\n' + result.stdout);
+      if (job.phase1 && !control.signal.aborted) {
+        lintFindings = await diagnoseFailedRender(runtimeRoot, directory, job.compositionPath ?? 'index.html', control.signal).catch(() => undefined);
+      }
+      throw new Error('Hyperframes render 失败：' + (result.stderr || result.stdout).slice(-1800));
+    }
     // Never label an absent or non-MP4 output as completed, even after exit code 0.
     failure = { failureStage: 'output', failureCode: 'EXPORT_OUTPUT_INVALID' };
     const file = await (await import('node:fs/promises')).open(output, 'r');
@@ -203,8 +223,12 @@ export async function renderNext(store: WorkspaceStore, runtimeRoot: string, tra
       const report = await verifyExport(output, job.expected!, undefined, control.signal);
       await stage('verified', report);
       if (report.status !== 'passed') {
+        const check = report.checks.find(check => check.status === 'failed') ?? report.checks.find(check => check.status === 'not_run');
+        failure.checkCode = check?.name;
+        failure.verificationReason = check?.reason;
         if (report.status === 'blocked') failure.failureCode = 'EXPORT_VERIFICATION_BLOCKED';
-        throw new Error('EXPORT_VERIFICATION_FAILED: ' + JSON.stringify(report.checks));
+        const reason = check ? `${check.name}: ${check.details}` : JSON.stringify(report.checks);
+        throw new Error(`${failure.failureCode}: ${reason}`);
       }
     }
     failure = { failureStage: 'finalize', failureCode: 'EXPORT_FINALIZE_FAILED' };
@@ -213,16 +237,25 @@ export async function renderNext(store: WorkspaceStore, runtimeRoot: string, tra
   } catch (error) {
     if (!job) throw error;
     const code = (error as NodeJS.ErrnoException | undefined)?.code;
+    if (code && exportSystemErrorCodes.includes(code)) failure.systemError = code;
     if (failure.failureStage === 'render' && code === 'COMMAND_TIMEOUT') failure.failureCode = 'EXPORT_RENDER_TIMEOUT';
     if (failure.failureStage === 'output' && code === 'ENOENT') failure.failureCode = 'EXPORT_OUTPUT_MISSING';
     await recordDiagnostic(store.directory, { kind: 'export_failed', jobId: job.id, projectId: job.projectId,
       message: error instanceof Error ? error.message : 'Render failed' });
-    await rm(store.exportPath(job), { force: true });
+    // A final-state write can fail after the validated MP4 and per-job record reached disk.
+    if (failure.failureStage !== 'finalize') await rm(store.exportPath(job), { force: true }).catch(() => {});
     const current = await store.job(job.id);
     if (current && ['running', 'cancelling'].includes(current.state)) {
-      try { await store.finishExport(job.id, job.token!, error instanceof Error ? error.message : '渲染失败', failure); }
-      catch {
-        tracking?.track('incident_confirmed', { incident_id: job.id, incident_type: 'other', severity: 'sev1', subject_id: job.id, evidence_ref: 'terminal_persist_failed' }, undefined, 'worker', validHostContext(job.trackingHost) ? job.trackingHost : undefined);
+      try {
+        const finished = await store.finishExport(job.id, job.token!, error instanceof Error ? error.message : '渲染失败', { ...failure, ...(lintFindings && { lintFindings }) });
+        if (finished.state === 'cancelled' && failure.failureStage === 'finalize') await rm(store.exportPath(job), { force: true }).catch(() => {});
+      }
+      catch (persistError) {
+        const errno = (persistError as NodeJS.ErrnoException)?.code;
+        const reason = errno === 'ENOSPC' ? 'out_of_space' : errno === 'ENOENT' ? 'missing_file'
+          : errno === 'EACCES' || errno === 'EPERM' ? 'permission_denied'
+          : persistError instanceof Error && persistError.message === '无效的导出任务凭据' ? 'ownership_changed' : 'unknown';
+        tracking?.track('incident_confirmed', { incident_id: job.id, incident_type: 'other', severity: 'sev1', subject_id: job.id, evidence_ref: 'terminal_persist_failed', persist_reason: reason }, undefined, 'worker', validHostContext(job.trackingHost) ? job.trackingHost : undefined);
       }
     }
   } finally {
