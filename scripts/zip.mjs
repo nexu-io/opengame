@@ -15,6 +15,10 @@ export function zip(entries) {
     header.writeUInt16LE(0x800, 6); header.writeUInt16LE(33, 12); header.writeUInt32LE(crc, 14);
     header.writeUInt32LE(entry.data.length, 18); header.writeUInt32LE(entry.data.length, 22); header.writeUInt16LE(name.length, 26);
     const dir = Buffer.alloc(46); dir.writeUInt32LE(0x02014b50, 0); dir.writeUInt16LE(20, 4); dir.writeUInt16LE(20, 6);
+    if (entry.mode !== undefined) {
+      dir.writeUInt16LE((3 << 8) | 20, 4); // Unix creator: external attributes carry the POSIX file mode.
+      dir.writeUInt32LE((entry.mode << 16) >>> 0, 38);
+    }
     dir.writeUInt16LE(0x800, 8); dir.writeUInt16LE(33, 14); dir.writeUInt32LE(crc, 16);
     dir.writeUInt32LE(entry.data.length, 20); dir.writeUInt32LE(entry.data.length, 24); dir.writeUInt16LE(name.length, 28); dir.writeUInt32LE(offset, 42);
     local.push(header, name, entry.data); central.push(dir, name);

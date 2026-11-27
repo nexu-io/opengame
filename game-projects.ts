@@ -1113,7 +1113,7 @@ server.listen(port, '127.0.0.1', () => {
     const game = await this.get(id);
     const { dir } = await this.locate(id);
     const maxExportBytes = 64 * 1024 * 1024;
-    let entries: { name: string; data: Buffer }[];
+    let entries: { name: string; data: Buffer; mode?: number }[];
     try {
       const bundle = await buildPublishBundle({
         dataDirectory: path.dirname(this.root),
@@ -1148,7 +1148,7 @@ server.listen(port, '127.0.0.1', () => {
       ['Start-Windows.bat', offlineWinLauncher],
       ['PLAY-README.txt', offlinePlayReadme],
     ] as const) {
-      if (!existing.has(name.toLowerCase())) entries.push({ name, data: Buffer.from(content, 'utf8') });
+      if (!existing.has(name.toLowerCase())) entries.push({ name, data: Buffer.from(content, 'utf8'), mode: name === 'Start-Mac.command' ? 0o100755 : undefined });
     }
     const slug = (game.title || game.id)
       .toLowerCase()
