@@ -142,13 +142,22 @@ export function LinkQr({ url, size = 132 }: { url: string; size?: number }) {
   );
 }
 
-export function hasWechatInlineControls(session: GamePublishSession | undefined): boolean {
-  const status = session?.wechat?.status;
-  if (!status) return false;
+export function wechatInlineControlFlags(status: WechatPublishStatus | undefined): {
+  showKey: boolean;
+  canReplaceKey: boolean;
+  showQr: boolean;
+  any: boolean;
+} {
+  if (!status) return { showKey: false, canReplaceKey: false, showQr: false, any: false };
   const showKey = status.current === 'key' && Boolean(status.appid);
+  // Only after WeChat refused the saved key (wrong file, or a key for another AppID); otherwise there is nothing to replace.
   const canReplaceKey = Boolean(status.appid && status.hasKey && status.keyRejected);
   const showQr = Boolean(status.preview) && (status.current === 'preview' || status.current === 'upload');
-  return showKey || showQr || canReplaceKey;
+  return { showKey, canReplaceKey, showQr, any: showKey || showQr || canReplaceKey };
+}
+
+export function hasWechatInlineControls(session: GamePublishSession | undefined): boolean {
+  return wechatInlineControlFlags(session?.wechat?.status).any;
 }
 
 /**
@@ -161,12 +170,8 @@ export function WechatInlineControls({ session }: { session: GamePublishSession 
   const fileRef = useRef<HTMLInputElement>(null);
   const wechat = session.wechat;
   const status = wechat?.status;
-  if (!status) return null;
-  const showKey = status.current === 'key' && Boolean(status.appid);
-  // Only after WeChat refused the saved key (wrong file, or a key for another AppID); otherwise there is nothing to replace.
-  const canReplaceKey = Boolean(status.appid && status.hasKey && status.keyRejected);
-  const showQr = Boolean(status.preview) && (status.current === 'preview' || status.current === 'upload');
-  if (!showKey && !showQr && !canReplaceKey) return null;
+  const { showKey, canReplaceKey, showQr, any } = wechatInlineControlFlags(status);
+  if (!status || !any) return null;
   return (
     <div className="om-gp-inline">
       {(showKey || canReplaceKey) && (

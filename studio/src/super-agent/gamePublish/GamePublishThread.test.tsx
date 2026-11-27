@@ -4,8 +4,9 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SuperAgentMessage } from '../../../../shared/super-agent';
 import { I18nProvider } from '../../i18n/I18n';
+import { countConversationTurns } from '../ExecutionTimeline';
 import { GamePublishThread, GamePublishTurnEntries, partitionPublishEntries } from './GamePublishThread';
-import { OpenDesignProgress } from './WechatProgress';
+import { OpenDesignProgress, wechatInlineControlFlags } from './WechatProgress';
 import { gamePublishActions, gamePublishSessionFor, gamePublishThreadFor, resetGamePublishStore } from './gamePublishStore';
 
 const { publishMock, wxMock } = vi.hoisted(() => ({
@@ -263,5 +264,26 @@ describe('GamePublishThread', () => {
       await act(async () => { root.unmount(); });
       host.remove();
     }
+  });
+
+  it('derives turn counts and WeChat inline control visibility from single shared helpers', () => {
+    expect(countConversationTurns([])).toBe(0);
+    expect(countConversationTurns([
+      { id: 'a0', role: 'assistant', status: 'completed', text: 'Welcome', createdAt: 1 },
+      { id: 't0', role: 'tool', text: 'check', createdAt: 2 },
+    ])).toBe(1);
+    expect(countConversationTurns([
+      { id: 'a0', role: 'assistant', status: 'completed', text: 'Welcome', createdAt: 1 },
+      { id: 'u1', role: 'user', text: 'Hi', createdAt: 2 },
+      { id: 't1', role: 'tool', text: 'run', createdAt: 3 },
+      { id: 'u2', role: 'user', text: 'Next', createdAt: 4 },
+      { id: 'a2', role: 'assistant', status: 'streaming', text: 'Working…', createdAt: 5 },
+    ])).toBe(3);
+
+    expect(wechatInlineControlFlags(undefined)).toEqual({ showKey: false, canReplaceKey: false, showQr: false, any: false });
+    expect(wechatInlineControlFlags(makeWechatStatus('ip'))).toEqual({ showKey: false, canReplaceKey: false, showQr: false, any: false });
+    expect(wechatInlineControlFlags(makeWechatStatus('key'))).toEqual({ showKey: true, canReplaceKey: false, showQr: false, any: true });
+    expect(wechatInlineControlFlags(makeWechatStatus('ip', { keyRejected: true }))).toEqual({ showKey: false, canReplaceKey: true, showQr: false, any: true });
+    expect(wechatInlineControlFlags(makeWechatStatus('preview', { preview: { createdAt: 'now', qrcodeUrl: '/qr.png' } }))).toEqual({ showKey: false, canReplaceKey: false, showQr: true, any: true });
   });
 });

@@ -9,7 +9,6 @@
  * uses local inline step controls, as do the other platforms.
  */
 import { useSyncExternalStore } from 'react';
-import type { SuperAgentMessage } from '../../../../shared/super-agent';
 import { buildPlatformZip, buildPlayable, gameSlug, loadGameHtml, type GamePackageResult, type GamePackageTarget } from './gamePackage';
 import { describeLinkError, publishGameLink, type GamePublishLinkTarget } from './gamePublishAdapter';
 import type { GamePublishDevToolId } from './devTools';
@@ -89,17 +88,6 @@ export type GamePublishThreadEntry =
   | { id: string; artifactId: string; anchorTurnIndex?: number; kind: 'result'; title: string; detail: string; vars?: Record<string, string>; action?: string; href?: string; link?: boolean }
   | { id: string; artifactId: string; anchorTurnIndex?: number; kind: 'link-failed'; message: string; authRequired: boolean }
   ;
-
-/** Matches ExecutionTimeline's turn grouping so publish entries can anchor to exact turns without clock skew. */
-export function countConversationTurns(messages: readonly SuperAgentMessage[] | undefined): number {
-  if (!messages?.length) return 0;
-  let count = 0;
-  for (const msg of messages) {
-    if (msg.role === 'user') count += 1;
-    else if (count === 0) count = 1;
-  }
-  return count;
-}
 
 const sessions = new Map<string, GamePublishSession>();
 const threads = new Map<string, GamePublishThreadEntry[]>();

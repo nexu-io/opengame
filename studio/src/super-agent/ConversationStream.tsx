@@ -76,7 +76,7 @@ import { WorkspaceBack } from '../motion/WorkspaceBack';
 import { AgentModelPicker } from './AgentModelPicker';
 import { compactDirLabel, isInternalManagedStorageDir } from './ChangedFilesTree';
 import type { AccountHandoffResume } from './useAccountHandoff';
-import { ApprovalCard, ExecutionTimeline, type SuperAgentTurnFeedbackSubmit } from './ExecutionTimeline';
+import { ApprovalCard, countConversationTurns, ExecutionTimeline, type SuperAgentTurnFeedbackSubmit } from './ExecutionTimeline';
 import {
   ResourceThumbImage,
   resourceIcon,
@@ -109,7 +109,7 @@ import {
 } from './ModeComposerControls';
 import { CreationHome } from './CreationHome';
 import { GamePublishThread, GamePublishTurnEntries, partitionPublishEntries } from './gamePublish/GamePublishThread';
-import { countConversationTurns, gamePublishActions, useGamePublishThread, usePublishForChat } from './gamePublish/gamePublishStore';
+import { gamePublishActions, useGamePublishThread, usePublishForChat } from './gamePublish/gamePublishStore';
 
 export function resolveCreationModeEntry(
   mode: SuperAgentCreationModeId | null,
