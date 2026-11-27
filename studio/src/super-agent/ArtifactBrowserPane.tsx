@@ -67,6 +67,7 @@ import { fileAttachmentIcon, resourceIcon } from './ResourcePickerDialog';
 import { GamePublishPanel } from './gamePublish/GamePublishPanel';
 import { buildGamePublishOpenInput, isTrialGameArtifact, resolveGameCloudTarget, resolvePublishableGameId } from './gamePublish/gamePublishEntry';
 import { gamePublishActions, useGamePublishSession, type GamePublishChooseOptions } from './gamePublish/gamePublishStore';
+import { GameStudioTopbar, type GameStudioTabId } from './GameStudioTopbar';
 import {
   captureSuperAgentPreviewSnapshot,
   readSuperAgentFileContent,
@@ -988,6 +989,7 @@ function useIframePreviewBridge({
   return {
     frameRef,
     iframeRef,
+    bridgeToken: bridgeTokenRef.current,
     bridgedPreviewUrl,
     pickedElement,
     syncPickMode,
@@ -1017,6 +1019,8 @@ function GameProjectArtifactView({
   onNotify,
   onGameMeta,
   onBackgroundLoadingChange,
+  audioMuted = false,
+  audioVolume = 1,
 }: {
   artifact: SuperAgentArtifact;
   bundledMatch?: GameCard;
@@ -1043,6 +1047,8 @@ function GameProjectArtifactView({
     orientation?: GameCard['orientation'];
   }) => void;
   onBackgroundLoadingChange?: (loading: boolean) => void;
+  audioMuted?: boolean;
+  audioVolume?: number;
 }) {
   const { t } = useI18n();
   const projectId = artifact.projectId || '';
@@ -1234,6 +1240,31 @@ function GameProjectArtifactView({
     });
   }, [effectiveMode, annotateActive, bridge.iframeRef]);
 
+  const syncAudioState = useCallback(() => {
+    const win = bridge.iframeRef.current?.contentWindow;
+    if (!win) return;
+    try {
+      win.postMessage({ type: 'om:preview-audio', token: bridge.bridgeToken, muted: audioMuted, volume: audioVolume }, '*');
+    } catch { /* ignore detached frame */ }
+  }, [audioMuted, audioVolume, bridge.bridgeToken, bridge.iframeRef]);
+
+  useEffect(() => {
+    if (effectiveMode !== 'preview' || isExternalGame) return;
+    syncAudioState();
+  }, [effectiveMode, isExternalGame, syncAudioState]);
+
+  useEffect(() => {
+    if (effectiveMode !== 'preview' || isExternalGame) return;
+    const onMessage = (event: MessageEvent) => {
+      if (!bridge.iframeRef.current || event.source !== bridge.iframeRef.current.contentWindow) return;
+      if (event.data?.type === 'om:audio-guard-ready') {
+        syncAudioState();
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [effectiveMode, isExternalGame, bridge.iframeRef, syncAudioState]);
+
   useEffect(() => {
     if (effectiveMode === 'preview' && !annotateActive) {
       pendingFrameFocusRef.current = true;
@@ -1346,6 +1377,7 @@ function GameProjectArtifactView({
       iframeRef={bridge.iframeRef}
       onIframeLoad={() => {
         if (canUsePreviewBridge) bridge.syncPickMode();
+        if (!isExternalGame) syncAudioState();
         if (pendingFrameFocusRef.current) {
           pendingFrameFocusRef.current = false;
           focusGameFrame();
@@ -1858,7 +1890,9 @@ function ImageArtifactView({ url, title }: { url: string; title: string }) {
 
 export function ArtifactBrowserPane({
   active = true,
+  studioMode = 'default',
   chatId,
+  previewBrowserSessionId,
   chatRunning,
   workingDir,
   artifacts,
@@ -1892,7 +1926,9 @@ export function ArtifactBrowserPane({
   onOpenInBrandKit,
 }: {
   active?: boolean;
+  studioMode?: 'default' | 'game';
   chatId: string | null;
+  previewBrowserSessionId?: string;
   chatRunning?: boolean;
   workingDir?: string;
   artifacts: SuperAgentArtifact[];
@@ -1926,6 +1962,11 @@ export function ArtifactBrowserPane({
   onOpenInBrandKit: (kitId?: string) => void;
 }) {
   const { t } = useI18n();
+  const fallbackPreviewSessionIdRef = useRef(
+    `preview-${Math.random().toString(36).slice(2, 8)}`,
+  );
+  const effectivePreviewBrowserSessionId = previewBrowserSessionId || fallbackPreviewSessionIdRef.current;
+  const browserSessionId = chatId || effectivePreviewBrowserSessionId;
   const [viewMode, setViewMode] = useState<'preview' | 'code' | 'trailer'>('preview');
   const [gameMetaEntry, setGameMetaEntry] = useState<{
     artifactId: string;
@@ -1936,6 +1977,9 @@ export function ArtifactBrowserPane({
   } | null>(null);
   const [gameFrameBackgroundLoading, setGameFrameBackgroundLoading] = useState(false);
   const [viewport, setViewport] = useState<DesignViewportId>('desktop');
+  const [gameAudioMuted, setGameAudioMuted] = useState(false);
+  const [gameAudioVolume, setGameAudioVolume] = useState(1);
+  const lastNonZeroVolumeRef = useRef(1);
   const userChoseViewportForArtifactRef = useRef<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [webStateEntry, setWebStateEntry] = useState<{ artifactId: string; state: WebPageState } | null>(null);
@@ -2091,6 +2135,17 @@ export function ArtifactBrowserPane({
       setAddressEditing(false);
     }
   }, [active]);
+
+  useEffect(() => {
+    if (!deviceMenuOpen && !browserMenuOpen && !viewModeMenuOpen) return;
+    const onWindowBlur = () => {
+      setDeviceMenuOpen(false);
+      setBrowserMenuOpen(false);
+      setViewModeMenuOpen(false);
+    };
+    window.addEventListener('blur', onWindowBlur);
+    return () => window.removeEventListener('blur', onWindowBlur);
+  }, [deviceMenuOpen, browserMenuOpen, viewModeMenuOpen]);
 
   useEffect(() => {
     if (viewMode !== 'preview') {
@@ -2334,9 +2389,13 @@ export function ArtifactBrowserPane({
 
   useEffect(() => {
     if (!pendingWebUrl) return;
+    if (!showNewTab && activeArtifact?.kind === 'web') {
+      setPendingWebUrl(null);
+      return;
+    }
     const timer = setTimeout(() => setPendingWebUrl(null), 10_000);
     return () => clearTimeout(timer);
-  }, [pendingWebUrl]);
+  }, [pendingWebUrl, showNewTab, activeArtifact?.kind, activeArtifact?.id]);
 
   const navigateWeb = (targetUrl: string) => {
     setPendingWebUrl(targetUrl);
@@ -2454,963 +2513,1115 @@ export function ArtifactBrowserPane({
       ? `${activeArtifact.url}?download=1`
       : undefined);
 
-  return (
-    <aside ref={viewerRef} className="om-sa-viewer" aria-label={t('Artifact Viewer')}>
-      <div className="om-sa-viewer-tabs-bar">
-        <div className="om-sa-viewer-tabs-group">
-          <div ref={tabStripRef} className="om-sa-viewer-tabs" role="tablist" aria-label={t('Viewer tabs')}>
-            {openTabs.map(tab => {
-              const isActive = !showNewTab && activeArtifact?.id === tab.id;
-              const tabTitle = tab.kind === 'web' ? (webTabTitles[tab.id] || tab.title) : tab.title;
+  const isGameStudio = studioMode === 'game';
+  const hasModeSwitch = activeArtifact?.kind === 'design-project' || Boolean(activeGameProjectId && !isGameTrial);
+  const gameCloudTarget = resolveGameCloudTarget(activeArtifact);
+  const canCloudShare = !showNewTab && (
+    (Boolean(activeArtifact?.projectId) && (activeArtifact?.kind === 'design-project' || activeArtifact?.kind === 'motion-project'))
+    || Boolean(gameCloudTarget)
+  );
+  const activeDeviceIcon = activeArtifact?.kind === 'web'
+    ? (webDevicePreset === 'mobile' ? 'smartphone-line' : webDevicePreset === 'tablet' ? 'tablet-line' : 'computer-line')
+    : (viewport === 'mobile' ? 'smartphone-line' : viewport === 'tablet' ? 'tablet-line' : 'computer-line');
+  const isConstrainedViewport = activeArtifact?.kind === 'web'
+    ? webDevicePreset !== 'responsive'
+    : viewport !== 'desktop';
+  const viewModeOptions: Array<{ id: 'preview' | 'code' | 'trailer'; label: string; icon: string }> = [
+    { id: 'preview', label: t('Preview'), icon: 'eye-line' },
+    { id: 'code', label: t('Code'), icon: 'code-s-slash-line' },
+    ...(activeArtifact?.kind === 'game-project' && gameMeta?.trailerUrl
+      ? [{ id: 'trailer' as const, label: t('Trailer'), icon: 'film-line' }]
+      : []),
+  ];
+  const activeViewModeOption = viewModeOptions.find(opt => opt.id === viewMode) ?? viewModeOptions[0];
+
+  const submitAddress = (raw: string) => {
+    const trimmed = raw.trim();
+    const activeDisplay = activeArtifact ? artifactAddressDisplay(activeArtifact) : '';
+    if (!trimmed || (activeArtifact?.kind !== 'web' && trimmed === activeDisplay) || /^(?:design|motion|game|export|asset|brand):\/\//i.test(trimmed)) return;
+    const normalized = normalizeBrowserAddress(trimmed);
+    setAddressEditing(false);
+    addressInputRef.current?.blur();
+    if (publishPanelOpen && activeArtifact) gamePublishActions.close(activeArtifact.id);
+    navigateWeb(normalized ?? searchWebUrl(trimmed));
+  };
+
+  const annotateButtonNode = supportsAnnotate ? (
+    <Tooltip label={t('Annotate elements, regions, and drawings')}>
+      <IconButton
+        variant="ghost"
+        className="motion-icon-button om-sa-annotate-btn"
+        data-active={annotateActive || undefined}
+        aria-label={t('Annotate elements, regions, and drawings')}
+        onMouseDown={event => event.preventDefault()}
+        onClick={() => {
+          setAnnotateActive(v => {
+            const next = !v;
+            if (next) setAnnotTool('select');
+            return next;
+          });
+        }}
+        icon={<RemixIcon name="focus-3-line" size={15} />}
+      />
+    </Tooltip>
+  ) : null;
+
+  const viewportPopoverNode = showViewportMenu ? (
+    <Popover
+      open={deviceMenuOpen}
+      onOpenChange={setDeviceMenuOpen}
+      side="bottom"
+      align="end"
+      initialFocus={false}
+      aria-label={t('Viewport presets')}
+      tooltip={t('Viewport presets')}
+      className="om-sa-device-menu-popover"
+      trigger={
+        <Button
+          variant="plain"
+          type="button"
+          className="om-sa-device-trigger"
+          data-active={deviceMenuOpen || undefined}
+          data-constrained={isConstrainedViewport || undefined}
+          aria-label={t('Viewport presets')}
+          aria-expanded={deviceMenuOpen}
+        >
+          <RemixIcon name={activeDeviceIcon} size={15} />
+          <RemixIcon name="arrow-down-s-line" size={13} className="om-sa-device-caret" />
+        </Button>
+      }
+    >
+      <div className="om-sa-device-menu" role="menu" aria-label={t('Viewport presets')}>
+        {activeArtifact?.kind === 'web' ? (
+          <>
+            {WEB_DEVICE_PRESETS.map(preset => {
+              const isActive = webDevicePreset === preset.id;
+              const dims = preset.width && preset.height
+                ? (isActive && webDeviceRotated ? `${preset.height} × ${preset.width}` : `${preset.width} × ${preset.height}`)
+                : t('Auto');
               return (
-                <div key={tab.id} className="om-sa-viewer-tab" data-active={isActive || undefined}>
-                  <Button
-                    variant="plain"
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    title={tabTitle}
-                    className="om-sa-viewer-tab-btn"
-                    onClick={() => onSelectTab(tab.id)}
-                  >
-                    <RemixIcon name={artifactTabIcon(tab.kind, tab.filePath || tab.title, tab.mimeType)} size={13} />
-                    <span>{tabTitle}</span>
-                  </Button>
-                  <IconButton
-                    variant="plain"
-                    className="om-sa-viewer-tab-close"
-                    aria-label={t('Close tab')}
-                    onClick={() => onCloseTab(tab.id)}
-                    icon={<RemixIcon name="close-line" size={12} />}
-                  />
-                </div>
+                <Button
+                  key={preset.id}
+                  variant="plain"
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={isActive}
+                  className="om-sa-device-menu-item"
+                  data-active={isActive || undefined}
+                  onClick={() => {
+                    setWebDevicePreset(preset.id);
+                    if (preset.id === 'responsive') setWebDeviceRotated(false);
+                    setDeviceMenuOpen(false);
+                  }}
+                >
+                  <RemixIcon name={preset.icon} size={14} />
+                  <span className="om-sa-device-menu-label">{t(preset.label)}</span>
+                  <small className="om-sa-device-menu-dims">{dims}</small>
+                  <span className="om-sa-device-menu-check" aria-hidden="true">
+                    {isActive && <RemixIcon name="check-line" size={14} />}
+                  </span>
+                </Button>
               );
             })}
-            {showNewTab && (
-              <div className="om-sa-viewer-tab" data-active>
+            {fixedViewport && (
+              <>
+                <div className="om-sa-browser-menu-sep" role="separator" />
                 <Button
                   variant="plain"
                   type="button"
-                  role="tab"
-                  aria-selected
-                  className="om-sa-viewer-tab-btn"
-                  onClick={onNewTab}
+                  role="menuitem"
+                  className="om-sa-device-menu-item"
+                  data-active={webDeviceRotated || undefined}
+                  onClick={() => setWebDeviceRotated(v => !v)}
                 >
-                  <RemixIcon name="global-line" size={13} />
-                  <span>{t('New tab')}</span>
+                  <RemixIcon name="clockwise-line" size={14} />
+                  <span className="om-sa-device-menu-label">{t('Rotate viewport')}</span>
+                  <small className="om-sa-device-menu-dims">
+                    {fixedViewport.width} × {fixedViewport.height}
+                  </small>
+                  <span className="om-sa-device-menu-check" aria-hidden="true" />
                 </Button>
-                <IconButton
-                  variant="plain"
-                  className="om-sa-viewer-tab-close"
-                  aria-label={t('Close tab')}
-                  onClick={() => {
-                    const fallback = openTabs.at(-1);
-                    if (fallback) onSelectTab(fallback.id);
-                    else onClosePane();
-                  }}
-                  icon={<RemixIcon name="close-line" size={12} />}
-                />
-              </div>
+              </>
             )}
-          </div>
-          <Tooltip label={t('New tab')}>
-            <IconButton
-              variant="plain"
-              className="om-sa-new-tab-btn"
-              aria-label={t('New tab')}
-              disabled={showNewTab}
-              onClick={event => {
-                event.currentTarget.blur();
-                setPendingWebUrl(null);
-                onNewTab();
-                requestAnimationFrame(() => newTabInputRef.current?.focus());
-              }}
-              icon={<RemixIcon name="add-line" size={15} />}
-            />
-          </Tooltip>
-        </div>
-
-        <div className="om-sa-viewer-win-actions">
-          <Tooltip label={t(expanded ? 'Restore viewer' : 'Expand viewer')}>
-            <IconButton
-              variant="ghost"
-              className="motion-icon-button"
-              aria-label={t(expanded ? 'Restore viewer' : 'Expand viewer')}
-              onClick={onToggleExpand}
-              icon={<RemixIcon name={expanded ? 'fullscreen-exit-line' : 'fullscreen-line'} size={15} />}
-            />
-          </Tooltip>
-          <Tooltip label={t('Close viewer')}>
-            <IconButton
-              variant="ghost"
-              className="motion-icon-button"
-              aria-label={t('Close viewer')}
-              onClick={onClosePane}
-              icon={<RemixIcon name="close-line" size={16} />}
-            />
-          </Tooltip>
-        </div>
+          </>
+        ) : (
+          designViewports.map(preset => {
+            const isActive = viewport === preset.id;
+            const dims = preset.width && preset.height
+              ? `${preset.width} × ${preset.height}`
+              : t('Auto');
+            return (
+              <Button
+                key={preset.id}
+                variant="plain"
+                type="button"
+                role="menuitemradio"
+                aria-checked={isActive}
+                className="om-sa-device-menu-item"
+                data-active={isActive || undefined}
+                onClick={() => {
+                  userChoseViewportForArtifactRef.current = activeArtifact?.id ?? null;
+                  setViewport(preset.id);
+                  setDeviceMenuOpen(false);
+                }}
+              >
+                <RemixIcon name={preset.icon} size={14} />
+                <span className="om-sa-device-menu-label">{t(preset.label)}</span>
+                <small className="om-sa-device-menu-dims">{dims}</small>
+                <span className="om-sa-device-menu-check" aria-hidden="true">
+                  {isActive && <RemixIcon name="check-line" size={14} />}
+                </span>
+              </Button>
+            );
+          })
+        )}
       </div>
+    </Popover>
+  ) : null;
 
-      <div className="om-sa-viewer-toolbar">
-        <div className="om-sa-nav-btns">
-          {(activeArtifact?.kind === 'web' || showNewTab) && (
-            <>
-              <Tooltip label={t('Back')}>
-                <IconButton
-                  variant="ghost"
-                  className="motion-icon-button"
-                  aria-label={t('Back')}
-                  disabled={activeArtifact?.kind !== 'web' || !webState?.canGoBack}
-                  onClick={handleBack}
-                  icon={<RemixIcon name="arrow-left-line" size={15} />}
-                />
-              </Tooltip>
-              <Tooltip label={t('Forward')}>
-                <IconButton
-                  variant="ghost"
-                  className="motion-icon-button"
-                  aria-label={t('Forward')}
-                  disabled={activeArtifact?.kind !== 'web' || !webState?.canGoForward}
-                  onClick={handleForward}
-                  icon={<RemixIcon name="arrow-right-line" size={15} />}
-                />
-              </Tooltip>
-            </>
-          )}
-          <Tooltip label={t('Reload')}>
-            <IconButton
-              variant="ghost"
-              className="motion-icon-button"
-              aria-label={t('Reload')}
-              disabled={!activeArtifact}
-              onClick={handleReload}
-              icon={<RemixIcon name="refresh-line" size={15} />}
-            />
-          </Tooltip>
-        </div>
+  const screenshotButtonNode = canCaptureScreenshot ? (
+    <Tooltip label={t('Capture screenshot to chat')}>
+      <IconButton
+        variant="ghost"
+        className="motion-icon-button"
+        aria-label={t('Capture screenshot to chat')}
+        disabled={capturingScreenshot}
+        onClick={() => void handleCaptureScreenshot()}
+        icon={<RemixIcon name={capturingScreenshot ? 'loader-4-line' : 'camera-line'} size={15} />}
+      />
+    </Tooltip>
+  ) : null;
 
-        <div className="om-sa-address-wrap">
-          <form
-            className="om-sa-address-form"
-            onSubmit={event => {
-              event.preventDefault();
-              const trimmed = addressDraft.trim();
-              const activeDisplay = activeArtifact ? artifactAddressDisplay(activeArtifact) : '';
-              if (!trimmed || (activeArtifact?.kind !== 'web' && trimmed === activeDisplay) || /^(?:design|motion|game|export|asset|brand):\/\//i.test(trimmed)) return;
-              const normalized = normalizeBrowserAddress(trimmed);
-              setAddressEditing(false);
-              addressInputRef.current?.blur();
-              navigateWeb(normalized ?? searchWebUrl(trimmed));
+  const consoleButtonNode = supportsAnnotate && (webErrorCount > 0 || consoleOpen) ? (
+    <Tooltip label={t('Console & errors')}>
+      <Button
+        variant="ghost"
+        type="button"
+        className="motion-icon-button om-sa-console-toggle-btn"
+        data-active={consoleOpen || undefined}
+        aria-label={t('Open console')}
+        onClick={() => setConsoleOpen(v => !v)}
+      >
+        <RemixIcon name="terminal-box-fill" size={15} />
+        {webErrorCount > 0 && (
+          <span className="om-sa-console-toolbar-badge">{webErrorCount > 99 ? '99+' : webErrorCount}</span>
+        )}
+      </Button>
+    </Tooltip>
+  ) : null;
+
+  const remixButtonNode = toolbarGameAction && activeArtifact ? (
+    <Tooltip label={t('Remix')}>
+      <Button
+        variant="plain"
+        type="button"
+        className="om-sa-toolbar-btn om-sa-game-use-btn"
+        aria-label={t('Remix')}
+        onClick={() => toolbarGameAction(activeArtifact)}
+      >
+        <RemixIcon name="sparkling-line" size={14} />
+        <span>{t('Remix')}</span>
+      </Button>
+    </Tooltip>
+  ) : null;
+
+  const sharePopoverNode = canCloudShare && activeArtifact && (activeArtifact.kind === 'game-project' || activeArtifact.kind === 'design-project' || activeArtifact.kind === 'motion-project') ? (
+    <WebPublishPopover
+      compact
+      targetKind={activeArtifact.kind === 'game-project' ? 'game' : activeArtifact.kind === 'motion-project' ? 'motion' : 'design'}
+      targetId={activeArtifact.kind === 'game-project' ? gameCloudTarget!.targetId : activeArtifact.projectId!}
+      embedUrl={gameCloudTarget?.embedUrl}
+      filePath={activeArtifact.kind === 'game-project' ? gameCloudTarget?.filePath : activeArtifact.entry}
+      title={activeArtifact.title}
+      triggerClassName="om-sa-share-trigger"
+      autoOpen={pendingDeployArtifactId === activeArtifact.id}
+      onAutoOpenConsumed={onConsumeDeployRequest}
+      revisionKey={activeArtifact.revision ?? String(activeArtifact.updatedAt)}
+      onOpenAccount={onOpenAccountSettings}
+      onNotify={onNotify}
+    />
+  ) : null;
+
+  const publishTriggerNode = !showNewTab && activeArtifact?.kind === 'game-project' && publishGameId ? (
+    <Button
+      variant="plain"
+      type="button"
+      className="om-sa-share-trigger om-sa-publish-trigger"
+      data-active={publishPanelOpen || undefined}
+      aria-pressed={publishPanelOpen}
+      onClick={() => {
+        const input = buildGamePublishOpenInput(activeArtifact, {
+          chatId,
+          catalogSource: gameMeta?.source,
+          orientation: gameMeta?.orientation,
+          includeLink: canCloudShare,
+        });
+        if (input) gamePublishActions.toggle(input);
+      }}
+    >
+      <RemixIcon name="upload-2-line" size={14} />
+      <span>{t('Publish')}</span>
+    </Button>
+  ) : null;
+
+  const browserMenuPopoverNode = activeArtifact ? (
+    <Popover
+      open={browserMenuOpen}
+      onOpenChange={setBrowserMenuOpen}
+      side="bottom"
+      align="end"
+      initialFocus={false}
+      aria-label={t('Browser options')}
+      renderPanel={<MenuPanel data-menu-layout="custom" />}
+      className="motion-positioned-menu om-sa-browser-menu-popover"
+      trigger={
+        <IconButton
+          variant="ghost"
+          className="motion-icon-button"
+          data-active={browserMenuOpen || undefined}
+          aria-label={t('Browser options')}
+          icon={<RemixIcon name="more-line" size={15} />}
+        />
+      }
+    >
+      <div className="om-sa-browser-menu" role="menu" aria-label={t('Browser options')}>
+        {activeArtifact.kind === 'web' && (
+          <Button
+            variant="plain"
+            type="button"
+            role="menuitem"
+            className="om-sa-browser-menu-item"
+            onClick={() => {
+              setBrowserMenuOpen(false);
+              void handleBrowserCommand('hard-reload');
             }}
           >
-            <RemixIcon name={activeArtifact ? artifactTabIcon(activeArtifact.kind) : 'search-line'} size={14} />
-            <input
-              ref={addressInputRef}
-              value={addressDraft}
-              placeholder={t('Search web, artifacts, or enter a URL')}
-              aria-label={t('Artifact address bar')}
-              onFocus={event => {
-                setAddressEditing(true);
-                event.currentTarget.select();
-              }}
-              onBlur={() => setAddressEditing(false)}
-              onChange={event => setAddressDraft(event.target.value)}
-            />
-          </form>
+            <RemixIcon name="refresh-line" size={14} />
+            <span>{t('Hard reload')}</span>
+          </Button>
+        )}
 
-          {addressEditing
-            && addressDraft.trim()
-            && !(activeArtifact && activeArtifact.kind !== 'web' && addressDraft.trim() === artifactAddressDisplay(activeArtifact))
-            && !/^(?:design|motion|game|export|asset|brand):\/\//i.test(addressDraft.trim())
-            && (() => {
-            const trimmed = addressDraft.trim();
-            const normalized = normalizeBrowserAddress(trimmed);
-            const q = trimmed.toLowerCase();
-            const matchedResources = quickOpenItems
-              .filter(item => `${item.title} ${searchableSubtitle(item)}`.toLowerCase().includes(q))
-              .slice(0, 3);
-            return (
-              <div className="om-sa-address-suggest" role="listbox" aria-label={t('Suggestions')}>
-                {normalized ? (
+        {canCaptureScreenshot && compactToolbar && (
+          <Button
+            variant="plain"
+            type="button"
+            role="menuitem"
+            className="om-sa-browser-menu-item"
+            disabled={capturingScreenshot}
+            onClick={() => {
+              setBrowserMenuOpen(false);
+              void handleCaptureScreenshot();
+            }}
+          >
+            <RemixIcon name="camera-line" size={14} />
+            <span>{t('Capture screenshot to chat')}</span>
+          </Button>
+        )}
+        {supportsAnnotate && (
+          <Button
+            variant="plain"
+            type="button"
+            role="menuitem"
+            className="om-sa-browser-menu-item"
+            data-active={consoleOpen || undefined}
+            onClick={() => {
+              setBrowserMenuOpen(false);
+              setConsoleOpen(v => !v);
+            }}
+          >
+            <RemixIcon name="terminal-box-fill" size={14} />
+            <span>{t('Console & errors')}</span>
+            {(webErrorCount > 0 || consoleEntries.length > 0) && (
+              <small className="om-sa-browser-menu-count" data-error={webErrorCount > 0 || undefined}>
+                {webErrorCount > 0 ? webErrorCount : consoleEntries.length}
+              </small>
+            )}
+          </Button>
+        )}
+
+        {externalHref && (
+          <Button
+            variant="plain"
+            type="button"
+            role="menuitem"
+            className="om-sa-browser-menu-item"
+            onClick={() => {
+              setBrowserMenuOpen(false);
+              window.open(externalHref, '_blank', 'noopener,noreferrer');
+            }}
+          >
+            <RemixIcon name="external-link-line" size={14} />
+            <span>{t('Open external')}</span>
+          </Button>
+        )}
+
+        {sourceCredit && (
+          <a
+            href={sourceCredit.postUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            role="menuitem"
+            className="om-sa-browser-menu-item"
+            onClick={() => setBrowserMenuOpen(false)}
+          >
+            <RemixIcon name="external-link-line" size={14} />
+            <span>{t('Original author · {author}', { author: sourceCredit.author })}</span>
+          </a>
+        )}
+
+        {downloadHref && (
+          <a
+            href={downloadHref}
+            download
+            role="menuitem"
+            className="om-sa-browser-menu-item"
+            onClick={() => setBrowserMenuOpen(false)}
+          >
+            <RemixIcon name="download-2-line" size={14} />
+            <span>{t('Download')}</span>
+          </a>
+        )}
+
+        {activeArtifact.kind !== 'web' && (
+          <>
+            {(supportsAnnotate || externalHref || sourceCredit || downloadHref)
+              // Games only have "Open in Game Studio" below; skip the separator when it is absent.
+              && (activeArtifact.kind !== 'game-project' || Boolean(activeArtifact.projectId && onOpenInGameStudio)) && (
+              <div role="separator" />
+            )}
+
+            {/* Games: templates use the toolbar Remix button; the user's own games need no Attach entry. */}
+            {['design-project', 'motion-project', 'asset-image', 'asset-video', 'asset-audio', 'brand-kit'].includes(activeArtifact.kind) && (
+              <Button
+                variant="plain"
+                type="button"
+                role="menuitem"
+                className="om-sa-browser-menu-item"
+                onClick={() => {
+                  setBrowserMenuOpen(false);
+                  onAttachArtifact(activeArtifact);
+                }}
+              >
+                <RemixIcon name="add-line" size={14} />
+                <span>{t('Attach')}</span>
+              </Button>
+            )}
+
+            {activeArtifact.kind === 'motion-project' && activeArtifact.projectId && (
+              <>
+                <Button
+                  variant="plain"
+                  type="button"
+                  role="menuitem"
+                  className="om-sa-browser-menu-item"
+                  onClick={() => {
+                    setBrowserMenuOpen(false);
+                    motionViewRef.current?.attachSelection(false);
+                  }}
+                >
+                  <RemixIcon name="focus-3-line" size={14} />
+                  <span>{t('Attach selection')}</span>
+                </Button>
+                <Button
+                  variant="plain"
+                  type="button"
+                  role="menuitem"
+                  className="om-sa-browser-menu-item"
+                  disabled={capturingMotionFrame}
+                  onClick={() => {
+                    setBrowserMenuOpen(false);
+                    void (async () => {
+                      setCapturingMotionFrame(true);
+                      try {
+                        await motionViewRef.current?.captureFrame();
+                      } finally {
+                        setCapturingMotionFrame(false);
+                      }
+                    })();
+                  }}
+                >
+                  <RemixIcon name="camera-line" size={14} />
+                  <span>{t('Capture frame')}</span>
+                </Button>
+              </>
+            )}
+
+            {activeArtifact.kind === 'design-project' && activeArtifact.projectId && (
+              <Button
+                variant="plain"
+                type="button"
+                role="menuitem"
+                className="om-sa-browser-menu-item"
+                onClick={() => {
+                  setBrowserMenuOpen(false);
+                  onOpenInDesignStudio(activeArtifact.projectId!);
+                }}
+              >
+                <RemixIcon name="layout-line" size={14} />
+                <span>{t('Open in Design Studio')}</span>
+              </Button>
+            )}
+
+            {activeArtifact.kind === 'motion-project' && activeArtifact.projectId && (
+              <Button
+                variant="plain"
+                type="button"
+                role="menuitem"
+                className="om-sa-browser-menu-item"
+                onClick={() => {
+                  setBrowserMenuOpen(false);
+                  onOpenInMotionStudio(activeArtifact.projectId!);
+                }}
+              >
+                <RemixIcon name="movie-line" size={14} />
+                <span>{t('Open in Motion Studio')}</span>
+              </Button>
+            )}
+
+            {activeArtifact.kind === 'game-project' && activeArtifact.projectId && onOpenInGameStudio && (
+              <Button
+                variant="plain"
+                type="button"
+                role="menuitem"
+                className="om-sa-browser-menu-item"
+                onClick={() => {
+                  setBrowserMenuOpen(false);
+                  onOpenInGameStudio(activeArtifact.projectId!);
+                }}
+              >
+                <RemixIcon name="gamepad-line" size={14} />
+                <span>{t('Open in Game Studio')}</span>
+              </Button>
+            )}
+
+            {['asset-image', 'asset-video', 'asset-audio'].includes(activeArtifact.kind) && activeArtifact.assetId && (
+              <Button
+                variant="plain"
+                type="button"
+                role="menuitem"
+                className="om-sa-browser-menu-item"
+                onClick={() => {
+                  setBrowserMenuOpen(false);
+                  onOpenInAssets(activeArtifact.assetId!, activeArtifact.versionId);
+                }}
+              >
+                <RemixIcon name="folder-open-line" size={14} />
+                <span>{t('Open in Assets')}</span>
+              </Button>
+            )}
+
+            {activeArtifact.kind === 'brand-kit' && (
+              <Button
+                variant="plain"
+                type="button"
+                role="menuitem"
+                className="om-sa-browser-menu-item"
+                onClick={() => {
+                  setBrowserMenuOpen(false);
+                  onOpenInBrandKit(activeArtifact.kitId);
+                }}
+              >
+                <RemixIcon name="palette-line" size={14} />
+                <span>{t('Open in Brand Kit')}</span>
+              </Button>
+            )}
+          </>
+        )}
+
+        {activeArtifact.kind === 'web' && (
+          <>
+            <div role="separator" />
+
+            <div className="om-sa-browser-menu-row">
+              <span className="om-sa-browser-menu-label">{t('Appearance')}</span>
+              <div className="om-sa-browser-menu-seg" role="group" aria-label={t('Appearance')}>
+                {(['auto', 'light', 'dark'] as BrowserColorScheme[]).map(scheme => (
                   <Button
+                    key={scheme}
                     variant="plain"
                     type="button"
-                    className="om-sa-suggest-row"
-                    onMouseDown={e => e.preventDefault()}
-                    onClick={() => {
-                      setAddressEditing(false);
-                      addressInputRef.current?.blur();
-                      navigateWeb(normalized);
-                    }}
+                    className="om-sa-browser-seg-btn"
+                    data-active={webColorScheme === scheme || undefined}
+                    onClick={() => void handleBrowserCommand('set-color-scheme', scheme)}
                   >
-                    <RemixIcon name="global-line" size={15} />
-                    <span className="om-sa-suggest-query">{normalized}</span>
-                    <small>{t('Open URL')}</small>
-                  </Button>
-                ) : (
-                  <Button
-                    variant="plain"
-                    type="button"
-                    className="om-sa-suggest-row"
-                    onMouseDown={e => e.preventDefault()}
-                    onClick={() => {
-                      setAddressEditing(false);
-                      addressInputRef.current?.blur();
-                      navigateWeb(searchWebUrl(trimmed));
-                    }}
-                  >
-                    <RemixIcon name="search-line" size={15} />
-                    <span className="om-sa-suggest-query">{trimmed}</span>
-                    <small>{t('Search the web')}</small>
-                  </Button>
-                )}
-                {matchedResources.map(item => (
-                  <Button
-                    key={`suggest:${item.kind}:${item.id}`}
-                    variant="plain"
-                    type="button"
-                    className="om-sa-suggest-row"
-                    onMouseDown={e => e.preventDefault()}
-                    onClick={() => {
-                      setAddressEditing(false);
-                      addressInputRef.current?.blur();
-                      onOpenResource(item);
-                    }}
-                  >
-                    <RemixIcon name={resourceIcon(item)} size={15} />
-                    <span className="om-sa-suggest-query">{item.title}</span>
-                    <small>{displaySubtitle(item) || item.kind}</small>
+                    {scheme === 'light' && <RemixIcon name="sun-fill" size={12} />}
+                    {scheme === 'dark' && <RemixIcon name="moon-fill" size={12} />}
+                    <span>{t(scheme === 'auto' ? 'Auto' : scheme === 'light' ? 'Light' : 'Dark')}</span>
                   </Button>
                 ))}
               </div>
-            );
-          })()}
-        </div>
+            </div>
 
-        <div className="om-sa-context-actions">
-          {(() => {
-            const hasModeSwitch = activeArtifact?.kind === 'design-project' || Boolean(activeGameProjectId && !isGameTrial);
-            const gameCloudTarget = resolveGameCloudTarget(activeArtifact);
-            const canCloudShare = !showNewTab && (
-              (Boolean(activeArtifact?.projectId) && (activeArtifact?.kind === 'design-project' || activeArtifact?.kind === 'motion-project'))
-              || Boolean(gameCloudTarget)
-            );
-            const activeDeviceIcon = activeArtifact?.kind === 'web'
-              ? (webDevicePreset === 'mobile' ? 'smartphone-line' : webDevicePreset === 'tablet' ? 'tablet-line' : 'computer-line')
-              : (viewport === 'mobile' ? 'smartphone-line' : viewport === 'tablet' ? 'tablet-line' : 'computer-line');
-            const isConstrainedViewport = activeArtifact?.kind === 'web'
-              ? webDevicePreset !== 'responsive'
-              : viewport !== 'desktop';
-            const viewModeOptions: Array<{ id: 'preview' | 'code' | 'trailer'; label: string; icon: string }> = [
-              { id: 'preview', label: t('Preview'), icon: 'eye-line' },
-              { id: 'code', label: t('Code'), icon: 'code-s-slash-line' },
-              ...(activeArtifact?.kind === 'game-project' && gameMeta?.trailerUrl
-                ? [{ id: 'trailer' as const, label: t('Trailer'), icon: 'film-line' }]
-                : []),
-            ];
-            const activeViewModeOption = viewModeOptions.find(opt => opt.id === viewMode) ?? viewModeOptions[0];
-            return (
-              <>
-                {hasModeSwitch && (
-                  <Popover
-                    open={viewModeMenuOpen}
-                    onOpenChange={setViewModeMenuOpen}
-                    side="bottom"
-                    align="end"
-                    initialFocus={false}
-                    aria-label={t('View mode')}
-                    tooltip={`${t('View mode')}: ${activeViewModeOption.label}`}
-                    className="om-sa-view-mode-popover"
-                    trigger={
+            <div className="om-sa-browser-menu-row">
+              <span className="om-sa-browser-menu-label">{t('Zoom')}</span>
+              <div className="om-sa-browser-menu-zoom">
+                <IconButton
+                  variant="plain"
+                  className="om-sa-browser-zoom-btn"
+                  aria-label={t('Zoom out')}
+                  disabled={webZoom <= 0.5}
+                  onClick={() => void handleBrowserCommand('set-zoom', Number(Math.max(0.5, webZoom - 0.1).toFixed(2)))}
+                  icon={<RemixIcon name="zoom-out-line" size={13} />}
+                />
+                <span className="om-sa-browser-zoom-val">{Math.round(webZoom * 100)}%</span>
+                <IconButton
+                  variant="plain"
+                  className="om-sa-browser-zoom-btn"
+                  aria-label={t('Zoom in')}
+                  disabled={webZoom >= 2}
+                  onClick={() => void handleBrowserCommand('set-zoom', Number(Math.min(2, webZoom + 0.1).toFixed(2)))}
+                  icon={<RemixIcon name="zoom-in-line" size={13} />}
+                />
+                <IconButton
+                  variant="plain"
+                  className="om-sa-browser-zoom-btn"
+                  aria-label={t('Reset zoom')}
+                  disabled={webZoom === 1}
+                  onClick={() => void handleBrowserCommand('set-zoom', 1)}
+                  icon={<RemixIcon name="refresh-line" size={12} />}
+                />
+              </div>
+            </div>
+
+            <div role="separator" />
+
+            <Button
+              variant="plain"
+              type="button"
+              role="menuitem"
+              className="om-sa-browser-menu-item"
+              onClick={() => {
+                setBrowserMenuOpen(false);
+                void handleBrowserCommand('clear-cookies', undefined, t('Cleared cookies'));
+              }}
+            >
+              <RemixIcon name="delete-bin-line" size={14} />
+              <span>{t('Clear cookies')}</span>
+            </Button>
+            <Button
+              variant="plain"
+              type="button"
+              role="menuitem"
+              className="om-sa-browser-menu-item"
+              onClick={() => {
+                setBrowserMenuOpen(false);
+                void handleBrowserCommand('clear-cache', undefined, t('Cleared cache'));
+              }}
+            >
+              <RemixIcon name="delete-bin-line" size={14} />
+              <span>{t('Clear cache')}</span>
+            </Button>
+          </>
+        )}
+      </div>
+    </Popover>
+  ) : null;
+
+  const hasPublishView = Boolean(!showNewTab && activeArtifact?.kind === 'game-project' && publishGameId);
+  const hasTrailerView = Boolean(!showNewTab && activeArtifact?.kind === 'game-project' && gameMeta?.trailerUrl);
+  const activeGameStudioTab: GameStudioTabId =
+    publishPanelOpen && hasPublishView
+      ? 'publish'
+      : viewMode === 'code' && hasModeSwitch
+        ? 'code'
+        : viewMode === 'trailer' && hasTrailerView
+          ? 'trailer'
+          : 'preview';
+  const gameStudioTargetIcon = showNewTab || !activeArtifact
+    ? 'global-line'
+    : artifactTabIcon(activeArtifact.kind, activeArtifact.filePath || activeArtifact.title, activeArtifact.mimeType);
+  const gameStudioTargetLabel = showNewTab || !activeArtifact
+    ? t('New tab')
+    : activeArtifact.kind === 'web'
+      ? (webTabTitles[activeArtifact.id] || artifactAddressDisplay(activeArtifact))
+      : activeArtifact.kind === 'game-project'
+        ? activeArtifact.title
+        : artifactAddressDisplay(activeArtifact);
+
+  const handleSelectGameStudioTab = (nextTab: GameStudioTabId) => {
+    if (nextTab === 'cloud') return;
+    if (nextTab === 'publish') {
+      if (!showNewTab && activeArtifact?.kind === 'game-project' && publishGameId && !publishPanelOpen) {
+        const input = buildGamePublishOpenInput(activeArtifact, {
+          chatId,
+          catalogSource: gameMeta?.source,
+          orientation: gameMeta?.orientation,
+          includeLink: canCloudShare,
+        });
+        if (input) gamePublishActions.open(input);
+      }
+      return;
+    }
+    if (publishPanelOpen && activeArtifact) {
+      gamePublishActions.close(activeArtifact.id);
+    }
+    setViewMode(nextTab);
+  };
+
+  return (
+    <aside
+      ref={viewerRef}
+      className="om-sa-viewer"
+      data-studio-mode={studioMode}
+      aria-label={t('Artifact Viewer')}
+    >
+      {isGameStudio ? (
+        <GameStudioTopbar
+          active={active}
+          activeTab={activeGameStudioTab}
+          activeArtifact={activeArtifact}
+          openTabs={openTabs}
+          showNewTab={showNewTab}
+          expanded={expanded}
+          hasCodeView={hasModeSwitch}
+          hasPublishView={hasPublishView}
+          hasTrailerView={hasTrailerView}
+          hasPublished={Boolean(publishSession && (publishSession.published.length > 0 || publishSession.linkUrl))}
+          targetIcon={gameStudioTargetIcon}
+          targetDisplayLabel={gameStudioTargetLabel}
+          addressDraft={addressDraft}
+          onAddressDraftChange={setAddressDraft}
+          onSubmitAddress={submitAddress}
+          normalizeAddress={normalizeBrowserAddress}
+          quickOpenItems={quickOpenItems}
+          webTabTitles={webTabTitles}
+          canGoBack={Boolean(webState?.canGoBack)}
+          canGoForward={Boolean(webState?.canGoForward)}
+          onBack={handleBack}
+          onForward={handleForward}
+          onReload={handleReload}
+          onSelectTab={id => {
+            if (publishPanelOpen && activeArtifact) gamePublishActions.close(activeArtifact.id);
+            setViewMode('preview');
+            onSelectTab(id);
+          }}
+          onCloseTab={onCloseTab}
+          onNewTab={() => {
+            setPendingWebUrl(null);
+            if (publishPanelOpen && activeArtifact) gamePublishActions.close(activeArtifact.id);
+            setViewMode('preview');
+            onNewTab();
+          }}
+          onOpenResource={item => {
+            if (publishPanelOpen && activeArtifact) gamePublishActions.close(activeArtifact.id);
+            setViewMode('preview');
+            onOpenResource(item);
+          }}
+          onSelectStudioTab={handleSelectGameStudioTab}
+          onToggleExpand={onToggleExpand}
+          onClosePane={onClosePane}
+          showAudioControl={Boolean(!showNewTab && activeArtifact?.kind === 'game-project' && activeGameProjectId)}
+          audioMuted={gameAudioMuted}
+          audioVolume={gameAudioVolume}
+          onToggleAudioMute={() => {
+            if (gameAudioMuted || gameAudioVolume <= 0.001) {
+              setGameAudioMuted(false);
+              if (gameAudioVolume <= 0.001) {
+                setGameAudioVolume(lastNonZeroVolumeRef.current > 0.05 ? lastNonZeroVolumeRef.current : 0.8);
+              }
+            } else {
+              setGameAudioMuted(true);
+            }
+          }}
+          onChangeAudioVolume={nextVolume => {
+            const clamped = Math.max(0, Math.min(1, Number(nextVolume.toFixed(2))));
+            setGameAudioVolume(clamped);
+            if (clamped <= 0.001) {
+              setGameAudioMuted(true);
+            } else {
+              lastNonZeroVolumeRef.current = clamped;
+              setGameAudioMuted(false);
+            }
+          }}
+          externalHref={externalHref}
+          viewerProgressLoading={viewerProgressLoading}
+          compactToolbar={compactToolbar}
+          viewportNode={viewportPopoverNode}
+          annotateNode={annotateButtonNode}
+          screenshotNode={screenshotButtonNode}
+          consoleNode={consoleButtonNode}
+          browserMenuNode={browserMenuPopoverNode}
+          remixNode={remixButtonNode}
+          shareNode={sharePopoverNode}
+          publishNode={publishTriggerNode}
+          tabIconFor={tab => artifactTabIcon(tab.kind, tab.filePath || tab.title, tab.mimeType)}
+        />
+      ) : (
+        <>
+          <div className="om-sa-viewer-tabs-bar">
+            <div className="om-sa-viewer-tabs-group">
+              <div ref={tabStripRef} className="om-sa-viewer-tabs" role="tablist" aria-label={t('Viewer tabs')}>
+                {openTabs.map(tab => {
+                  const isActive = !showNewTab && activeArtifact?.id === tab.id;
+                  const tabTitle = tab.kind === 'web' ? (webTabTitles[tab.id] || tab.title) : tab.title;
+                  return (
+                    <div key={tab.id} className="om-sa-viewer-tab" data-active={isActive || undefined}>
                       <Button
                         variant="plain"
                         type="button"
-                        className="om-sa-device-trigger om-sa-view-mode-trigger"
-                        data-active={viewModeMenuOpen || undefined}
-                        data-constrained={viewMode !== 'preview' || undefined}
-                        aria-label={`${t('View mode')}: ${activeViewModeOption.label}`}
-                        aria-expanded={viewModeMenuOpen}
+                        role="tab"
+                        aria-selected={isActive}
+                        title={tabTitle}
+                        className="om-sa-viewer-tab-btn"
+                        onClick={() => onSelectTab(tab.id)}
                       >
-                        <RemixIcon name={activeViewModeOption.icon} size={15} />
-                        <RemixIcon name="arrow-down-s-line" size={13} className="om-sa-device-caret" />
+                        <RemixIcon name={artifactTabIcon(tab.kind, tab.filePath || tab.title, tab.mimeType)} size={13} />
+                        <span>{tabTitle}</span>
                       </Button>
-                    }
-                  >
-                    <div className="om-sa-device-menu" role="menu" aria-label={t('View mode')}>
-                      {viewModeOptions.map(opt => {
-                        const isActive = viewMode === opt.id;
-                        return (
-                          <Button
-                            key={opt.id}
-                            variant="plain"
-                            type="button"
-                            role="menuitemradio"
-                            aria-checked={isActive}
-                            className="om-sa-device-menu-item"
-                            data-active={isActive || undefined}
-                            onClick={() => {
-                              setViewMode(opt.id);
-                              setViewModeMenuOpen(false);
-                            }}
-                          >
-                            <RemixIcon name={opt.icon} size={14} />
-                            <span className="om-sa-device-menu-label">{opt.label}</span>
-                            <span className="om-sa-device-menu-check" aria-hidden="true">
-                              {isActive && <RemixIcon name="check-line" size={14} />}
-                            </span>
-                          </Button>
-                        );
-                      })}
+                      <IconButton
+                        variant="plain"
+                        className="om-sa-viewer-tab-close"
+                        aria-label={t('Close tab')}
+                        onClick={() => onCloseTab(tab.id)}
+                        icon={<RemixIcon name="close-line" size={12} />}
+                      />
                     </div>
-                  </Popover>
-                )}
-
-                {hasModeSwitch && supportsAnnotate && (
-                  <span className="om-sa-toolbar-divider" aria-hidden="true" />
-                )}
-
-                {showViewportMenu && (
-                  <div className="om-sa-tool-group">
-                    {supportsAnnotate && (
-                    <Tooltip label={t('Annotate elements, regions, and drawings')}>
-                      <IconButton
-                        variant="ghost"
-                        className="motion-icon-button om-sa-annotate-btn"
-                        data-active={annotateActive || undefined}
-                        aria-label={t('Annotate elements, regions, and drawings')}
-                        onMouseDown={event => event.preventDefault()}
-                        onClick={() => {
-                          setAnnotateActive(v => {
-                            const next = !v;
-                            if (next) setAnnotTool('select');
-                            return next;
-                          });
-                        }}
-                        icon={<RemixIcon name="focus-3-line" size={15} />}
-                      />
-                    </Tooltip>
-                    )}
-
-                    <Popover
-                      open={deviceMenuOpen}
-                      onOpenChange={setDeviceMenuOpen}
-                      side="bottom"
-                      align="end"
-                      initialFocus={false}
-                      aria-label={t('Viewport presets')}
-                      tooltip={t('Viewport presets')}
-                      className="om-sa-device-menu-popover"
-                      trigger={
-                        <Button
-                          variant="plain"
-                          type="button"
-                          className="om-sa-device-trigger"
-                          data-active={deviceMenuOpen || undefined}
-                          data-constrained={isConstrainedViewport || undefined}
-                          aria-label={t('Viewport presets')}
-                          aria-expanded={deviceMenuOpen}
-                        >
-                          <RemixIcon name={activeDeviceIcon} size={15} />
-                          <RemixIcon name="arrow-down-s-line" size={13} className="om-sa-device-caret" />
-                        </Button>
-                      }
+                  );
+                })}
+                {showNewTab && (
+                  <div className="om-sa-viewer-tab" data-active>
+                    <Button
+                      variant="plain"
+                      type="button"
+                      role="tab"
+                      aria-selected
+                      className="om-sa-viewer-tab-btn"
+                      onClick={onNewTab}
                     >
-                      <div className="om-sa-device-menu" role="menu" aria-label={t('Viewport presets')}>
-                        {activeArtifact?.kind === 'web' ? (
-                          <>
-                            {WEB_DEVICE_PRESETS.map(preset => {
-                              const isActive = webDevicePreset === preset.id;
-                              const dims = preset.width && preset.height
-                                ? (isActive && webDeviceRotated ? `${preset.height} × ${preset.width}` : `${preset.width} × ${preset.height}`)
-                                : t('Auto');
-                              return (
-                                <Button
-                                  key={preset.id}
-                                  variant="plain"
-                                  type="button"
-                                  role="menuitemradio"
-                                  aria-checked={isActive}
-                                  className="om-sa-device-menu-item"
-                                  data-active={isActive || undefined}
-                                  onClick={() => {
-                                    setWebDevicePreset(preset.id);
-                                    if (preset.id === 'responsive') setWebDeviceRotated(false);
-                                    setDeviceMenuOpen(false);
-                                  }}
-                                >
-                                  <RemixIcon name={preset.icon} size={14} />
-                                  <span className="om-sa-device-menu-label">{t(preset.label)}</span>
-                                  <small className="om-sa-device-menu-dims">{dims}</small>
-                                  <span className="om-sa-device-menu-check" aria-hidden="true">
-                                    {isActive && <RemixIcon name="check-line" size={14} />}
-                                  </span>
-                                </Button>
-                              );
-                            })}
-                            {fixedViewport && (
-                              <>
-                                <div className="om-sa-browser-menu-sep" role="separator" />
-                                <Button
-                                  variant="plain"
-                                  type="button"
-                                  role="menuitem"
-                                  className="om-sa-device-menu-item"
-                                  data-active={webDeviceRotated || undefined}
-                                  onClick={() => setWebDeviceRotated(v => !v)}
-                                >
-                                  <RemixIcon name="clockwise-line" size={14} />
-                                  <span className="om-sa-device-menu-label">{t('Rotate viewport')}</span>
-                                  <small className="om-sa-device-menu-dims">
-                                    {fixedViewport.width} × {fixedViewport.height}
-                                  </small>
-                                  <span className="om-sa-device-menu-check" aria-hidden="true" />
-                                </Button>
-                              </>
-                            )}
-                          </>
-                        ) : (
-                          designViewports.map(preset => {
-                            const isActive = viewport === preset.id;
-                            const dims = preset.width && preset.height
-                              ? `${preset.width} × ${preset.height}`
-                              : t('Auto');
-                            return (
-                              <Button
-                                key={preset.id}
-                                variant="plain"
-                                type="button"
-                                role="menuitemradio"
-                                aria-checked={isActive}
-                                className="om-sa-device-menu-item"
-                                data-active={isActive || undefined}
-                                onClick={() => {
-                                  userChoseViewportForArtifactRef.current = activeArtifact?.id ?? null;
-                                  setViewport(preset.id);
-                                  setDeviceMenuOpen(false);
-                                }}
-                              >
-                                <RemixIcon name={preset.icon} size={14} />
-                                <span className="om-sa-device-menu-label">{t(preset.label)}</span>
-                                <small className="om-sa-device-menu-dims">{dims}</small>
-                                <span className="om-sa-device-menu-check" aria-hidden="true">
-                                  {isActive && <RemixIcon name="check-line" size={14} />}
-                                </span>
-                              </Button>
-                            );
-                          })
-                        )}
-                      </div>
-                    </Popover>
-
-                    {canCaptureScreenshot && !compactToolbar && (
-                      <Tooltip label={t('Capture screenshot to chat')}>
-                        <IconButton
-                          variant="ghost"
-                          className="motion-icon-button"
-                          aria-label={t('Capture screenshot to chat')}
-                          disabled={capturingScreenshot}
-                          onClick={() => void handleCaptureScreenshot()}
-                          icon={<RemixIcon name={capturingScreenshot ? 'loader-4-line' : 'camera-line'} size={15} />}
-                        />
-                      </Tooltip>
-                    )}
-
-                    {supportsAnnotate && (webErrorCount > 0 || consoleOpen) && (
-                      <Tooltip label={t('Console & errors')}>
-                        <Button
-                          variant="ghost"
-                          type="button"
-                          className="motion-icon-button om-sa-console-toggle-btn"
-                          data-active={consoleOpen || undefined}
-                          aria-label={t('Open console')}
-                          onClick={() => setConsoleOpen(v => !v)}
-                        >
-                          <RemixIcon name="terminal-box-fill" size={15} />
-                          {webErrorCount > 0 && (
-                            <span className="om-sa-console-toolbar-badge">{webErrorCount > 99 ? '99+' : webErrorCount}</span>
-                          )}
-                        </Button>
-                      </Tooltip>
-                    )}
+                      <RemixIcon name="global-line" size={13} />
+                      <span>{t('New tab')}</span>
+                    </Button>
+                    <IconButton
+                      variant="plain"
+                      className="om-sa-viewer-tab-close"
+                      aria-label={t('Close tab')}
+                      onClick={() => {
+                        const fallback = openTabs.at(-1);
+                        if (fallback) onSelectTab(fallback.id);
+                        else onClosePane();
+                      }}
+                      icon={<RemixIcon name="close-line" size={12} />}
+                    />
                   </div>
                 )}
+              </div>
+              <Tooltip label={t('New tab')}>
+                <IconButton
+                  variant="plain"
+                  className="om-sa-new-tab-btn"
+                  aria-label={t('New tab')}
+                  disabled={showNewTab}
+                  onClick={event => {
+                    event.currentTarget.blur();
+                    setPendingWebUrl(null);
+                    onNewTab();
+                    requestAnimationFrame(() => newTabInputRef.current?.focus());
+                  }}
+                  icon={<RemixIcon name="add-line" size={15} />}
+                />
+              </Tooltip>
+            </div>
 
-                {toolbarGameAction && activeArtifact && (
-                  <>
-                    {(hasModeSwitch || showViewportMenu) && (
-                      <span className="om-sa-toolbar-divider" aria-hidden="true" />
-                    )}
-                    <Tooltip label={t('Remix')}>
-                      <Button
-                        variant="plain"
-                        type="button"
-                        className="om-sa-toolbar-btn om-sa-game-use-btn"
-                        aria-label={t('Remix')}
-                        onClick={() => toolbarGameAction(activeArtifact)}
-                      >
-                        <RemixIcon name="sparkling-line" size={14} />
-                        <span>{t('Remix')}</span>
-                      </Button>
-                    </Tooltip>
-                  </>
-                )}
-
-                {!showNewTab && activeArtifact?.kind === 'motion-project' && activeArtifact.projectId && (
-                  <div className="om-sa-tool-group">
-                    <Tooltip label={t('Attach current Motion selection to chat')}>
-                      <Button
-                        variant="plain"
-                        type="button"
-                        className="om-sa-toolbar-btn om-sa-motion-attach-btn"
-                        data-has-selection={hasRichMotionSelection(motionSnapshot) || undefined}
-                        aria-label={t('Attach selection')}
-                        onClick={() => motionViewRef.current?.attachSelection(false)}
-                      >
-                        <RemixIcon name="add-line" size={14} />
-                        <span>{motionSnapshot ? formatMotionSelectionLabel(motionSnapshot) : t('Attach selection')}</span>
-                      </Button>
-                    </Tooltip>
-                    <Tooltip label={t('Capture frame')}>
-                      <IconButton
-                        variant="ghost"
-                        className="motion-icon-button"
-                        aria-label={t('Capture frame')}
-                        disabled={capturingMotionFrame}
-                        onClick={async () => {
-                          if (capturingMotionFrame) return;
-                          setCapturingMotionFrame(true);
-                          try {
-                            await motionViewRef.current?.captureFrame();
-                          } finally {
-                            setCapturingMotionFrame(false);
-                          }
-                        }}
-                        icon={<RemixIcon name={capturingMotionFrame ? 'loader-4-line' : 'camera-line'} size={15} />}
-                      />
-                    </Tooltip>
-                    {(motionSnapshot?.consoleErrors.length ?? 0) > 0 && (
-                      <Tooltip label={t('Console & errors')}>
-                        <Button
-                          variant="ghost"
-                          type="button"
-                          className="motion-icon-button om-sa-console-toggle-btn"
-                          aria-label={t('Console & errors')}
-                          onClick={() => motionViewRef.current?.attachConsoleErrors(false)}
-                        >
-                          <RemixIcon name="terminal-box-fill" size={15} />
-                          <span className="om-sa-console-toolbar-badge">
-                            {motionSnapshot!.consoleErrors.length > 99 ? '99+' : motionSnapshot!.consoleErrors.length}
-                          </span>
-                        </Button>
-                      </Tooltip>
-                    )}
-                  </div>
-                )}
-
-                {canCloudShare && (hasModeSwitch || showViewportMenu || toolbarGameAction || (activeArtifact?.kind === 'motion-project' && Boolean(activeArtifact.projectId))) && (
-                  <span className="om-sa-toolbar-divider" aria-hidden="true" />
-                )}
-
-                {canCloudShare && activeArtifact && (activeArtifact.kind === 'game-project' || activeArtifact.kind === 'design-project' || activeArtifact.kind === 'motion-project') && (
-                  <WebPublishPopover
-                    compact
-                    targetKind={activeArtifact.kind === 'game-project' ? 'game' : activeArtifact.kind === 'motion-project' ? 'motion' : 'design'}
-                    targetId={activeArtifact.kind === 'game-project' ? gameCloudTarget!.targetId : activeArtifact.projectId!}
-                    embedUrl={gameCloudTarget?.embedUrl}
-                    filePath={activeArtifact.kind === 'game-project' ? gameCloudTarget?.filePath : activeArtifact.entry}
-                    title={activeArtifact.title}
-                    triggerClassName="om-sa-share-trigger"
-                    autoOpen={pendingDeployArtifactId === activeArtifact.id}
-                    onAutoOpenConsumed={onConsumeDeployRequest}
-                    revisionKey={activeArtifact.revision ?? String(activeArtifact.updatedAt)}
-                    onOpenAccount={onOpenAccountSettings}
-                    onNotify={onNotify}
-                  />
-                )}
-
-                {!showNewTab && activeArtifact?.kind === 'game-project' && publishGameId && (
-                  <Button
-                    variant="plain"
-                    type="button"
-                    className="om-sa-share-trigger om-sa-publish-trigger"
-                    data-active={publishPanelOpen || undefined}
-                    aria-pressed={publishPanelOpen}
-                    onClick={() => {
-                      const input = buildGamePublishOpenInput(activeArtifact, {
-                        chatId,
-                        catalogSource: gameMeta?.source,
-                        orientation: gameMeta?.orientation,
-                        includeLink: canCloudShare,
-                      });
-                      if (input) gamePublishActions.toggle(input);
-                    }}
-                  >
-                    <RemixIcon name="upload-2-line" size={14} />
-                    <span>{t('Publish')}</span>
-                  </Button>
-                )}
-              </>
-            );
-          })()}
-
-          {activeArtifact && (
-            <Popover
-              open={browserMenuOpen}
-              onOpenChange={setBrowserMenuOpen}
-              side="bottom"
-              align="end"
-              initialFocus={false}
-              aria-label={t('Browser options')}
-              renderPanel={<MenuPanel data-menu-layout="custom" />}
-              className="motion-positioned-menu om-sa-browser-menu-popover"
-              trigger={
+            <div className="om-sa-viewer-win-actions">
+              <Tooltip label={t(expanded ? 'Restore viewer' : 'Expand viewer')}>
                 <IconButton
                   variant="ghost"
                   className="motion-icon-button"
-                  data-active={browserMenuOpen || undefined}
-                  aria-label={t('Browser options')}
-                  icon={<RemixIcon name="more-line" size={15} />}
+                  aria-label={t(expanded ? 'Restore viewer' : 'Expand viewer')}
+                  onClick={onToggleExpand}
+                  icon={<RemixIcon name={expanded ? 'fullscreen-exit-line' : 'fullscreen-line'} size={15} />}
                 />
-              }
-            >
-              <div className="om-sa-browser-menu" role="menu" aria-label={t('Browser options')}>
-                {activeArtifact.kind === 'web' && (
-                  <Button
-                    variant="plain"
-                    type="button"
-                    role="menuitem"
-                    className="om-sa-browser-menu-item"
-                    onClick={() => {
-                      setBrowserMenuOpen(false);
-                      void handleBrowserCommand('hard-reload');
-                    }}
-                  >
-                    <RemixIcon name="refresh-line" size={14} />
-                    <span>{t('Hard reload')}</span>
-                  </Button>
-                )}
+              </Tooltip>
+              <Tooltip label={t('Close viewer')}>
+                <IconButton
+                  variant="ghost"
+                  className="motion-icon-button"
+                  aria-label={t('Close viewer')}
+                  onClick={onClosePane}
+                  icon={<RemixIcon name="close-line" size={16} />}
+                />
+              </Tooltip>
+            </div>
+          </div>
 
-                {canCaptureScreenshot && compactToolbar && (
-                  <Button
-                    variant="plain"
-                    type="button"
-                    role="menuitem"
-                    className="om-sa-browser-menu-item"
-                    disabled={capturingScreenshot}
-                    onClick={() => {
-                      setBrowserMenuOpen(false);
-                      void handleCaptureScreenshot();
-                    }}
-                  >
-                    <RemixIcon name="camera-line" size={14} />
-                    <span>{t('Capture screenshot to chat')}</span>
-                  </Button>
-                )}
-                {supportsAnnotate && (
-                  <Button
-                    variant="plain"
-                    type="button"
-                    role="menuitem"
-                    className="om-sa-browser-menu-item"
-                    data-active={consoleOpen || undefined}
-                    onClick={() => {
-                      setBrowserMenuOpen(false);
-                      setConsoleOpen(v => !v);
-                    }}
-                  >
-                    <RemixIcon name="terminal-box-fill" size={14} />
-                    <span>{t('Console & errors')}</span>
-                    {(webErrorCount > 0 || consoleEntries.length > 0) && (
-                      <small className="om-sa-browser-menu-count" data-error={webErrorCount > 0 || undefined}>
-                        {webErrorCount > 0 ? webErrorCount : consoleEntries.length}
-                      </small>
-                    )}
-                  </Button>
-                )}
+          <div className="om-sa-viewer-toolbar">
+            <div className="om-sa-nav-btns">
+              {(activeArtifact?.kind === 'web' || showNewTab) && (
+                <>
+                  <Tooltip label={t('Back')}>
+                    <IconButton
+                      variant="ghost"
+                      className="motion-icon-button"
+                      aria-label={t('Back')}
+                      disabled={activeArtifact?.kind !== 'web' || !webState?.canGoBack}
+                      onClick={handleBack}
+                      icon={<RemixIcon name="arrow-left-line" size={15} />}
+                    />
+                  </Tooltip>
+                  <Tooltip label={t('Forward')}>
+                    <IconButton
+                      variant="ghost"
+                      className="motion-icon-button"
+                      aria-label={t('Forward')}
+                      disabled={activeArtifact?.kind !== 'web' || !webState?.canGoForward}
+                      onClick={handleForward}
+                      icon={<RemixIcon name="arrow-right-line" size={15} />}
+                    />
+                  </Tooltip>
+                </>
+              )}
+              <Tooltip label={t('Reload')}>
+                <IconButton
+                  variant="ghost"
+                  className="motion-icon-button"
+                  aria-label={t('Reload')}
+                  disabled={!activeArtifact}
+                  onClick={handleReload}
+                  icon={<RemixIcon name="refresh-line" size={15} />}
+                />
+              </Tooltip>
+            </div>
 
-                {externalHref && (
-                  <Button
-                    variant="plain"
-                    type="button"
-                    role="menuitem"
-                    className="om-sa-browser-menu-item"
-                    onClick={() => {
-                      setBrowserMenuOpen(false);
-                      window.open(externalHref, '_blank', 'noopener,noreferrer');
-                    }}
-                  >
-                    <RemixIcon name="external-link-line" size={14} />
-                    <span>{t('Open external')}</span>
-                  </Button>
-                )}
+            <div className="om-sa-address-wrap">
+              <form
+                className="om-sa-address-form"
+                onSubmit={event => {
+                  event.preventDefault();
+                  submitAddress(addressDraft);
+                }}
+              >
+                <RemixIcon name={activeArtifact ? artifactTabIcon(activeArtifact.kind) : 'search-line'} size={14} />
+                <input
+                  ref={addressInputRef}
+                  value={addressDraft}
+                  placeholder={t('Search web, artifacts, or enter a URL')}
+                  aria-label={t('Artifact address bar')}
+                  onFocus={event => {
+                    setAddressEditing(true);
+                    event.currentTarget.select();
+                  }}
+                  onBlur={() => setAddressEditing(false)}
+                  onChange={event => setAddressDraft(event.target.value)}
+                />
+              </form>
 
-                {sourceCredit && (
-                  <a
-                    href={sourceCredit.postUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    role="menuitem"
-                    className="om-sa-browser-menu-item"
-                    onClick={() => setBrowserMenuOpen(false)}
-                  >
-                    <RemixIcon name="external-link-line" size={14} />
-                    <span>{t('Original author · {author}', { author: sourceCredit.author })}</span>
-                  </a>
-                )}
-
-                {downloadHref && (
-                  <a
-                    href={downloadHref}
-                    download
-                    role="menuitem"
-                    className="om-sa-browser-menu-item"
-                    onClick={() => setBrowserMenuOpen(false)}
-                  >
-                    <RemixIcon name="download-2-line" size={14} />
-                    <span>{t('Download')}</span>
-                  </a>
-                )}
-
-                {activeArtifact.kind !== 'web' && (
-                  <>
-                    {(supportsAnnotate || externalHref || sourceCredit || downloadHref)
-                      // Games only have "Open in Game Studio" below; skip the separator when it is absent.
-                      && (activeArtifact.kind !== 'game-project' || Boolean(activeArtifact.projectId && onOpenInGameStudio)) && (
-                      <div role="separator" />
-                    )}
-
-                    {/* Games: templates use the toolbar Remix button; the user's own games need no Attach entry. */}
-                    {['design-project', 'motion-project', 'asset-image', 'asset-video', 'asset-audio', 'brand-kit'].includes(activeArtifact.kind) && (
+              {addressEditing
+                && addressDraft.trim()
+                && !(activeArtifact && activeArtifact.kind !== 'web' && addressDraft.trim() === artifactAddressDisplay(activeArtifact))
+                && !/^(?:design|motion|game|export|asset|brand):\/\//i.test(addressDraft.trim())
+                && (() => {
+                const trimmed = addressDraft.trim();
+                const normalized = normalizeBrowserAddress(trimmed);
+                const q = trimmed.toLowerCase();
+                const matchedResources = quickOpenItems
+                  .filter(item => `${item.title} ${searchableSubtitle(item)}`.toLowerCase().includes(q))
+                  .slice(0, 3);
+                return (
+                  <div className="om-sa-address-suggest" role="listbox" aria-label={t('Suggestions')}>
+                    {normalized ? (
                       <Button
                         variant="plain"
                         type="button"
-                        role="menuitem"
-                        className="om-sa-browser-menu-item"
+                        className="om-sa-suggest-row"
+                        onMouseDown={e => e.preventDefault()}
                         onClick={() => {
-                          setBrowserMenuOpen(false);
-                          onAttachArtifact(activeArtifact);
+                          setAddressEditing(false);
+                          addressInputRef.current?.blur();
+                          navigateWeb(normalized);
                         }}
                       >
-                        <RemixIcon name="add-line" size={14} />
-                        <span>{t('Attach')}</span>
+                        <RemixIcon name="global-line" size={15} />
+                        <span className="om-sa-suggest-query">{normalized}</span>
+                        <small>{t('Open URL')}</small>
                       </Button>
-                    )}
-
-                    {activeArtifact.kind === 'motion-project' && activeArtifact.projectId && (
-                      <>
-                        <Button
-                          variant="plain"
-                          type="button"
-                          role="menuitem"
-                          className="om-sa-browser-menu-item"
-                          onClick={() => {
-                            setBrowserMenuOpen(false);
-                            motionViewRef.current?.attachSelection(false);
-                          }}
-                        >
-                          <RemixIcon name="focus-3-line" size={14} />
-                          <span>{t('Attach selection')}</span>
-                        </Button>
-                        <Button
-                          variant="plain"
-                          type="button"
-                          role="menuitem"
-                          className="om-sa-browser-menu-item"
-                          disabled={capturingMotionFrame}
-                          onClick={() => {
-                            setBrowserMenuOpen(false);
-                            void (async () => {
-                              setCapturingMotionFrame(true);
-                              try {
-                                await motionViewRef.current?.captureFrame();
-                              } finally {
-                                setCapturingMotionFrame(false);
-                              }
-                            })();
-                          }}
-                        >
-                          <RemixIcon name="camera-line" size={14} />
-                          <span>{t('Capture frame')}</span>
-                        </Button>
-                      </>
-                    )}
-
-                    {activeArtifact.kind === 'design-project' && activeArtifact.projectId && (
+                    ) : (
                       <Button
                         variant="plain"
                         type="button"
-                        role="menuitem"
-                        className="om-sa-browser-menu-item"
+                        className="om-sa-suggest-row"
+                        onMouseDown={e => e.preventDefault()}
                         onClick={() => {
-                          setBrowserMenuOpen(false);
-                          onOpenInDesignStudio(activeArtifact.projectId!);
+                          setAddressEditing(false);
+                          addressInputRef.current?.blur();
+                          navigateWeb(searchWebUrl(trimmed));
                         }}
                       >
-                        <RemixIcon name="layout-line" size={14} />
-                        <span>{t('Open in Design Studio')}</span>
+                        <RemixIcon name="search-line" size={15} />
+                        <span className="om-sa-suggest-query">{trimmed}</span>
+                        <small>{t('Search the web')}</small>
                       </Button>
                     )}
-
-                    {activeArtifact.kind === 'motion-project' && activeArtifact.projectId && (
+                    {matchedResources.map(item => (
                       <Button
+                        key={`suggest:${item.kind}:${item.id}`}
                         variant="plain"
                         type="button"
-                        role="menuitem"
-                        className="om-sa-browser-menu-item"
+                        className="om-sa-suggest-row"
+                        onMouseDown={e => e.preventDefault()}
                         onClick={() => {
-                          setBrowserMenuOpen(false);
-                          onOpenInMotionStudio(activeArtifact.projectId!);
+                          setAddressEditing(false);
+                          addressInputRef.current?.blur();
+                          onOpenResource(item);
                         }}
                       >
-                        <RemixIcon name="movie-line" size={14} />
-                        <span>{t('Open in Motion Studio')}</span>
+                        <RemixIcon name={resourceIcon(item)} size={15} />
+                        <span className="om-sa-suggest-query">{item.title}</span>
+                        <small>{displaySubtitle(item) || item.kind}</small>
                       </Button>
-                    )}
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
 
-                    {activeArtifact.kind === 'game-project' && activeArtifact.projectId && onOpenInGameStudio && (
-                      <Button
-                        variant="plain"
-                        type="button"
-                        role="menuitem"
-                        className="om-sa-browser-menu-item"
-                        onClick={() => {
-                          setBrowserMenuOpen(false);
-                          onOpenInGameStudio(activeArtifact.projectId!);
-                        }}
-                      >
-                        <RemixIcon name="gamepad-line" size={14} />
-                        <span>{t('Open in Game Studio')}</span>
-                      </Button>
-                    )}
-
-                    {['asset-image', 'asset-video', 'asset-audio'].includes(activeArtifact.kind) && activeArtifact.assetId && (
-                      <Button
-                        variant="plain"
-                        type="button"
-                        role="menuitem"
-                        className="om-sa-browser-menu-item"
-                        onClick={() => {
-                          setBrowserMenuOpen(false);
-                          onOpenInAssets(activeArtifact.assetId!, activeArtifact.versionId);
-                        }}
-                      >
-                        <RemixIcon name="folder-open-line" size={14} />
-                        <span>{t('Open in Assets')}</span>
-                      </Button>
-                    )}
-
-                    {activeArtifact.kind === 'brand-kit' && (
-                      <Button
-                        variant="plain"
-                        type="button"
-                        role="menuitem"
-                        className="om-sa-browser-menu-item"
-                        onClick={() => {
-                          setBrowserMenuOpen(false);
-                          onOpenInBrandKit(activeArtifact.kitId);
-                        }}
-                      >
-                        <RemixIcon name="palette-line" size={14} />
-                        <span>{t('Open in Brand Kit')}</span>
-                      </Button>
-                    )}
-                  </>
-                )}
-
-                {activeArtifact.kind === 'web' && (
-                  <>
-                    <div role="separator" />
-
-                    <div className="om-sa-browser-menu-row">
-                      <span className="om-sa-browser-menu-label">{t('Appearance')}</span>
-                      <div className="om-sa-browser-menu-seg" role="group" aria-label={t('Appearance')}>
-                        {(['auto', 'light', 'dark'] as BrowserColorScheme[]).map(scheme => (
-                          <Button
-                            key={scheme}
-                            variant="plain"
-                            type="button"
-                            className="om-sa-browser-seg-btn"
-                            data-active={webColorScheme === scheme || undefined}
-                            onClick={() => void handleBrowserCommand('set-color-scheme', scheme)}
-                          >
-                            {scheme === 'light' && <RemixIcon name="sun-fill" size={12} />}
-                            {scheme === 'dark' && <RemixIcon name="moon-fill" size={12} />}
-                            <span>{t(scheme === 'auto' ? 'Auto' : scheme === 'light' ? 'Light' : 'Dark')}</span>
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="om-sa-browser-menu-row">
-                      <span className="om-sa-browser-menu-label">{t('Zoom')}</span>
-                      <div className="om-sa-browser-menu-zoom">
-                        <IconButton
-                          variant="plain"
-                          className="om-sa-browser-zoom-btn"
-                          aria-label={t('Zoom out')}
-                          disabled={webZoom <= 0.5}
-                          onClick={() => void handleBrowserCommand('set-zoom', Number(Math.max(0.5, webZoom - 0.1).toFixed(2)))}
-                          icon={<RemixIcon name="zoom-out-line" size={13} />}
-                        />
-                        <span className="om-sa-browser-zoom-val">{Math.round(webZoom * 100)}%</span>
-                        <IconButton
-                          variant="plain"
-                          className="om-sa-browser-zoom-btn"
-                          aria-label={t('Zoom in')}
-                          disabled={webZoom >= 2}
-                          onClick={() => void handleBrowserCommand('set-zoom', Number(Math.min(2, webZoom + 0.1).toFixed(2)))}
-                          icon={<RemixIcon name="zoom-in-line" size={13} />}
-                        />
-                        <IconButton
-                          variant="plain"
-                          className="om-sa-browser-zoom-btn"
-                          aria-label={t('Reset zoom')}
-                          disabled={webZoom === 1}
-                          onClick={() => void handleBrowserCommand('set-zoom', 1)}
-                          icon={<RemixIcon name="refresh-line" size={12} />}
-                        />
-                      </div>
-                    </div>
-
-                    <div role="separator" />
-
+            <div className="om-sa-context-actions">
+              {hasModeSwitch && (
+                <Popover
+                  open={viewModeMenuOpen}
+                  onOpenChange={setViewModeMenuOpen}
+                  side="bottom"
+                  align="end"
+                  initialFocus={false}
+                  aria-label={t('View mode')}
+                  tooltip={`${t('View mode')}: ${activeViewModeOption.label}`}
+                  className="om-sa-view-mode-popover"
+                  trigger={
                     <Button
                       variant="plain"
                       type="button"
-                      role="menuitem"
-                      className="om-sa-browser-menu-item"
-                      onClick={() => {
-                        setBrowserMenuOpen(false);
-                        void handleBrowserCommand('clear-cookies', undefined, t('Cleared cookies'));
-                      }}
+                      className="om-sa-device-trigger om-sa-view-mode-trigger"
+                      data-active={viewModeMenuOpen || undefined}
+                      data-constrained={viewMode !== 'preview' || undefined}
+                      aria-label={`${t('View mode')}: ${activeViewModeOption.label}`}
+                      aria-expanded={viewModeMenuOpen}
                     >
-                      <RemixIcon name="delete-bin-line" size={14} />
-                      <span>{t('Clear cookies')}</span>
+                      <RemixIcon name={activeViewModeOption.icon} size={15} />
+                      <RemixIcon name="arrow-down-s-line" size={13} className="om-sa-device-caret" />
                     </Button>
+                  }
+                >
+                  <div className="om-sa-device-menu" role="menu" aria-label={t('View mode')}>
+                    {viewModeOptions.map(opt => {
+                      const isActive = viewMode === opt.id;
+                      return (
+                        <Button
+                          key={opt.id}
+                          variant="plain"
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={isActive}
+                          className="om-sa-device-menu-item"
+                          data-active={isActive || undefined}
+                          onClick={() => {
+                            setViewMode(opt.id);
+                            setViewModeMenuOpen(false);
+                          }}
+                        >
+                          <RemixIcon name={opt.icon} size={14} />
+                          <span className="om-sa-device-menu-label">{opt.label}</span>
+                          <span className="om-sa-device-menu-check" aria-hidden="true">
+                            {isActive && <RemixIcon name="check-line" size={14} />}
+                          </span>
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </Popover>
+              )}
+
+              {hasModeSwitch && supportsAnnotate && (
+                <span className="om-sa-toolbar-divider" aria-hidden="true" />
+              )}
+
+              {showViewportMenu && (
+                <div className="om-sa-tool-group">
+                  {annotateButtonNode}
+                  {viewportPopoverNode}
+                  {!compactToolbar && screenshotButtonNode}
+                  {consoleButtonNode}
+                </div>
+              )}
+
+              {remixButtonNode && (
+                <>
+                  {(hasModeSwitch || showViewportMenu) && (
+                    <span className="om-sa-toolbar-divider" aria-hidden="true" />
+                  )}
+                  {remixButtonNode}
+                </>
+              )}
+
+              {!showNewTab && activeArtifact?.kind === 'motion-project' && activeArtifact.projectId && (
+                <div className="om-sa-tool-group">
+                  <Tooltip label={t('Attach current Motion selection to chat')}>
                     <Button
                       variant="plain"
                       type="button"
-                      role="menuitem"
-                      className="om-sa-browser-menu-item"
-                      onClick={() => {
-                        setBrowserMenuOpen(false);
-                        void handleBrowserCommand('clear-cache', undefined, t('Cleared cache'));
-                      }}
+                      className="om-sa-toolbar-btn om-sa-motion-attach-btn"
+                      data-has-selection={hasRichMotionSelection(motionSnapshot) || undefined}
+                      aria-label={t('Attach selection')}
+                      onClick={() => motionViewRef.current?.attachSelection(false)}
                     >
-                      <RemixIcon name="delete-bin-line" size={14} />
-                      <span>{t('Clear cache')}</span>
+                      <RemixIcon name="add-line" size={14} />
+                      <span>{motionSnapshot ? formatMotionSelectionLabel(motionSnapshot) : t('Attach selection')}</span>
                     </Button>
-                  </>
-                )}
-              </div>
-            </Popover>
-          )}
-        </div>
-        {viewerProgressLoading && <div className="om-sa-viewer-progress" role="progressbar" aria-label={t('Loading…')} />}
-      </div>
+                  </Tooltip>
+                  <Tooltip label={t('Capture frame')}>
+                    <IconButton
+                      variant="ghost"
+                      className="motion-icon-button"
+                      aria-label={t('Capture frame')}
+                      disabled={capturingMotionFrame}
+                      onClick={async () => {
+                        if (capturingMotionFrame) return;
+                        setCapturingMotionFrame(true);
+                        try {
+                          await motionViewRef.current?.captureFrame();
+                        } finally {
+                          setCapturingMotionFrame(false);
+                        }
+                      }}
+                      icon={<RemixIcon name={capturingMotionFrame ? 'loader-4-line' : 'camera-line'} size={15} />}
+                    />
+                  </Tooltip>
+                  {(motionSnapshot?.consoleErrors.length ?? 0) > 0 && (
+                    <Tooltip label={t('Console & errors')}>
+                      <Button
+                        variant="ghost"
+                        type="button"
+                        className="motion-icon-button om-sa-console-toggle-btn"
+                        aria-label={t('Console & errors')}
+                        onClick={() => motionViewRef.current?.attachConsoleErrors(false)}
+                      >
+                        <RemixIcon name="terminal-box-fill" size={15} />
+                        <span className="om-sa-console-toolbar-badge">
+                          {motionSnapshot!.consoleErrors.length > 99 ? '99+' : motionSnapshot!.consoleErrors.length}
+                        </span>
+                      </Button>
+                    </Tooltip>
+                  )}
+                </div>
+              )}
 
-      <div className="om-sa-viewer-stage" data-console={consoleOpen && supportsAnnotate ? 'true' : undefined} data-publish-open={publishPanelOpen || undefined}>
+              {canCloudShare && (hasModeSwitch || showViewportMenu || Boolean(remixButtonNode) || (activeArtifact?.kind === 'motion-project' && Boolean(activeArtifact.projectId))) && (
+                <span className="om-sa-toolbar-divider" aria-hidden="true" />
+              )}
+
+              {sharePopoverNode}
+              {publishTriggerNode}
+              {browserMenuPopoverNode}
+            </div>
+            {viewerProgressLoading && <div className="om-sa-viewer-progress" role="progressbar" aria-label={t('Loading…')} />}
+          </div>
+        </>
+      )}
+
+      <div
+        className="om-sa-viewer-stage"
+        data-console={consoleOpen && supportsAnnotate ? 'true' : undefined}
+        data-publish-open={publishPanelOpen || undefined}
+        data-publish-studio={isGameStudio && publishPanelOpen ? 'true' : undefined}
+      >
         <div className="om-sa-viewer-stage-body">
           {pendingWebUrl && (showNewTab || !activeArtifact) ? (
           <div className="om-sa-web-skeleton om-sa-web-skeleton-enter" role="status" aria-label={t('Loading…')}>
@@ -3672,8 +3883,10 @@ export function ArtifactBrowserPane({
             onNotify={onNotify}
             onGameMeta={meta => setGameMetaEntry({ artifactId: activeArtifact.id, ...meta })}
             onBackgroundLoadingChange={setGameFrameBackgroundLoading}
+            audioMuted={gameAudioMuted}
+            audioVolume={gameAudioVolume}
           />
-        ) : activeArtifact.kind === 'web' && activeArtifact.url && chatId ? (
+        ) : activeArtifact.kind === 'web' && activeArtifact.url && browserSessionId ? (
           <div className="om-sa-web-stage">
             <div className="om-sa-web-stage-main" data-framed={Boolean(fixedViewport) || undefined}>
               <div
@@ -3691,10 +3904,11 @@ export function ArtifactBrowserPane({
                   }
                 >
                   <WebBrowser
+                    key={activeArtifact.id}
                     ref={webRef}
-                    sessionId={chatId}
+                    sessionId={browserSessionId}
                     tabId={safeBrowserTabId(activeArtifact.id)}
-                    endpoint={superAgentBrowserEndpoint(chatId, safeBrowserTabId(activeArtifact.id))}
+                    endpoint={superAgentBrowserEndpoint(chatId, safeBrowserTabId(activeArtifact.id), effectivePreviewBrowserSessionId)}
                     url={activeArtifact.url}
                     interactive={!annotateActive}
                     fixedViewport={fixedViewport}
@@ -3733,6 +3947,7 @@ export function ArtifactBrowserPane({
           <GamePublishPanel
             artifactId={activeArtifact.id}
             coverUrl={`/motion-api/games/${encodeURIComponent(publishGameId)}/play/assets/cover.png`}
+            presentation={isGameStudio ? 'studio' : 'drawer'}
             onChooseDouyin={onChooseDouyin}
             onNotify={onNotify}
           />

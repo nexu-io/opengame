@@ -23,9 +23,10 @@ type Notify = (message: string, tone?: 'info' | 'error') => void;
  * Fixed position and height; one step at a time. Real work (OpenDesign link, packages) reports
  * its real result; console steps record what the user says they did.
  */
-export function GamePublishPanel({ artifactId, coverUrl, onChooseDouyin, onNotify }: {
+export function GamePublishPanel({ artifactId, coverUrl, presentation = 'drawer', onChooseDouyin, onNotify }: {
   artifactId: string;
   coverUrl?: string;
+  presentation?: 'drawer' | 'studio';
   onChooseDouyin?: (artifactId: string, options: GamePublishChooseOptions) => void;
   onNotify?: Notify;
 }) {
@@ -139,7 +140,7 @@ export function GamePublishPanel({ artifactId, coverUrl, onChooseDouyin, onNotif
   }
 
   return (
-    <aside className="om-gp-panel" aria-label={t('Publish panel')}>
+    <aside className="om-gp-panel" data-presentation={presentation} aria-label={t('Publish panel')}>
       {head}
       <div className="om-gp-body">{body}</div>
       {foot && <footer className="om-gp-foot">{foot}</footer>}

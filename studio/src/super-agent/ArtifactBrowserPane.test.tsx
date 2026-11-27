@@ -9,6 +9,7 @@ import {
   ArtifactBrowserPane,
   EXTERNAL_IFRAME_REVEAL_TIMEOUT_MS,
 } from './ArtifactBrowserPane';
+import { GAME_STUDIO_TAB_REGISTRY } from './GameStudioTopbar';
 
 vi.mock('../components/WebPublishPopover', () => ({
   WebPublishPopover: () => null,
@@ -72,22 +73,33 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function renderViewer(artifacts: SuperAgentArtifact[], initialTabId = artifacts[0].id) {
+async function renderViewer(
+  artifacts: SuperAgentArtifact[],
+  initialTabId = artifacts[0].id,
+  options?: {
+    studioMode?: 'default' | 'game';
+    onOpenWebUrl?: (url: string) => void;
+    onCloseTab?: (tabId: string) => void;
+  },
+) {
   const noop = () => {};
+  let setTabExternal: ((tabId: string) => void) | null = null;
   function Harness() {
     const [activeTabId, setActiveTabId] = useState(initialTabId);
+    setTabExternal = setActiveTabId;
     return (
       <ArtifactBrowserPane
-        chatId={null}
+        studioMode={options?.studioMode}
+        chatId="chat-game-1"
         artifacts={artifacts}
         openTabIds={artifacts.map(item => item.id)}
         activeTabId={activeTabId}
         expanded={false}
         workspaceItems={[]}
         onSelectTab={setActiveTabId}
-        onCloseTab={noop}
+        onCloseTab={options?.onCloseTab ?? noop}
         onNewTab={() => setActiveTabId(NEW_VIEWER_TAB_ID)}
-        onOpenWebUrl={noop}
+        onOpenWebUrl={options?.onOpenWebUrl ?? noop}
         onOpenArtifact={setActiveTabId}
         onOpenResource={noop}
         onToggleExpand={noop}
@@ -108,6 +120,14 @@ async function renderViewer(artifacts: SuperAgentArtifact[], initialTabId = arti
     );
     await Promise.resolve();
   });
+  return {
+    selectTab: async (tabId: string) => {
+      await act(async () => {
+        setTabExternal?.(tabId);
+        await Promise.resolve();
+      });
+    },
+  };
 }
 
 it('waits for the isolated trial origin before navigating the game iframe', async () => {
@@ -264,5 +284,197 @@ describe('ArtifactBrowserPane external game iframe reveal', () => {
     expect(container.querySelector('[data-game-failed]')).toBeNull();
     act(() => { signal('loading'); iframe.dispatchEvent(new Event('load')); signal('ready'); });
     expect(container.querySelector('[data-game-loading]')).toBeNull();
+  });
+});
+
+describe('ArtifactBrowserPane Game Studio mode', () => {
+  const MY_GAME: SuperAgentArtifact = {
+    id: 'game:my-custom-game',
+    kind: 'game-project',
+    projectId: 'my-custom-game',
+    title: 'My Custom Game',
+    url: '/motion-api/games/my-custom-game/play/index.html',
+    createdAt: 1002,
+    updatedAt: 1002,
+    presentedAt: 1002,
+  };
+  const WEB_REF_ARTIFACT: SuperAgentArtifact = {
+    id: 'web:ref-1',
+    kind: 'web',
+    title: 'Game Design Ref',
+    url: 'https://example.com/docs',
+    createdAt: 1003,
+    updatedAt: 1003,
+  };
+
+  it('renders a single-row Game Studio header with direct Preview/Code/Publish tabs and reserved Cloud registry slot', async () => {
+    await renderViewer([MY_GAME], MY_GAME.id, { studioMode: 'game' });
+
+    const viewer = container.querySelector('.om-sa-viewer')!;
+    expect(viewer.getAttribute('data-studio-mode')).toBe('game');
+    expect(viewer.querySelector('.om-sa-viewer-tabs-bar')).toBeNull();
+    expect(viewer.querySelector('.om-sa-game-studio-bar')).not.toBeNull();
+
+    // Direct tabs: Preview, Code, Publish (Cloud is registered as a disabled extension slot)
+    const tabs = [...viewer.querySelectorAll<HTMLButtonElement>('.om-sa-game-studio-tabs [role="tab"]')];
+    expect(tabs.map(tab => tab.dataset.tabId)).toEqual(['preview', 'code', 'publish']);
+    expect(tabs[0].getAttribute('aria-selected')).toBe('true');
+    expect(GAME_STUDIO_TAB_REGISTRY.some(item => item.id === 'cloud' && item.enabled === false)).toBe(true);
+
+    // Switching to Publish renders GamePublishPanel as full-stage studio view
+    const publishTab = tabs.find(tab => tab.dataset.tabId === 'publish')!;
+    await act(async () => publishTab.click());
+    expect(publishTab.getAttribute('aria-selected')).toBe('true');
+    const stage = viewer.querySelector('.om-sa-viewer-stage')!;
+    expect(stage.getAttribute('data-publish-studio')).toBe('true');
+    const publishPanel = viewer.querySelector('aside[aria-label="Publish panel"]');
+    expect(publishPanel?.getAttribute('data-presentation')).toBe('studio');
+
+    // Switching back to Preview closes the full-stage publish view
+    const previewTab = tabs.find(tab => tab.dataset.tabId === 'preview')!;
+    await act(async () => previewTab.click());
+    expect(stage.getAttribute('data-publish-studio')).toBeNull();
+    expect(viewer.querySelector('aside[aria-label="Publish panel"]')).toBeNull();
+  });
+
+  it('integrates browser URL navigation, multi-tab switching, and web history controls inside Preview mode', async () => {
+    const onOpenWebUrl = vi.fn();
+    const onCloseTab = vi.fn();
+    await renderViewer([MY_GAME, WEB_REF_ARTIFACT], MY_GAME.id, {
+      studioMode: 'game',
+      onOpenWebUrl,
+      onCloseTab,
+    });
+
+    const viewer = container.querySelector('.om-sa-viewer')!;
+    // While viewing the game tab, Back/Forward stay hidden; Reload and switcher are inside the browser capsule
+    expect(viewer.querySelector('.om-sa-game-browser-bar button[aria-label="Back"]')).toBeNull();
+    expect(viewer.querySelector('.om-sa-game-browser-bar button[aria-label="Reload"]')).not.toBeNull();
+
+    const switcher = viewer.querySelector<HTMLButtonElement>('button[aria-label="Switch preview tab or enter URL"]')!;
+    expect(switcher.textContent).toContain('My Custom Game');
+    expect(switcher.querySelector('.om-sa-game-tab-count')?.textContent).toBe('2');
+
+    await act(async () => switcher.click());
+    const popover = document.querySelector('.om-sa-game-switcher-popover')!;
+    expect(popover).not.toBeNull();
+
+    // Switch to the open web reference tab
+    const tabOptions = [...popover.querySelectorAll<HTMLButtonElement>('.om-sa-game-tab-select')];
+    expect(tabOptions).toHaveLength(2);
+    await act(async () => tabOptions[1].click());
+
+    // Now on the web tab, Back/Forward browser controls appear inside the integrated capsule
+    expect(viewer.querySelector('.om-sa-game-browser-bar button[aria-label="Back"]')).not.toBeNull();
+    expect(viewer.querySelector('.om-sa-game-browser-bar button[aria-label="Forward"]')).not.toBeNull();
+    expect(viewer.querySelector('.om-sa-game-studio-tabs [role="tab"][data-tab-id="code"]')).toBeNull();
+    expect(viewer.querySelector('.om-sa-game-studio-tabs [role="tab"][data-tab-id="publish"]')).toBeNull();
+
+    // Open switcher again to test live tab filtering, URL navigation, and tab close
+    await act(async () => switcher.click());
+    const urlInput = document.querySelector<HTMLInputElement>('.om-sa-game-switcher-popover input[aria-label="Artifact address bar"]')!;
+    expect(urlInput.hasAttribute('data-panel-search-input')).toBe(true);
+    const form = urlInput.closest('form')!;
+    const setInputValue = (value: string) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(urlInput, value);
+      urlInput.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    // Typing filters open tabs live while also offering web search / URL navigation
+    await act(async () => setInputValue('Design Ref'));
+    const filteredTabRows = document.querySelectorAll('.om-sa-game-switcher-popover .om-sa-game-tab-row');
+    expect(filteredTabRows).toHaveLength(1);
+    expect(filteredTabRows[0].textContent).toContain('Game Design Ref');
+
+    await act(async () => setInputValue('localhost:5173'));
+    await act(async () => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(onOpenWebUrl).toHaveBeenCalledWith('http://localhost:5173');
+
+    await act(async () => switcher.click());
+    expect(switcher.getAttribute('aria-expanded')).toBe('true');
+    expect(document.querySelector('.om-sa-game-switcher-popover')).not.toBeNull();
+    // Clicking into an iframe blurs the parent window and dismisses the switcher popover
+    await act(async () => {
+      window.dispatchEvent(new Event('blur'));
+      vi.runAllTimers();
+    });
+    expect(switcher.getAttribute('aria-expanded')).toBe('false');
+
+    await act(async () => switcher.click());
+    const closeBtn = document.querySelector<HTMLButtonElement>('.om-sa-game-tab-close')!;
+    await act(async () => closeBtn.click());
+    expect(onCloseTab).toHaveBeenCalledWith(MY_GAME.id);
+  });
+
+  it('omits Code and Publish tabs for trial/external games while keeping Preview and Viewport presets', async () => {
+    await renderViewer([EXTERNAL_TENNIS], EXTERNAL_TENNIS.id, { studioMode: 'game' });
+
+    const viewer = container.querySelector('.om-sa-viewer')!;
+    const tabs = [...viewer.querySelectorAll<HTMLButtonElement>('.om-sa-game-studio-tabs [role="tab"]')];
+    expect(tabs.map(tab => tab.dataset.tabId)).toEqual(['preview']);
+    expect(viewer.querySelector('button[aria-label="Viewport presets"]')).not.toBeNull();
+    expect(viewer.querySelector('button[aria-label="Open external"]')).not.toBeNull();
+    // External cross-origin games cannot be injected, so the root-level audio button is omitted
+    expect(viewer.querySelector('.om-sa-game-audio-btn')).toBeNull();
+  });
+
+  it('controls local game audio at the root level via mute toggle and iframe postMessage handshake', async () => {
+    await renderViewer([MY_GAME], MY_GAME.id, { studioMode: 'game' });
+
+    const viewer = container.querySelector('.om-sa-viewer')!;
+    const iframe = viewer.querySelector<HTMLIFrameElement>('iframe[title="My Custom Game"]')!;
+    const postSpy = vi.spyOn(iframe.contentWindow!, 'postMessage');
+
+    const muteBtn = viewer.querySelector<HTMLButtonElement>('.om-sa-game-audio-btn')!;
+    expect(muteBtn).not.toBeNull();
+    expect(muteBtn.getAttribute('aria-pressed')).toBe('false');
+
+    await act(async () => muteBtn.click());
+    expect(muteBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(muteBtn.hasAttribute('data-muted')).toBe(true);
+    expect(postSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'om:preview-audio', token: expect.any(String), muted: true, volume: 1 }),
+      '*',
+    );
+
+    postSpy.mockClear();
+    // When the injected audio guard signals ready, parent immediately re-syncs muted state
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: iframe.contentWindow,
+        data: { type: 'om:audio-guard-ready' },
+      }));
+    });
+    expect(postSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'om:preview-audio', token: expect.any(String), muted: true, volume: 1 }),
+      '*',
+    );
+  });
+
+  it('reconciles Game Studio active tab to Preview when switching from game Code view to a web artifact', async () => {
+    const webArtifact: SuperAgentArtifact = {
+      id: 'web:docs',
+      kind: 'web',
+      title: 'Example Docs',
+      url: 'https://example.com',
+      updatedAt: 101,
+    };
+    const { selectTab } = await renderViewer([MY_GAME, webArtifact], MY_GAME.id, { studioMode: 'game' });
+
+    const codeTab = container.querySelector<HTMLButtonElement>('.om-sa-game-studio-tab[data-tab-id="code"]')!;
+    expect(codeTab).not.toBeNull();
+    await act(async () => codeTab.click());
+    expect(codeTab.getAttribute('aria-selected')).toBe('true');
+    expect(container.querySelector('.om-sa-game-browser-bar')).toBeNull();
+
+    // Switching to a web artifact (no Code view) in the same mounted viewer must fall back to Preview so the browser bar stays visible
+    await selectTab(webArtifact.id);
+
+    const previewTab = container.querySelector<HTMLButtonElement>('.om-sa-game-studio-tab[data-tab-id="preview"]')!;
+    expect(previewTab.getAttribute('aria-selected')).toBe('true');
+    expect(container.querySelector('.om-sa-game-browser-bar')).not.toBeNull();
   });
 });

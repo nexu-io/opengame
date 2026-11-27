@@ -1019,12 +1019,13 @@ export async function handler(req: IncomingMessage, res: ServerResponse, store =
         }
       }
       const saBrowser = url.pathname.match(/^\/api\/super-agent\/chats\/([^/]+)\/browser\/([a-z0-9-]{1,80})(?:\/(events|command|resize|input|inspect|screenshot|console))?$/);
-      if (saBrowser) {
-        const [, chatId, tabId, action] = saBrowser;
-        await superAgent.get(chatId);
+      const saPreviewBrowser = saBrowser ? null : url.pathname.match(/^\/api\/super-agent\/browser\/([a-z0-9-]{1,80})\/([a-z0-9-]{1,80})(?:\/(events|command|resize|input|inspect|screenshot|console))?$/);
+      if (saBrowser || saPreviewBrowser) {
+        const [, sessionKey, tabId, action] = (saBrowser ?? saPreviewBrowser)!;
+        if (saBrowser) await superAgent.get(sessionKey);
         if (!context.runtimeRoot) throw new Error('浏览器服务尚未就绪');
         const browser = context.browser ??= new WorkspaceBrowser(context.runtimeRoot);
-        const browserSession = `sa-${chatId}`;
+        const browserSession = saBrowser ? `sa-${sessionKey}` : `sa-preview-${sessionKey}`;
         if (!action && req.method === 'POST') {
           const data = await input(req);
           return json(res, 200, (await browser.open(browserSession, tabId, data.url, { width: data.width, height: data.height, dpr: data.dpr })).state);

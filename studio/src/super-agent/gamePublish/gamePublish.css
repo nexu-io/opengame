@@ -22,8 +22,32 @@
   font-size: var(--motion-text-sm);
 }
 
+.om-sa-viewer-stage[data-publish-studio] > .om-sa-viewer-stage-body {
+  display: none;
+}
+
+.om-gp-panel[data-presentation="studio"] {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  border-left: 0;
+  background: var(--motion-bg);
+}
+
+.om-gp-panel[data-presentation="studio"] > .om-gp-head,
+.om-gp-panel[data-presentation="studio"] > .om-gp-body,
+.om-gp-panel[data-presentation="studio"] > .om-gp-foot {
+  width: 100%;
+  max-width: 680px;
+  margin-inline: auto;
+}
+
+.om-gp-panel[data-presentation="studio"] > .om-gp-head {
+  padding-top: var(--motion-space-20);
+}
+
 @container sa-viewer (max-width: 920px) {
-  .om-gp-panel {
+  .om-gp-panel:not([data-presentation="studio"]) {
     position: absolute;
     top: 0;
     right: 0;

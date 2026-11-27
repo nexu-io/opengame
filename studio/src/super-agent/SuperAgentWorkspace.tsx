@@ -442,6 +442,9 @@ export function SuperAgentWorkspace({
   activeTabIdRef.current = activeTabId;
   const [previewArtifacts, setPreviewArtifacts] = useState<SuperAgentArtifact[]>([]);
   const previewArtifactIdsRef = useRef<Set<string>>(new Set());
+  const previewBrowserSessionIdRef = useRef(
+    `preview-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+  );
   const chatArtifacts = useMemo(() => presentChatArtifacts(activeChat?.artifacts ?? []), [activeChat?.artifacts]);
   const presentedChat = useMemo(() => activeChat && chatArtifacts.replaced.size
     ? { ...activeChat, artifacts: chatArtifacts.artifacts }
@@ -487,15 +490,31 @@ export function SuperAgentWorkspace({
     () => (activeTabId !== NEW_VIEWER_TAB_ID ? viewerArtifacts.find(item => item.id === activeTabId) ?? null : null),
     [activeTabId, viewerArtifacts],
   );
+  const hasOpenGameTab = useMemo(
+    () => openTabIds.some(id => viewerArtifacts.find(item => item.id === id)?.kind === 'game-project'),
+    [openTabIds, viewerArtifacts],
+  );
+  const viewerStudioMode: 'default' | 'game' =
+    requestedMode === 'game'
+    || activeChat?.intent === 'game'
+    || currentViewerArtifact?.kind === 'game-project'
+    || hasOpenGameTab
+      ? 'game'
+      : 'default';
   const isStageViewerActive = Boolean(
     viewerOpen
-    && currentViewerArtifact
     && (
-      currentViewerArtifact.kind === 'game-project'
-      || currentViewerArtifact.kind === 'design-project'
-      || currentViewerArtifact.kind === 'motion-project'
-      || currentViewerArtifact.kind === 'motion-export'
-      || currentViewerArtifact.kind === 'asset-video'
+      viewerStudioMode === 'game'
+      || (
+        currentViewerArtifact
+        && (
+          currentViewerArtifact.kind === 'game-project'
+          || currentViewerArtifact.kind === 'design-project'
+          || currentViewerArtifact.kind === 'motion-project'
+          || currentViewerArtifact.kind === 'motion-export'
+          || currentViewerArtifact.kind === 'asset-video'
+        )
+      )
     ),
   );
 
@@ -1358,25 +1377,44 @@ export function SuperAgentWorkspace({
     void handleOpenArtifactId(targetId);
   };
 
-  const handleOpenWebUrl = async (url: string) => {
+  const handleOpenWebUrl = (url: string) => {
     const routedArtifactId = resolveInternalArtifactRouteId(url);
     if (routedArtifactId) {
-      await handleOpenArtifactId(routedArtifactId);
+      void handleOpenArtifactId(routedArtifactId);
       return;
     }
+    const trimmed = url.trim();
+    const resolvedUrl = trimmed.startsWith('/') && typeof window !== 'undefined'
+      ? `${window.location.origin}${trimmed}`
+      : trimmed;
+    let parsed: URL;
     try {
-      const resolvedUrl = url.startsWith('/') && typeof window !== 'undefined'
-        ? `${window.location.origin}${url}`
-        : url;
-      const target = await ensureChatCreated();
-      const res = await updateSuperAgentChat(target.id, {
-        addArtifact: { kind: 'web', url: resolvedUrl },
-      });
-      applyChatSnapshot(res.conversation, false);
-      setViewerOpen(true);
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : t('Could not open web page'));
+      parsed = new URL(resolvedUrl);
+    } catch {
+      showToast(t('Could not open web page'));
+      return;
     }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      showToast(t('Could not open web page'));
+      return;
+    }
+    const normalizedUrl = parsed.href;
+    const existing = viewerArtifacts.find(item => item.kind === 'web' && item.url === normalizedUrl);
+    if (existing) {
+      void handleOpenArtifactId(existing.id);
+      return;
+    }
+    const now = Date.now();
+    openLocalPreviewArtifact({
+      id: `web:${now}-${Math.random().toString(36).slice(2, 7)}`,
+      kind: 'web',
+      title: parsed.hostname || normalizedUrl,
+      subtitle: normalizedUrl,
+      url: normalizedUrl,
+      createdAt: now,
+      updatedAt: now,
+      presentedAt: now,
+    });
   };
 
   const handleOpenResource = async (item: SuperAgentResourceAttachment) => {
@@ -1459,27 +1497,8 @@ export function SuperAgentWorkspace({
       };
     };
 
-    if (patch.kind === 'workspace-file') {
-      if (viewerArtifacts.some(a => a.id === patchId)) {
-        void handleOpenArtifactId(patchId);
-        return;
-      }
-      openLocalPreviewArtifact(buildLocalArtifact());
-      return;
-    }
-
-    if (activeChat) {
-      if (viewerArtifacts.some(a => a.id === patchId)) {
-        void handleOpenArtifactId(patchId);
-        return;
-      }
-      try {
-        const res = await updateSuperAgentChat(activeChat.id, { addArtifact: patch });
-        applyChatSnapshot(res.conversation, false);
-        setViewerOpen(true);
-      } catch (error) {
-        showToast(error instanceof Error ? error.message : t('Could not preview resource'));
-      }
+    if (viewerArtifacts.some(a => a.id === patchId)) {
+      void handleOpenArtifactId(patchId);
       return;
     }
 
@@ -1557,6 +1576,7 @@ export function SuperAgentWorkspace({
       }
     }
 
+    previewArtifactIdsRef.current.add(fullArtifact.id);
     setPreviewArtifacts(prev => {
       const next = prev.filter(item => item.id !== fullArtifact.id);
       next.push(fullArtifact);
@@ -1789,8 +1809,12 @@ export function SuperAgentWorkspace({
 
   const handleCloseTab = (tabId: string) => {
     const target = viewerArtifacts.find(item => item.id === tabId);
-    if (target?.kind === 'web' && activeChat?.id) {
-      void closeSuperAgentBrowserTab(activeChat.id, safeBrowserTabId(tabId));
+    if (target?.kind === 'web') {
+      void closeSuperAgentBrowserTab(
+        activeChat?.id ?? null,
+        safeBrowserTabId(tabId),
+        previewBrowserSessionIdRef.current,
+      );
     }
     previewArtifactIdsRef.current.delete(tabId);
     setPreviewArtifacts(prev => prev.filter(item => item.id !== tabId));
@@ -2458,7 +2482,9 @@ export function SuperAgentWorkspace({
           <Suspense fallback={<RouteSurfaceFallback compact />}>
             <ArtifactBrowserPane
               active={active}
+              studioMode={viewerStudioMode}
               chatId={activeChat?.id ?? null}
+              previewBrowserSessionId={previewBrowserSessionIdRef.current}
               chatRunning={activeChat?.state === 'running' || activeChat?.state === 'waiting'}
               workingDir={activeChat?.workingDir}
               artifacts={viewerArtifacts}

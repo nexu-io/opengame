@@ -1631,8 +1631,9 @@ test('gameHttp injects viewport guard only for iframe/guarded requests and keeps
   assert.equal(raw.status,200);
   assert.equal(raw.body,rawHtml);
   assert.doesNotMatch(raw.body,/data-om-viewport-guard/);
+  assert.doesNotMatch(raw.body,/data-om-audio-guard/);
 
-  // Iframe navigation (Sec-Fetch-Dest: iframe), explicit ?omViewportGuard=1, and ?omBridge=... all receive the guard.
+  // Iframe navigation (Sec-Fetch-Dest: iframe), explicit ?omViewportGuard=1, and ?omBridge=... all receive the guards.
   for(const [query,headers] of [
     ['',{host:'localhost:4380','sec-fetch-dest':'iframe'}],
     ['?omViewportGuard=1',{host:'localhost:4380'}],
@@ -1641,6 +1642,7 @@ test('gameHttp injects viewport guard only for iframe/guarded requests and keeps
     const guarded=await fetchEntry(query,headers);
     assert.equal(guarded.status,200);
     assert.match(guarded.body,/data-om-viewport-guard/);
+    assert.match(guarded.body,/data-om-audio-guard/);
     if(query.includes('omBridge'))assert.match(guarded.body,/data-om-preview-bridge/);
   }
 }));
@@ -1726,4 +1728,79 @@ test('injected viewport guard replays resize for late async listeners after a 0x
   roRecovery.triggerRO();
   roRecovery.flushRaf();
   assert.equal(roCalls,1);
+});
+
+test('injected audio guard validates sender/token and applies mute and volume scaling to HTMLMediaElement',async()=>{
+  const {buildAudioGuardScript}=await import('../shared/preview-bridge.ts');
+  const scriptMatch=buildAudioGuardScript().match(/<script[^>]*>([\s\S]*?)<\/script>/);
+  assert(scriptMatch,'audio guard script tag');
+  const guardSource=scriptMatch[1];
+
+  const listeners=new Map<string,Set<Function>>();
+  const readyMessages:any[]=[];
+  const parentWin={postMessage(msg:any){readyMessages.push(msg);}};
+  const otherWin={};
+
+  class FakeHTMLMediaElement{
+    _vol=1;
+    _muted=false;
+    get volume(){return this._vol;}
+    set volume(v:number){this._vol=v;}
+    get muted(){return this._muted;}
+    set muted(v:boolean){this._muted=v;}
+    play(){return Promise.resolve();}
+  }
+
+  class FakeAudio extends FakeHTMLMediaElement{
+    src?:string;
+    constructor(src?:string){super();this.src=src;}
+  }
+
+  const testBridge = ['omb', 'test', '1'].join('_');
+  const wrongBridge = ['omb', 'other', '2'].join('_');
+  const win:any={
+    parent:parentWin,
+    location:{search:`?omBridge=${testBridge}`},
+    URLSearchParams,
+    HTMLMediaElement:FakeHTMLMediaElement,
+    Audio:FakeAudio,
+    document:{readyState:'complete',querySelectorAll(){return [];}},
+    addEventListener(type:string,fn:Function){
+      let set=listeners.get(type);
+      if(!set){set=new Set();listeners.set(type,set);}
+      set.add(fn);
+    },
+    dispatchMessage(source:any,data:any){
+      for(const fn of [...(listeners.get('message')??[])])fn({source,data});
+    },
+  };
+  win.window=win;
+  runInNewContext(guardSource,win);
+
+  assert.equal(readyMessages.length,1);
+  assert.equal(readyMessages[0].type,'om:audio-guard-ready');
+  assert.equal(readyMessages[0].token,testBridge);
+
+  const sfx=new win.Audio('bgm.mp3');
+  sfx.volume=0.8;
+  assert.equal(sfx._vol,0.8);
+  assert.equal(sfx._muted,false);
+
+  // Messages from non-parent senders or with a wrong token must be ignored.
+  win.dispatchMessage(otherWin,{type:'om:preview-audio',token:testBridge,muted:true,volume:0.2});
+  win.dispatchMessage(parentWin,{type:'om:preview-audio',token:wrongBridge,muted:true,volume:0.2});
+  assert.equal(sfx._muted,false);
+  assert.equal(sfx._vol,0.8);
+
+  // Valid parent message mutes underlying element while preserving logical volume/muted state.
+  win.dispatchMessage(parentWin,{type:'om:preview-audio',token:testBridge,muted:true,volume:0.5});
+  assert.equal(sfx._muted,true);
+  assert.equal(sfx._vol,0);
+  assert.equal(sfx.volume,0.8);
+  assert.equal(sfx.muted,false);
+
+  // Unmuting at 50% scales underlying volume to 0.8 * 0.5 = 0.4.
+  win.dispatchMessage(parentWin,{type:'om:preview-audio',token:testBridge,muted:false,volume:0.5});
+  assert.equal(sfx._muted,false);
+  assert.ok(Math.abs(sfx._vol-0.4)<1e-6,`expected scaled volume 0.4, got ${sfx._vol}`);
 });
