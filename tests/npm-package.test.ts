@@ -89,12 +89,9 @@ async function verifyBundledTemplates(application: string) {
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
 
-test('shared Agent instructions keep source-default, optional npm and release controls synchronized', async () => {
-  const section = async file => {
-    const text = await readFile(new URL(`../${file}`, import.meta.url), 'utf8');
-    return text.split('## Candidate and publication controls\n')[1].split('\n## ')[0].trim();
-  };
-  const shared = await section('AGENTS.md');
+test('Claude Code imports the shared Agent instructions and release controls', async () => {
+  const instructions = await readFile(new URL('../AGENTS.md', import.meta.url), 'utf8');
+  const shared = instructions.split('## Candidate and publication controls\n')[1].split('\n## ')[0].trim();
   assert(shared.includes('New repository installations use the source bootstrap in docs/install.md'));
   assert(shared.includes('Published npm application installation is optional') && shared.includes('explicit user choice'));
   assert(shared.includes('Never silently substitute npm for source or mix installations'));
@@ -108,7 +105,8 @@ test('shared Agent instructions keep source-default, optional npm and release co
   assert(shared.includes('Consumer jobs receive neither npm OIDC nor R2 credentials'));
   assert(shared.includes('Preserve existing installations, projects, credentials'));
   assert(shared.includes('npm remains the source dependency/build tool'));
-  assert.equal(await section('CLAUDE.md'), shared, 'CLAUDE.md must mirror the AGENTS.md release controls');
+  const claude = await readFile(new URL('../CLAUDE.md', import.meta.url), 'utf8');
+  assert.equal(claude.trim(), '@AGENTS.md');
 });
 
 test('release packaging rejects floating npm versions, lock drift, unpinned native assets and a mismatched browser', async () => {

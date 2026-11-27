@@ -14,12 +14,13 @@ OpenGame PR CI checks repository policy and tracked source for every change. Pro
 
 ## Repository collaboration instructions
 
-Keep persistent user instructions for repository work in this file, and keep `CLAUDE.md` aligned with this shared source so every Agent follows the same rules.
+Maintain repository instructions in `AGENTS.md`. The root `CLAUDE.md` contains only `@AGENTS.md` so Claude Code loads the same rules.
 
 1. All commit messages must be in English, including both the subject and body, as well as merge and revert messages.
-2. All repository collaboration content you create or update must be in English: issue and pull request titles and descriptions, comments, review summaries, discussions, and release notes. This applies even when the user's request is in another language.
-3. Before committing or submitting repository content, verify that it follows these English-language requirements.
-4. Branch new work from the latest `main` and target all pull requests at `main`. Merge reviewed changes directly into `main` when authorized; do not use `feature/motion` as an intermediate integration branch.
+2. All repository collaboration content you create or update must be in English: issue and pull request titles, bodies, and comments, review summaries, discussions, and release notes. This applies even when the user's request is in another language.
+3. Write new or edited code comments, docstrings, TODOs, and test descriptions in English. Preserve intentionally localized content and localization test data in their target languages.
+4. Check these language requirements before committing, pushing, or submitting repository content.
+5. Branch new work from the latest `main` and target all pull requests at `main`. Merge reviewed changes directly into `main` when authorized; do not use `feature/motion` as an intermediate integration branch.
 
 ## Repository PR review follow-up
 
@@ -105,7 +106,7 @@ Follow [the shared design system](docs/design-system.md#interaction-and-feedback
 - Use the existing status label to indicate when a gallery card is playing or selected for reuse. Reserve focus outlines for keyboard navigation. Follow the [UI craft checklist](docs/design-system.md#ui-craft-and-anti-patterns-checklist).
 - Use neutral selected surfaces, borders and text for adjacent game composer option pills. Follow the [UI craft checklist](docs/design-system.md#ui-craft-and-anti-patterns-checklist).
 - Verify actual opened menus, Popovers, `Select` dropdowns, hover/active states, inline editing, Toasts, loading/error states, and narrow + wide layouts in **both** light and dark themes in the browser. A component rendered in source is not evidence that it layers, aligns, or behaves correctly in the browser.
-- **Distill recurring UI polish feedback into design-system rules.** Whenever the user reminds or corrects you on UI or styling polish (such as redundant borders, double-boxed Popovers/menus, hover jitter, control alignment, or hierarchy), fix the instance and distill the generalizable pattern into `AGENTS.md`, `CLAUDE.md`, and [docs/design-system.md](docs/design-system.md#ui-craft-and-anti-patterns-checklist) (cross-referencing the design-system specification) so all subsequent generated UI is constrained against repeating the same mistake.
+- **Distill recurring UI polish feedback into design-system rules.** Whenever the user reminds or corrects you on UI or styling polish (such as redundant borders, double-boxed Popovers/menus, hover jitter, control alignment, or hierarchy), fix the instance and distill the generalizable pattern into `AGENTS.md` and [docs/design-system.md](docs/design-system.md#ui-craft-and-anti-patterns-checklist) (cross-referencing the design-system specification) so all subsequent generated UI is constrained against repeating the same mistake.
 
 ## Workflows and guided UX
 
