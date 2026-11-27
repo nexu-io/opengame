@@ -1210,6 +1210,24 @@ test('OPEND-5839 forward-compat audio JSON Schema shapes and Magi-2 live-first v
   assert.equal(toggleField?.kind, 'boolean');
   assert.equal(toggleField?.default, false);
 
+  // Live published audio schema overrides hardcoded alwaysOnVideoAudioModels (e.g. wan-2.7 gaining a toggle).
+  const wanWithLiveToggle: Model = {
+    id: 'opendesign:wan-2.7',
+    provider: 'opendesign',
+    modelId: 'wan-2.7',
+    label: 'Wan 2.7',
+    modality: 'video',
+    mode: 'text-to-video',
+    source: 'live',
+    nativeOptions: { audio: { enum: [true, false], default: false }, durations: [5, 10] },
+  };
+  assert.equal(videoAudioAlwaysOn(wanWithLiveToggle), false);
+  assert.equal(defaultVideoAudioEnabled(wanWithLiveToggle), false);
+  const wanToggleField = generationOptions(wanWithLiveToggle)?.fields.find(f => f.key === 'generate_audio');
+  assert.equal(wanToggleField?.kind, 'boolean');
+  assert.equal(wanToggleField?.default, false);
+  assert.doesNotThrow(() => validateGenerationOptions(wanWithLiveToggle, { duration: 5, generate_audio: false }));
+
   // Magi-2 live 4-5s capabilities and offline fallback do not inject unsupported multi-shot duration=10; live 4-30s wins when published.
   const magiLiveShort: Model = {
     id: 'opendesign:magi-2', provider: 'opendesign', modelId: 'magi-2', label: 'Magi-2',

@@ -333,16 +333,10 @@ function publishedAudioValues(raw: unknown): { values: boolean[]; default?: bool
   return { values, ...(def !== undefined ? { default: def } : {}) };
 }
 
-function publishedAudioAlwaysOn(model: Model): boolean {
-  const published = publishedAudioValues(model.nativeOptions?.audio);
-  return Boolean(published && published.values.length === 1 && published.values[0] === true);
-}
-
 function publishedAudioToggle(model: Model): { default: boolean } | undefined {
-  if (publishedAudioAlwaysOn(model)) return undefined;
   const published = publishedAudioValues(model.nativeOptions?.audio);
-  if (published && published.values.length >= 2) {
-    return { default: published.default ?? true };
+  if (published) {
+    return published.values.length >= 2 ? { default: published.default ?? true } : undefined;
   }
   if (seedance25Models.has(model.modelId)) return { default: true };
   return undefined;
@@ -350,8 +344,10 @@ function publishedAudioToggle(model: Model): { default: boolean } | undefined {
 
 /** Whether an OpenDesign Cloud/account video model permanently generates native audio with no toggle. */
 export function videoAudioAlwaysOn(model: Model): boolean {
-  return isOpenDesignMedia(model) && model.modality === 'video'
-    && (alwaysOnVideoAudioModels.has(model.modelId) || publishedAudioAlwaysOn(model));
+  if (!isOpenDesignMedia(model) || model.modality !== 'video') return false;
+  const published = publishedAudioValues(model.nativeOptions?.audio);
+  if (published) return published.values.length === 1 && published.values[0] === true;
+  return alwaysOnVideoAudioModels.has(model.modelId);
 }
 
 /** Whether an OpenDesign Cloud/account video model enables native audio when `generate_audio` is omitted. */
