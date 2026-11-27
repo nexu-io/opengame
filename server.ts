@@ -227,7 +227,8 @@ export async function renderNext(store: WorkspaceStore, runtimeRoot: string, tra
         failure.checkCode = check?.name;
         failure.verificationReason = check?.reason;
         if (report.status === 'blocked') failure.failureCode = 'EXPORT_VERIFICATION_BLOCKED';
-        throw new Error('EXPORT_VERIFICATION_FAILED: ' + JSON.stringify(report.checks));
+        const reason = check ? `${check.name}: ${check.details}` : JSON.stringify(report.checks);
+        throw new Error(`${failure.failureCode}: ${reason}`);
       }
     }
     failure = { failureStage: 'finalize', failureCode: 'EXPORT_FINALIZE_FAILED' };

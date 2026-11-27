@@ -37,8 +37,8 @@ test('real phase1 MCP, active Studio history, confirmed running cancellation and
     const end = Date.now() + 100_000;
     for (;;) {
       const value = await call('openmotion_get_project', { projectId: pid, exportJobId: jobId });
-      assert.notEqual(value.exportJob.state, 'failed', JSON.stringify(value.exportJob));
       if (predicate(value.exportJob)) return value.exportJob;
+      assert.notEqual(value.exportJob.state, 'failed', JSON.stringify(value.exportJob));
       assert.ok(Date.now() < end, JSON.stringify(value.exportJob)); await delay(250);
     }
   };
@@ -78,5 +78,14 @@ test('real phase1 MCP, active Studio history, confirmed running cancellation and
     assert.equal((await call('openmotion_export_cancel', { projectId: p.projectId, requestId: 'cancel-completed', jobId: completed.id })).job.state, 'completed');
     const review = await call('openmotion_export_request', { action: 'record_review', projectId: p.projectId, jobId: completed.id, requestId: 'review', review: { objectId: completed.id, versionId: completed.versionId, source: 'agent', conclusion: 'pending', evidence: 'Technical checks passed; actual playback not yet reviewed' } });
     assert.equal(review.review.verifiedUserAdoption, false); assert.equal(review.changed, false);
+
+    const required = await call('openmotion_export_request', { ...exportArgs, requestId: 'require-audio', audio: 'required' });
+    const failed = await waitFor(p.projectId, required.job.id, job => ['completed', 'failed'].includes(job.state));
+    assert.equal(failed.state, 'failed');
+    assert.equal(failed.verification.expected.audio, 'required');
+    assert.equal(failed.verificationReason, 'missing_audio');
+    assert.match(failed.error, /audio: Missing required audio track/);
+    assert.equal(failed.downloadUrl, undefined);
+    await assert.rejects(access(store.exportPath(required.job)), { code: 'ENOENT' });
   } finally { await running.close(); }
 }, false));
