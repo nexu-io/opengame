@@ -21,6 +21,7 @@ import { verificationBinaries } from './scripts/verify-export.ts';
 import type { Duplex } from 'node:stream';
 import { injectPreviewBridgeHtml, injectViewportGuardHtml, isValidPreviewBridgeToken } from './shared/preview-bridge.ts';
 import { attachmentDisposition } from './shared/http-header.ts';
+import { withProcessLock } from './shared/process-lock.ts';
 import { HostedGameTemplates } from './shared/hosted-game-templates.ts';
 import { lfsPointer } from './shared/repository-template-catalog.ts';
 import { zip } from './scripts/zip.mjs';
@@ -892,9 +893,14 @@ export class GameProjects {
     this.root = path.resolve(workspace, 'games'); this.templates = templates; this.kits = kits;
     this.hosted = new HostedGameTemplates(path.join(templates, '..', 'game-downloads.json'), path.resolve(workspace, 'game-template-cache'));
   }
-  // Serialize mutations so concurrent requests cannot lose counts or race publication validation.
+  // Share the mutation boundary across Studio/MCP instances and processes using this workspace.
   mutate<T>(operation: () => Promise<T>): Promise<T> {
-    const result = this.pending.then(async () => { await this.ensureStorage(); return operation(); }); this.pending = result.catch(() => {}); return result;
+    const result = this.pending.then(async () => {
+      await this.ensureStorage();
+      return withProcessLock(path.join(this.root, '.mutation.lock'), operation);
+    });
+    this.pending = result.catch(() => {});
+    return result;
   }
   private async ensureStorage() {
     await mkdir(this.root, { recursive: true });
