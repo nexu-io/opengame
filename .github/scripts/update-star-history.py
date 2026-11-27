@@ -16,7 +16,7 @@ def record(history, day, stars):
     history[day] = stars
 
 
-def chart(history):
+def chart(history, repo="nexu-io/opengame", title="OpenGame star history"):
     first, last = min(history), max(history)
     span = max((last - first).days, 1)
     peak = max(max(history.values()), 1)
@@ -31,8 +31,8 @@ def chart(history):
         return BOTTOM - (BOTTOM - TOP) * count / ceiling
 
     svg = [f'''<svg xmlns="http://www.w3.org/2000/svg" width="780" height="280" viewBox="0 0 780 280" role="img" aria-labelledby="title desc">
-  <title id="title">OpenMotion star history</title>
-  <desc id="desc">Daily GitHub stars for nexu-io/openmotion from {first} to {last}. Latest total: {history[last]:,}.</desc>
+  <title id="title">{title}</title>
+  <desc id="desc">Daily GitHub stars for {repo} from {first} to {last}. Latest total: {history[last]:,}.</desc>
   <style>
     svg {{ font: 13px system-ui, sans-serif; color: #24292f; }}
     text {{ fill: currentColor; }}
@@ -44,7 +44,7 @@ def chart(history):
     }}
   </style>
   <rect class="background" width="780" height="280" rx="10"/>
-  <text x="24" y="40" font-size="23" font-weight="600">nexu-io/openmotion</text>
+  <text x="24" y="40" font-size="23" font-weight="600">{repo}</text>
   <text x="740" y="39" text-anchor="end">{history[last]:,} ★ · {last}</text>''']
     for tick in range(0, ceiling + 1, step):
         label = f"{tick / 1000:g}k" if tick >= 1000 else str(tick)
@@ -60,22 +60,22 @@ def chart(history):
     return "\n".join([*svg, "</svg>", ""])
 
 
-def update(directory, day, stars):
+def update(directory, day, stars, repo="nexu-io/opengame", title="OpenGame star history"):
+    directory.mkdir(parents=True, exist_ok=True)
     data = directory / "stars.csv"
     history = {}
-    with data.open(newline="") as source:
-        rows = csv.DictReader(source)
-        if rows.fieldnames != ["date", "stars"]:
-            raise ValueError("Invalid stars.csv header")
-        for row in rows:
-            observed = date.fromisoformat(row["date"])
-            if observed in history:
-                raise ValueError(f"Duplicate observation for {observed}")
-            record(history, observed, int(row["stars"]))
-    if not history:
-        raise ValueError("Missing historical observations")
+    if data.exists():
+        with data.open(newline="") as source:
+            rows = csv.DictReader(source)
+            if rows.fieldnames != ["date", "stars"]:
+                raise ValueError("Invalid stars.csv header")
+            for row in rows:
+                observed = date.fromisoformat(row["date"])
+                if observed in history:
+                    raise ValueError(f"Duplicate observation for {observed}")
+                record(history, observed, int(row["stars"]))
     record(history, day, stars)
-    svg = chart(history)
+    svg = chart(history, repo=repo, title=title)
     with data.open("w", newline="") as out:
         writer = csv.writer(out, lineterminator="\n")
         writer.writerow(["date", "stars"])
@@ -88,5 +88,7 @@ if __name__ == "__main__":
     parser.add_argument("directory", type=Path)
     parser.add_argument("day", type=date.fromisoformat)
     parser.add_argument("stars", type=int)
+    parser.add_argument("--repo", default="nexu-io/opengame")
+    parser.add_argument("--title", default="OpenGame star history")
     args = parser.parse_args()
-    update(args.directory, args.day, args.stars)
+    update(args.directory, args.day, args.stars, repo=args.repo, title=args.title)

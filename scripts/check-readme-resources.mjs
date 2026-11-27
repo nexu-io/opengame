@@ -14,6 +14,7 @@ export const resourceDocuments = [
 // These repository-owned / official live community charts refresh automatically and have no fixed local hash.
 const allowedLiveWidgetSources = new Set([
   'srcset="https://raw.githubusercontent.com/nexu-io/openmotion/readme-charts/star-history.svg"',
+  'srcset="https://raw.githubusercontent.com/nexu-io/opengame/readme-charts/star-history.svg"',
   'src="https://contrib.rocks/image?repo=nexu-io/opengame&amp;max=500&amp;columns=20&amp;anon=1"',
   'srcset="https://api.star-history.com/svg?repos=nexu-io%2Fopengame&amp;type=Date&amp;theme=dark"',
   'srcset="https://api.star-history.com/svg?repos=nexu-io%2Fopengame&amp;type=Date"',

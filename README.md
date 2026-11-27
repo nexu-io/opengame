@@ -186,49 +186,31 @@ Built for mobile thumbs, instant first-frame engagement, short high-retention lo
 
 <table width="100%">
 <tr>
-<td width="33%" valign="top" align="center">
-<img src="templates/games/gate-legion/cover.webp" width="220" alt="Gate Legion — 9:16 arithmetic gate army runner"><br>
-<strong>Gate Legion</strong><br>
-<code>9:16 · Gate Runner</code><br>
+<td width="50%" valign="top">
+<img src="templates/games/gate-legion/cover.webp" width="100%" alt="Gate Legion — 9:16 arithmetic gate army runner"><br>
+<strong>Gate Legion</strong> · <code>9:16 · Gate Runner</code><br>
 Lead your squad through <code>+10</code> / <code>×2</code> arithmetic gates and clash with the final boss army.<br>
-<a href="templates/games/gate-legion/">Source →</a>
+<a href="templates/games/gate-legion/">Inspect source →</a>
 </td>
-<td width="33%" valign="top" align="center">
-<img src="templates/games/pin-rescue/cover.webp" width="220" alt="Pin Rescue — 9:16 pull-the-pin puzzle"><br>
-<strong>Pin Rescue</strong><br>
-<code>9:16 · Pull-the-Pin Puzzle</code><br>
+<td width="50%" valign="top">
+<img src="templates/games/pin-rescue/cover.webp" width="100%" alt="Pin Rescue — 9:16 pull-the-pin puzzle"><br>
+<strong>Pin Rescue</strong> · <code>9:16 · Pull-the-Pin Puzzle</code><br>
 Pull pins to mix water and lava into stone, clear hazards, and deliver gold across five stages.<br>
-<a href="templates/games/pin-rescue/">Source →</a>
-</td>
-<td width="33%" valign="top" align="center">
-<img src="templates/games/sky-runner/cover.webp" width="220" alt="Sky Runner — 9:16 3D neon hoverboard runner"><br>
-<strong>Sky Runner</strong><br>
-<code>9:16 · 3D Lane Runner</code><br>
-Swipe lanes, collect coins, dodge drones, and boost through an accelerating neon skyway.<br>
-<a href="templates/games/sky-runner/">Source →</a>
+<a href="templates/games/pin-rescue/">Inspect source →</a>
 </td>
 </tr>
 <tr>
-<td width="33%" valign="top" align="center">
-<img src="templates/games/slime-swell/cover.webp" width="220" alt="Slime Swell — 9:16 city-eating arcade arena"><br>
-<strong>Slime Swell</strong><br>
-<code>9:16 · Grow &amp; Devour .io</code><br>
+<td width="50%" valign="top">
+<img src="templates/games/sky-runner/cover.webp" width="100%" alt="Sky Runner — 9:16 3D neon hoverboard runner"><br>
+<strong>Sky Runner</strong> · <code>9:16 · 3D Lane Runner</code><br>
+Swipe lanes, collect coins, dodge drones, and boost through an accelerating neon skyway.<br>
+<a href="templates/games/sky-runner/">Inspect source →</a>
+</td>
+<td width="50%" valign="top">
+<img src="templates/games/slime-swell/cover.webp" width="100%" alt="Slime Swell — 9:16 city-eating arcade arena"><br>
+<strong>Slime Swell</strong> · <code>9:16 · Grow &amp; Devour .io</code><br>
 Swallow street objects, grow bigger than buildings, and outrank three rival slimes in 60 seconds.<br>
-<a href="templates/games/slime-swell/">Source →</a>
-</td>
-<td width="33%" valign="top" align="center">
-<img src="templates/games/lane-turret/cover.webp" width="220" alt="Lane Turret — 9:16 space turret upgrade shooter"><br>
-<strong>Lane Turret</strong><br>
-<code>9:16 · Upgrade Shooter</code><br>
-Aim a triple-barrel turret, draft upgrade cards, and hold the line across ten waves.<br>
-<a href="templates/games/lane-turret/">Source →</a>
-</td>
-<td width="33%" valign="top" align="center">
-<img src="templates/games/merge-bakery/cover.webp" width="220" alt="Merge Bakery — 9:16 pastry merge game"><br>
-<strong>Merge Bakery</strong><br>
-<code>9:16 · Merge &amp; Serve</code><br>
-Bake dough, merge matching pastries, and serve timed customer orders to hit \$250 in 90 seconds.<br>
-<a href="templates/games/merge-bakery/">Source →</a>
+<a href="templates/games/slime-swell/">Inspect source →</a>
 </td>
 </tr>
 </table>
@@ -467,6 +449,62 @@ Share a playable game template, a remixable mini-game genre kit, an art-style gu
 
 [Contribute](CONTRIBUTING.md) · [Repository Guidelines](AGENTS.md) · [Report an Issue](https://github.com/nexu-io/opengame/issues)
 
+<a id="acknowledgements"></a>
+
+## 🙏 Acknowledgements & Open-Source Attribution
+
+OpenGame is built on and inspired by the open-source game, creative tooling, and AI agent community.
+
+### Core Foundations & Major Inspirations
+
+| Project | License | How OpenGame Builds On / References It |
+| --- | --- | --- |
+| **[Higgsfield AI Skills](https://github.com/higgsfield-ai/skills)** | MIT | Source of several ported and adapted game craft handbooks under [skills/openmotion-game/](skills/openmotion-game/) ([PROVENANCE.md](skills/openmotion-game/PROVENANCE.md) · [LICENSE-HIGGSFIELD](skills/openmotion-game/LICENSE-HIGGSFIELD)) |
+| **[HeyGen Hyperframes](https://github.com/heygen-com/hyperframes)** | Apache-2.0 | Upstream Studio editor foundation ([studio/LICENSE](studio/LICENSE)) and automated gameplay trailer composition & MP4 rendering engine |
+| **[DSH Game Studio](https://github.com/ZSeven-W/dsh-game-studio)** & **[dsh-games](https://github.com/finiking/dsh-games)** (by [@FiniYang](https://x.com/FiniYang)) | Open Source | Early open-source inspiration and reference for DeepSeek Harness (DSH) AI-native game creation workflows, automated playtesting, and playable game walls |
+| **[OpenDesign](https://github.com/nexu-io/open-design)** & **[OpenMotion](https://github.com/nexu-io/openmotion)** | Apache-2.0 | Shared open-source design system, multimodal Model Gateway, workspace architecture, and MCP tool contracts |
+| **[Three.js](https://github.com/mrdoob/three.js)** | MIT | Vendored offline 3D rendering engine and model/skeleton loaders powering 3D templates and agent-built 3D games ([LICENSE-three.txt](templates/game-kits/vendor/LICENSE-three.txt)) |
+| **[KayKit Adventurers Character Pack](https://www.kaylousberg.com/)** (by Kay Lousberg) | CC0 | Bundled offline rigged 3D characters (Mage & Knight) under [templates/game-kits/characters/](templates/game-kits/characters/) ([LICENSE-KayKit.txt](templates/game-kits/characters/LICENSE-KayKit.txt)) |
+| **[Cocos Creator / Cocos Engine](https://github.com/cocos/cocos-engine)** | MIT | Open-source game engine runtime powering offline-playable mini-game templates |
+| **[Model Context Protocol (MCP) SDK](https://github.com/modelcontextprotocol/typescript-sdk)** & **[Vercel Skills CLI](https://github.com/vercel-labs/skills)** | MIT / Apache-2.0 | Standard protocol for connecting 22 local AI agents and lightweight Skill distribution |
+
+We also thank the broader open-source ecosystem powering our stack: **Puppeteer & Chrome for Testing**, **FFmpeg**, **Dockview**, **CodeMirror 6**, **Lexical**, **React**, **Vite**, **Tailwind CSS**, **Zustand**, **Electron**, **GSAP**, **DiceBear** (Micah avatar style, CC BY 4.0, [attribution](studio/skill-cover-attribution.md)), and open-source fonts (**Albert Sans**, **IBM Plex Mono**, **Instrument Serif**, SIL OFL 1.1).
+
+### Community Game Showcase Credits
+
+Special thanks to the creators whose publicly shared AI browser games are featured as inspiration links in Game Studio (click any tile to visit the creator's original post):
+
+<p>
+  <a href="https://x.com/felixrieseberg/status/2119925633564463609" title="Saltline by @felixrieseberg"><img src="studio/src/motion/game/community/saltline.jpg" width="56" height="56" alt="Saltline (@felixrieseberg)" /></a>
+  <a href="https://x.com/Saccc_c/status/2109962425512734739" title="The Little Prince: Star Journey by @Saccc_c"><img src="studio/src/motion/game/community/little-prince.jpg" width="56" height="56" alt="The Little Prince: Star Journey (@Saccc_c)" /></a>
+  <a href="https://x.com/Rubzem/status/2104253584737230926" title="Sky Reach by @jonesiller"><img src="studio/src/motion/game/community/sky-reach.jpg" width="56" height="56" alt="Sky Reach (@jonesiller)" /></a>
+  <a href="https://x.com/edwinarbus/status/2102463453176979794" title="Antikythera Dive by @edwinarbus"><img src="studio/src/motion/game/community/shipwreck.jpg" width="56" height="56" alt="Antikythera Dive (@edwinarbus)" /></a>
+  <a href="https://x.com/bridgemindai/status/2102451997395866021" title="Turbo Kart Rally by @bridgemindai"><img src="studio/src/motion/game/community/turbo-kart.jpg" width="56" height="56" alt="Turbo Kart Rally (@bridgemindai)" /></a>
+  <a href="https://x.com/BubuStd/status/2102991290568954264" title="Voxel Musou by @BubuStd"><img src="studio/src/motion/game/community/voxel-musou.jpg" width="56" height="56" alt="Voxel Musou (@BubuStd)" /></a>
+  <a href="https://x.com/ebbyamir/status/2120284261089673376" title="Starry Nightrider by @ebbyamir"><img src="studio/src/motion/game/community/starry-nightrider.jpg" width="56" height="56" alt="Starry Nightrider (@ebbyamir)" /></a>
+  <a href="https://x.com/ViktorKav/status/2122647483281015155" title="Uno com Escada by @ViktorKav"><img src="studio/src/motion/game/community/uno-com-escada.jpg" width="56" height="56" alt="Uno com Escada (@ViktorKav)" /></a>
+  <a href="https://x.com/kevin_t_ngo/status/2119868968307695818" title="What the Water Keeps by @kevin_t_ngo"><img src="studio/src/motion/game/community/what-the-water-keeps.jpg" width="56" height="56" alt="What the Water Keeps (@kevin_t_ngo)" /></a>
+  <a href="https://x.com/kevin_t_ngo/status/2120238844754923874" title="Evensong by @kevin_t_ngo"><img src="studio/src/motion/game/community/evensong.jpg" width="56" height="56" alt="Evensong (@kevin_t_ngo)" /></a>
+  <a href="https://x.com/mattshumer_/status/2119877065701036047" title="Mirror Earth by @mattshumer_"><img src="studio/src/motion/game/community/mirror-earth.jpg" width="56" height="56" alt="Mirror Earth (@mattshumer_)" /></a>
+  <a href="https://x.com/photonstorm/status/2120330010112434313" title="Tennis (Go Wild) by @photonstorm"><img src="studio/src/motion/game/community/tennis-go-wild.jpg" width="56" height="56" alt="Tennis (Go Wild) (@photonstorm)" /></a>
+  <a href="https://x.com/op7418/status/2120694045299327187" title="Mist-Locked Mountain Gate by @op7418"><img src="studio/src/motion/game/community/mist-locked-mountain-gate.jpg" width="56" height="56" alt="Mist-Locked Mountain Gate (@op7418)" /></a>
+  <a href="https://x.com/__morse/status/2122013410309153042" title="omw: Castle Valley by @__morse"><img src="studio/src/motion/game/community/omw-castle-valley.jpg" width="56" height="56" alt="omw: Castle Valley (@__morse)" /></a>
+  <a href="https://x.com/loktar00/status/2120192761542615271" title="LANTERNFALL by @loktar00"><img src="studio/src/motion/game/community/lanternfall.jpg" width="56" height="56" alt="LANTERNFALL (@loktar00)" /></a>
+  <a href="https://x.com/Andrew_Blumson/status/2120599812512833557" title="MAAD MAXXING by @Andrew_Blumson"><img src="studio/src/motion/game/community/maad-maxxing.jpg" width="56" height="56" alt="MAAD MAXXING (@Andrew_Blumson)" /></a>
+  <a href="https://x.com/kevin_t_ngo/status/2119900487688622171" title="Gilt &amp; Gutter by @kevin_t_ngo"><img src="studio/src/motion/game/community/gilt-and-gutter.jpg" width="56" height="56" alt="Gilt &amp; Gutter (@kevin_t_ngo)" /></a>
+  <a href="https://x.com/xikhar/status/2122682962647122403" title="Papertrails by @xikhar"><img src="studio/src/motion/game/community/papertrails.jpg" width="56" height="56" alt="Papertrails (@xikhar)" /></a>
+  <a href="https://x.com/AravSrinivas/status/2122338465648103676" title="VICE '86 by @AravSrinivas"><img src="studio/src/motion/game/community/vice-86.jpg" width="56" height="56" alt="VICE '86 (@AravSrinivas)" /></a>
+  <a href="https://x.com/FuSheng_0306/status/2121237878097207583" title="Starfall by @FuSheng_0306"><img src="studio/src/motion/game/community/starfall-moba.jpg" width="56" height="56" alt="Starfall (@FuSheng_0306)" /></a>
+  <a href="https://x.com/aniketjart/status/2121793239175119279" title="Goku: Four-Star Road by @aniketjart"><img src="studio/src/motion/game/community/goku-four-star-road.jpg" width="56" height="56" alt="Goku: Four-Star Road (@aniketjart)" /></a>
+  <a href="https://x.com/noclipepe/status/2119728047754547326" title="Rug Racers by @noclipepe"><img src="studio/src/motion/game/community/rug-racers.jpg" width="56" height="56" alt="Rug Racers (@noclipepe)" /></a>
+  <a href="https://x.com/noclipepe/status/2119927838321328577" title="Dino Run: Locked In by @noclipepe"><img src="studio/src/motion/game/community/rambo-dino.jpg" width="56" height="56" alt="Dino Run: Locked In (@noclipepe)" /></a>
+  <a href="https://x.com/AravSrinivas/status/2122713692324384793" title="HADAL by @AravSrinivas"><img src="studio/src/motion/game/community/hadal.jpg" width="56" height="56" alt="HADAL (@AravSrinivas)" /></a>
+  <a href="https://x.com/emollick/status/2119876449494540554" title="I Would Have Gotten Away With It by @emollick"><img src="studio/src/motion/game/community/i-would-have-gotten-away.jpg" width="56" height="56" alt="I Would Have Gotten Away With It (@emollick)" /></a>
+  <a href="https://x.com/petergyang/status/2119901658394358005" title="Turbo Tails by @petergyang"><img src="studio/src/motion/game/community/turbo-tails.jpg" width="56" height="56" alt="Turbo Tails (@petergyang)" /></a>
+</p>
+
+> **Notice:** Community games link directly to their creators' original pages and remain the sole property of their respective authors — no third-party source code is copied. If you are a creator and would like your work updated, credited differently, or removed, please [open an issue](https://github.com/nexu-io/opengame/issues) and we will address it promptly.
+
 ## Contributors
 
 Thanks to everyone who has taken part — code, game templates, skills, docs, feedback, and issues.
@@ -479,6 +517,7 @@ Thanks to everyone who has taken part — code, game templates, skills, docs, fe
 
 <a href="https://www.star-history.com/#nexu-io/opengame&amp;Date">
   <picture>
+    <source srcset="https://raw.githubusercontent.com/nexu-io/opengame/readme-charts/star-history.svg" />
     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io%2Fopengame&amp;type=Date&amp;theme=dark" />
     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io%2Fopengame&amp;type=Date" />
     <img alt="OpenGame Star History" src="https://api.star-history.com/svg?repos=nexu-io%2Fopengame&amp;type=Date" />

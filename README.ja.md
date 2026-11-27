@@ -186,49 +186,31 @@ OpenGame は [`templates/games/`](templates/games/) に**すぐ遊べる 25 本�
 
 <table width="100%">
 <tr>
-<td width="33%" valign="top" align="center">
-<img src="templates/games/gate-legion/cover.webp" width="220" alt="Gate Legion — 9:16 算数ゲート軍団ランナー"><br>
-<strong>Gate Legion</strong><br>
-<code>9:16 · ゲートランナー</code><br>
+<td width="50%" valign="top">
+<img src="templates/games/gate-legion/cover.webp" width="100%" alt="Gate Legion — 9:16 算数ゲート軍団ランナー"><br>
+<strong>Gate Legion</strong> · <code>9:16 · ゲートランナー</code><br>
 <code>+10</code> / <code>×2</code> ゲートで軍勢を増殖させ、終点のボス軍団と激突する王道縦型ランナー。<br>
 <a href="templates/games/gate-legion/">ソース →</a>
 </td>
-<td width="33%" valign="top" align="center">
-<img src="templates/games/pin-rescue/cover.webp" width="220" alt="Pin Rescue — 9:16 ピン抜きパズル"><br>
-<strong>Pin Rescue</strong><br>
-<code>9:16 · ピン抜きパズル</code><br>
+<td width="50%" valign="top">
+<img src="templates/games/pin-rescue/cover.webp" width="100%" alt="Pin Rescue — 9:16 ピン抜きパズル"><br>
+<strong>Pin Rescue</strong> · <code>9:16 · ピン抜きパズル</code><br>
 ピンを抜いて水と溶岩を石に変え、罠を避けながら5ステージで黄金を届ける物理パズル。<br>
 <a href="templates/games/pin-rescue/">ソース →</a>
 </td>
-<td width="33%" valign="top" align="center">
-<img src="templates/games/sky-runner/cover.webp" width="220" alt="Sky Runner — 9:16 3D ネオンホバーボードランナー"><br>
-<strong>Sky Runner</strong><br>
-<code>9:16 · 3D レーンランナー</code><br>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="templates/games/sky-runner/cover.webp" width="100%" alt="Sky Runner — 9:16 3D ネオンホバーボードランナー"><br>
+<strong>Sky Runner</strong> · <code>9:16 · 3D レーンランナー</code><br>
 スワイプでレーンを切り替え、コイン回収とドローン回避を決めながら加速するネオン空中ラン。<br>
 <a href="templates/games/sky-runner/">ソース →</a>
 </td>
-</tr>
-<tr>
-<td width="33%" valign="top" align="center">
-<img src="templates/games/slime-swell/cover.webp" width="220" alt="Slime Swell — 9:16 街飲み込み成長アリーナ"><br>
-<strong>Slime Swell</strong><br>
-<code>9:16 · 捕食成長 .io</code><br>
+<td width="50%" valign="top">
+<img src="templates/games/slime-swell/cover.webp" width="100%" alt="Slime Swell — 9:16 街飲み込み成長アリーナ"><br>
+<strong>Slime Swell</strong> · <code>9:16 · 捕食成長 .io</code><br>
 街のオブジェクトを飲み込んでビルより大きく成長し、60秒間で3体のライバルを圧倒。<br>
 <a href="templates/games/slime-swell/">ソース →</a>
-</td>
-<td width="33%" valign="top" align="center">
-<img src="templates/games/lane-turret/cover.webp" width="220" alt="Lane Turret — 9:16 三連砲台アップグレード防衛"><br>
-<strong>Lane Turret</strong><br>
-<code>9:16 · 強化シューター</code><br>
-三連装タレットを操作し、強化カードを選びながら10ウェーブの敵襲を防衛。<br>
-<a href="templates/games/lane-turret/">ソース →</a>
-</td>
-<td width="33%" valign="top" align="center">
-<img src="templates/games/merge-bakery/cover.webp" width="220" alt="Merge Bakery — 9:16 パン合成＆接客ゲーム"><br>
-<strong>Merge Bakery</strong><br>
-<code>9:16 · マージ &amp; 接客</code><br>
-生地を焼いてパンを合成し、制限時間90秒以内に注文をさばいて売上250ドルを達成。<br>
-<a href="templates/games/merge-bakery/">ソース →</a>
 </td>
 </tr>
 </table>
@@ -467,6 +449,62 @@ OpenGame はローカル stdio MCP 経由で完全なゲーム開発ツール群
 
 [コントリビューションガイド](CONTRIBUTING.md) · [リポジトリ開発規約](AGENTS.md) · [Issue を報告](https://github.com/nexu-io/opengame/issues)
 
+<a id="acknowledgements"></a>
+
+## 🙏 謝辞・オープンソース帰属
+
+OpenGame は、ゲーム開発・クリエイティブツール・AI Agent のオープンソースエコシステムに支えられ、多くのプロジェクトから着想を得ています。
+
+### 主要な基盤・参考オープンソースプロジェクト
+
+| プロジェクト | ライセンス | 活用・参考内容 |
+| --- | --- | --- |
+| **[Higgsfield AI Skills](https://github.com/higgsfield-ai/skills)** | MIT | [skills/openmotion-game/](skills/openmotion-game/) 配下のゲーム制作ハンドブック複数本の移植元（[PROVENANCE.md](skills/openmotion-game/PROVENANCE.md) · [LICENSE-HIGGSFIELD](skills/openmotion-game/LICENSE-HIGGSFIELD)） |
+| **[HeyGen Hyperframes](https://github.com/heygen-com/hyperframes)** | Apache-2.0 | Studio エディタのフロントエンド基盤（[studio/LICENSE](studio/LICENSE)）および実機トレーラー合成・MP4 レンダリングエンジン |
+| **[DSH Game Studio](https://github.com/ZSeven-W/dsh-game-studio)** & **[dsh-games](https://github.com/finiking/dsh-games)**（作者：[@FiniYang](https://x.com/FiniYang)） | Open Source | DeepSeek Harness（DSH）上の AI ネイティブゲーム制作ワークショップ、自動プレイテスト、プレイアブルゲームウォールの設計着想・参考 |
+| **[OpenDesign](https://github.com/nexu-io/open-design)** & **[OpenMotion](https://github.com/nexu-io/openmotion)** | Apache-2.0 | 共通オープンソース基盤（デザインシステム、マルチモーダル Model Gateway、ワークスペース設計、MCP ツール契約） |
+| **[Three.js](https://github.com/mrdoob/three.js)** | MIT | 3D テンプレートおよび Agent 生成 3D ゲームを支える同梱オフライン 3D レンダリングエンジン（[LICENSE-three.txt](templates/game-kits/vendor/LICENSE-three.txt)） |
+| **[KayKit Adventurers Character Pack](https://www.kaylousberg.com/)**（作者：Kay Lousberg） | CC0 | [templates/game-kits/characters/](templates/game-kits/characters/) に同梱したリグ済み 3D キャラクター（Mage・Knight）（[LICENSE-KayKit.txt](templates/game-kits/characters/LICENSE-KayKit.txt)） |
+| **[Cocos Creator / Cocos Engine](https://github.com/cocos/cocos-engine)** | MIT | オフラインプレイ可能なミニゲームテンプレートを支えるオープンソースゲームエンジンランタイム |
+| **[Model Context Protocol (MCP) SDK](https://github.com/modelcontextprotocol/typescript-sdk)** & **[Vercel Skills CLI](https://github.com/vercel-labs/skills)** | MIT / Apache-2.0 | 22 のローカル AI Agent 接続プロトコルおよび軽量 Skill 配布基盤 |
+
+また、**Puppeteer & Chrome for Testing**、**FFmpeg**、**Dockview**、**CodeMirror 6**、**Lexical**、**React**、**Vite**、**Tailwind CSS**、**Zustand**、**Electron**、**GSAP**、**DiceBear**（Micah アバタースタイル、CC BY 4.0、[帰属表示](studio/skill-cover-attribution.md)）、およびオープンソースフォント（**Albert Sans**、**IBM Plex Mono**、**Instrument Serif**、SIL OFL 1.1）にも感謝いたします。
+
+### コミュニティ紹介ゲーム・クリエイター謝辞
+
+Game Studio のインスピレーション欄でオリジナル投稿へのリンクとして紹介している素晴らしい AI ゲームのクリエイターの皆様に感謝いたします（各アイコンをクリックすると原作者の投稿を開けます）：
+
+<p>
+  <a href="https://x.com/felixrieseberg/status/2119925633564463609" title="Saltline by @felixrieseberg"><img src="studio/src/motion/game/community/saltline.jpg" width="56" height="56" alt="Saltline (@felixrieseberg)" /></a>
+  <a href="https://x.com/Saccc_c/status/2109962425512734739" title="The Little Prince: Star Journey by @Saccc_c"><img src="studio/src/motion/game/community/little-prince.jpg" width="56" height="56" alt="The Little Prince: Star Journey (@Saccc_c)" /></a>
+  <a href="https://x.com/Rubzem/status/2104253584737230926" title="Sky Reach by @jonesiller"><img src="studio/src/motion/game/community/sky-reach.jpg" width="56" height="56" alt="Sky Reach (@jonesiller)" /></a>
+  <a href="https://x.com/edwinarbus/status/2102463453176979794" title="Antikythera Dive by @edwinarbus"><img src="studio/src/motion/game/community/shipwreck.jpg" width="56" height="56" alt="Antikythera Dive (@edwinarbus)" /></a>
+  <a href="https://x.com/bridgemindai/status/2102451997395866021" title="Turbo Kart Rally by @bridgemindai"><img src="studio/src/motion/game/community/turbo-kart.jpg" width="56" height="56" alt="Turbo Kart Rally (@bridgemindai)" /></a>
+  <a href="https://x.com/BubuStd/status/2102991290568954264" title="Voxel Musou by @BubuStd"><img src="studio/src/motion/game/community/voxel-musou.jpg" width="56" height="56" alt="Voxel Musou (@BubuStd)" /></a>
+  <a href="https://x.com/ebbyamir/status/2120284261089673376" title="Starry Nightrider by @ebbyamir"><img src="studio/src/motion/game/community/starry-nightrider.jpg" width="56" height="56" alt="Starry Nightrider (@ebbyamir)" /></a>
+  <a href="https://x.com/ViktorKav/status/2122647483281015155" title="Uno com Escada by @ViktorKav"><img src="studio/src/motion/game/community/uno-com-escada.jpg" width="56" height="56" alt="Uno com Escada (@ViktorKav)" /></a>
+  <a href="https://x.com/kevin_t_ngo/status/2119868968307695818" title="What the Water Keeps by @kevin_t_ngo"><img src="studio/src/motion/game/community/what-the-water-keeps.jpg" width="56" height="56" alt="What the Water Keeps (@kevin_t_ngo)" /></a>
+  <a href="https://x.com/kevin_t_ngo/status/2120238844754923874" title="Evensong by @kevin_t_ngo"><img src="studio/src/motion/game/community/evensong.jpg" width="56" height="56" alt="Evensong (@kevin_t_ngo)" /></a>
+  <a href="https://x.com/mattshumer_/status/2119877065701036047" title="Mirror Earth by @mattshumer_"><img src="studio/src/motion/game/community/mirror-earth.jpg" width="56" height="56" alt="Mirror Earth (@mattshumer_)" /></a>
+  <a href="https://x.com/photonstorm/status/2120330010112434313" title="Tennis (Go Wild) by @photonstorm"><img src="studio/src/motion/game/community/tennis-go-wild.jpg" width="56" height="56" alt="Tennis (Go Wild) (@photonstorm)" /></a>
+  <a href="https://x.com/op7418/status/2120694045299327187" title="Mist-Locked Mountain Gate by @op7418"><img src="studio/src/motion/game/community/mist-locked-mountain-gate.jpg" width="56" height="56" alt="Mist-Locked Mountain Gate (@op7418)" /></a>
+  <a href="https://x.com/__morse/status/2122013410309153042" title="omw: Castle Valley by @__morse"><img src="studio/src/motion/game/community/omw-castle-valley.jpg" width="56" height="56" alt="omw: Castle Valley (@__morse)" /></a>
+  <a href="https://x.com/loktar00/status/2120192761542615271" title="LANTERNFALL by @loktar00"><img src="studio/src/motion/game/community/lanternfall.jpg" width="56" height="56" alt="LANTERNFALL (@loktar00)" /></a>
+  <a href="https://x.com/Andrew_Blumson/status/2120599812512833557" title="MAAD MAXXING by @Andrew_Blumson"><img src="studio/src/motion/game/community/maad-maxxing.jpg" width="56" height="56" alt="MAAD MAXXING (@Andrew_Blumson)" /></a>
+  <a href="https://x.com/kevin_t_ngo/status/2119900487688622171" title="Gilt &amp; Gutter by @kevin_t_ngo"><img src="studio/src/motion/game/community/gilt-and-gutter.jpg" width="56" height="56" alt="Gilt &amp; Gutter (@kevin_t_ngo)" /></a>
+  <a href="https://x.com/xikhar/status/2122682962647122403" title="Papertrails by @xikhar"><img src="studio/src/motion/game/community/papertrails.jpg" width="56" height="56" alt="Papertrails (@xikhar)" /></a>
+  <a href="https://x.com/AravSrinivas/status/2122338465648103676" title="VICE '86 by @AravSrinivas"><img src="studio/src/motion/game/community/vice-86.jpg" width="56" height="56" alt="VICE '86 (@AravSrinivas)" /></a>
+  <a href="https://x.com/FuSheng_0306/status/2121237878097207583" title="Starfall by @FuSheng_0306"><img src="studio/src/motion/game/community/starfall-moba.jpg" width="56" height="56" alt="Starfall (@FuSheng_0306)" /></a>
+  <a href="https://x.com/aniketjart/status/2121793239175119279" title="Goku: Four-Star Road by @aniketjart"><img src="studio/src/motion/game/community/goku-four-star-road.jpg" width="56" height="56" alt="Goku: Four-Star Road (@aniketjart)" /></a>
+  <a href="https://x.com/noclipepe/status/2119728047754547326" title="Rug Racers by @noclipepe"><img src="studio/src/motion/game/community/rug-racers.jpg" width="56" height="56" alt="Rug Racers (@noclipepe)" /></a>
+  <a href="https://x.com/noclipepe/status/2119927838321328577" title="Dino Run: Locked In by @noclipepe"><img src="studio/src/motion/game/community/rambo-dino.jpg" width="56" height="56" alt="Dino Run: Locked In (@noclipepe)" /></a>
+  <a href="https://x.com/AravSrinivas/status/2122713692324384793" title="HADAL by @AravSrinivas"><img src="studio/src/motion/game/community/hadal.jpg" width="56" height="56" alt="HADAL (@AravSrinivas)" /></a>
+  <a href="https://x.com/emollick/status/2119876449494540554" title="I Would Have Gotten Away With It by @emollick"><img src="studio/src/motion/game/community/i-would-have-gotten-away.jpg" width="56" height="56" alt="I Would Have Gotten Away With It (@emollick)" /></a>
+  <a href="https://x.com/petergyang/status/2119901658394358005" title="Turbo Tails by @petergyang"><img src="studio/src/motion/game/community/turbo-tails.jpg" width="56" height="56" alt="Turbo Tails (@petergyang)" /></a>
+</p>
+
+> **権利表記について**：上記コミュニティ作品は原作者のオリジナルページへのリンク紹介のみを行っており、ソースコードの複製は行っていません。すべての権利は原作者に帰属します。表記の変更や掲載取り下げをご希望の場合は、[Issue よりご連絡](https://github.com/nexu-io/opengame/issues)いただければ速やかに対応いたします。
+
 ## Contributors
 
 コード、ゲームテンプレート、Skill、ドキュメント、フィードバック、Issue で参加してくださったすべての皆さまに感謝します。
@@ -479,6 +517,7 @@ OpenGame はローカル stdio MCP 経由で完全なゲーム開発ツール群
 
 <a href="https://www.star-history.com/#nexu-io/opengame&amp;Date">
   <picture>
+    <source srcset="https://raw.githubusercontent.com/nexu-io/opengame/readme-charts/star-history.svg" />
     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io%2Fopengame&amp;type=Date&amp;theme=dark" />
     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io%2Fopengame&amp;type=Date" />
     <img alt="OpenGame Star History" src="https://api.star-history.com/svg?repos=nexu-io%2Fopengame&amp;type=Date" />

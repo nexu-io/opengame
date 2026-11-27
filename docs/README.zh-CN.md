@@ -186,49 +186,31 @@ OpenGame 在 [`templates/games/`](../templates/games/) 中内置了 **25 款开�
 
 <table width="100%">
 <tr>
-<td width="33%" valign="top" align="center">
-<img src="../templates/games/gate-legion/cover.webp" width="220" alt="草原军团 Gate Legion — 9:16 算术门跑酷"><br>
-<strong>草原军团 · Gate Legion</strong><br>
-<code>9:16 · 算术门军团跑酷</code><br>
+<td width="50%" valign="top">
+<img src="../templates/games/gate-legion/cover.webp" width="100%" alt="草原军团 Gate Legion — 9:16 算术门跑酷"><br>
+<strong>草原军团 · Gate Legion</strong> · <code>9:16 · 算术门军团跑酷</code><br>
 左右拖动选择 <code>+10</code> / <code>×2</code> 算术门壮大军团，在终点迎战敌军。<br>
 <a href="../templates/games/gate-legion/">查看源码 →</a>
 </td>
-<td width="33%" valign="top" align="center">
-<img src="../templates/games/pin-rescue/cover.webp" width="220" alt="熔金拔针 Pin Rescue — 9:16 拔针解谜"><br>
-<strong>熔金拔针 · Pin Rescue</strong><br>
-<code>9:16 · 拔针物理解谜</code><br>
+<td width="50%" valign="top">
+<img src="../templates/games/pin-rescue/cover.webp" width="100%" alt="熔金拔针 Pin Rescue — 9:16 拔针解谜"><br>
+<strong>熔金拔针 · Pin Rescue</strong> · <code>9:16 · 拔针物理解谜</code><br>
 拔出机关针混合水流与熔岩，化解陷阱并在五道关卡中顺利夺金。<br>
 <a href="../templates/games/pin-rescue/">查看源码 →</a>
 </td>
-<td width="33%" valign="top" align="center">
-<img src="../templates/games/sky-runner/cover.webp" width="220" alt="霓虹天际跑者 Sky Runner — 9:16 3D 滑板跑酷"><br>
-<strong>霓虹天际跑者 · Sky Runner</strong><br>
-<code>9:16 · 3D 三道跑酷</code><br>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../templates/games/sky-runner/cover.webp" width="100%" alt="霓虹天际跑者 Sky Runner — 9:16 3D 滑板跑酷"><br>
+<strong>霓虹天际跑者 · Sky Runner</strong> · <code>9:16 · 3D 三道跑酷</code><br>
 切换赛道、拾取金币、躲避无人机，在不断加速的霓虹高空疾驰。<br>
 <a href="../templates/games/sky-runner/">查看源码 →</a>
 </td>
-</tr>
-<tr>
-<td width="33%" valign="top" align="center">
-<img src="../templates/games/slime-swell/cover.webp" width="220" alt="史莱姆膨胀城 Slime Swell — 9:16 城市吞噬大作战"><br>
-<strong>史莱姆膨胀城 · Slime Swell</strong><br>
-<code>9:16 · 吞噬成长 .io</code><br>
+<td width="50%" valign="top">
+<img src="../templates/games/slime-swell/cover.webp" width="100%" alt="史莱姆膨胀城 Slime Swell — 9:16 城市吞噬大作战"><br>
+<strong>史莱姆膨胀城 · Slime Swell</strong> · <code>9:16 · 吞噬成长 .io</code><br>
 吞噬比自己小的车辆与建筑，60 秒内体积超越三名竞争对手。<br>
 <a href="../templates/games/slime-swell/">查看源码 →</a>
-</td>
-<td width="33%" valign="top" align="center">
-<img src="../templates/games/lane-turret/cover.webp" width="220" alt="星港三线炮台 Lane Turret — 9:16 炮台割草射击"><br>
-<strong>星港三线炮台 · Lane Turret</strong><br>
-<code>9:16 · 三线升级射击</code><br>
-操控三联装自动炮台、拾取升级卡牌，坚守十波太空舰队攻势。<br>
-<a href="../templates/games/lane-turret/">查看源码 →</a>
-</td>
-<td width="33%" valign="top" align="center">
-<img src="../templates/games/merge-bakery/cover.webp" width="220" alt="合成小烘焙 Merge Bakery — 9:16 合成经营小游戏"><br>
-<strong>合成小烘焙 · Merge Bakery</strong><br>
-<code>9:16 · 合成经营</code><br>
-烤制面团、拖拽合成升级点心，在 90 秒内满足顾客订单赚满 \$250。<br>
-<a href="../templates/games/merge-bakery/">查看源码 →</a>
 </td>
 </tr>
 </table>
@@ -467,6 +449,62 @@ OpenGame 通过本地 stdio MCP 暴露完整的游戏开发与测试工具集（
 
 [贡献指南](../CONTRIBUTING.zh-CN.md) · [仓库开发规范](../AGENTS.md) · [提交 Issue](https://github.com/nexu-io/opengame/issues)
 
+<a id="acknowledgements"></a>
+
+## 🙏 开源致谢与版权声明
+
+OpenGame 的诞生离不开开源游戏、创作工具与 AI Agent 社区的共同积累。
+
+### 深度借鉴与核心开源底座
+
+| 开源项目 | 许可证 | 借鉴与复用说明 |
+| --- | --- | --- |
+| **[Higgsfield AI Skills](https://github.com/higgsfield-ai/skills)** | MIT | [skills/openmotion-game/](../skills/openmotion-game/) 中多份游戏美术与工程参考手册移植改编自该仓库（详见 [PROVENANCE.md](../skills/openmotion-game/PROVENANCE.md) · [LICENSE-HIGGSFIELD](../skills/openmotion-game/LICENSE-HIGGSFIELD)） |
+| **[HeyGen Hyperframes](https://github.com/heygen-com/hyperframes)** | Apache-2.0 | Studio 编辑器前端底座（许可见 [studio/LICENSE](../studio/LICENSE)）以及自动实机预告片合成与 MP4 渲染引擎 |
+| **[DSH Game Studio](https://github.com/ZSeven-W/dsh-game-studio)** & **[dsh-games](https://github.com/finiking/dsh-games)**（作者 [@FiniYang](https://x.com/FiniYang)） | 开源 | 深度启发并参考了基于 DeepSeek Harness（DSH）的 AI 原生游戏创作工作坊、自动试玩与可玩游戏墙理念 |
+| **[OpenDesign](https://github.com/nexu-io/open-design)** & **[OpenMotion](https://github.com/nexu-io/openmotion)** | Apache-2.0 | 同源开源底座，复用设计系统、多模态 Model Gateway、工作区架构与 MCP 工具契约 |
+| **[Three.js](https://github.com/mrdoob/three.js)** | MIT | 内置离线 3D 渲染引擎与模型/骨骼加载模块，支撑 3D 模板与原创 3D 游戏（[LICENSE-three.txt](../templates/game-kits/vendor/LICENSE-three.txt)） |
+| **[KayKit Adventurers Character Pack](https://www.kaylousberg.com/)**（作者 Kay Lousberg） | CC0 | 内置离线带骨骼动画 3D 角色包（Mage 与 Knight），位于 [templates/game-kits/characters/](../templates/game-kits/characters/)（[LICENSE-KayKit.txt](../templates/game-kits/characters/LICENSE-KayKit.txt)） |
+| **[Cocos Creator / Cocos Engine](https://github.com/cocos/cocos-engine)** | MIT | 支撑多款离线可玩小游戏模板的开源游戏引擎运行时 |
+| **[Model Context Protocol (MCP) SDK](https://github.com/modelcontextprotocol/typescript-sdk)** & **[Vercel Skills CLI](https://github.com/vercel-labs/skills)** | MIT / Apache-2.0 | 支撑 22 个本地 AI Agent 标准化接入协议与轻量化 Skill 分发 |
+
+同时感谢支撑本项目的底层开源生态：**Puppeteer & Chrome for Testing**、**FFmpeg**、**Dockview**、**CodeMirror 6**、**Lexical**、**React**、**Vite**、**Tailwind CSS**、**Zustand**、**Electron**、**GSAP**、**DiceBear**（Micah 头像风格，CC BY 4.0，[归属说明](../studio/skill-cover-attribution.md)）及开源字体（**Albert Sans**、**IBM Plex Mono**、**Instrument Serif**，SIL OFL 1.1）。
+
+### 社区游戏灵感与案例致谢
+
+特别感谢以下在社区公开分享精彩 AI 游戏的创作者，我们在 Game Studio 灵感区以原帖外链形式致敬并展示他们的作品（点击任意图标直达原作者原帖）：
+
+<p>
+  <a href="https://x.com/felixrieseberg/status/2119925633564463609" title="Saltline by @felixrieseberg"><img src="../studio/src/motion/game/community/saltline.jpg" width="56" height="56" alt="Saltline (@felixrieseberg)" /></a>
+  <a href="https://x.com/Saccc_c/status/2109962425512734739" title="The Little Prince: Star Journey by @Saccc_c"><img src="../studio/src/motion/game/community/little-prince.jpg" width="56" height="56" alt="The Little Prince: Star Journey (@Saccc_c)" /></a>
+  <a href="https://x.com/Rubzem/status/2104253584737230926" title="Sky Reach by @jonesiller"><img src="../studio/src/motion/game/community/sky-reach.jpg" width="56" height="56" alt="Sky Reach (@jonesiller)" /></a>
+  <a href="https://x.com/edwinarbus/status/2102463453176979794" title="Antikythera Dive by @edwinarbus"><img src="../studio/src/motion/game/community/shipwreck.jpg" width="56" height="56" alt="Antikythera Dive (@edwinarbus)" /></a>
+  <a href="https://x.com/bridgemindai/status/2102451997395866021" title="Turbo Kart Rally by @bridgemindai"><img src="../studio/src/motion/game/community/turbo-kart.jpg" width="56" height="56" alt="Turbo Kart Rally (@bridgemindai)" /></a>
+  <a href="https://x.com/BubuStd/status/2102991290568954264" title="Voxel Musou by @BubuStd"><img src="../studio/src/motion/game/community/voxel-musou.jpg" width="56" height="56" alt="Voxel Musou (@BubuStd)" /></a>
+  <a href="https://x.com/ebbyamir/status/2120284261089673376" title="Starry Nightrider by @ebbyamir"><img src="../studio/src/motion/game/community/starry-nightrider.jpg" width="56" height="56" alt="Starry Nightrider (@ebbyamir)" /></a>
+  <a href="https://x.com/ViktorKav/status/2122647483281015155" title="Uno com Escada by @ViktorKav"><img src="../studio/src/motion/game/community/uno-com-escada.jpg" width="56" height="56" alt="Uno com Escada (@ViktorKav)" /></a>
+  <a href="https://x.com/kevin_t_ngo/status/2119868968307695818" title="What the Water Keeps by @kevin_t_ngo"><img src="../studio/src/motion/game/community/what-the-water-keeps.jpg" width="56" height="56" alt="What the Water Keeps (@kevin_t_ngo)" /></a>
+  <a href="https://x.com/kevin_t_ngo/status/2120238844754923874" title="Evensong by @kevin_t_ngo"><img src="../studio/src/motion/game/community/evensong.jpg" width="56" height="56" alt="Evensong (@kevin_t_ngo)" /></a>
+  <a href="https://x.com/mattshumer_/status/2119877065701036047" title="Mirror Earth by @mattshumer_"><img src="../studio/src/motion/game/community/mirror-earth.jpg" width="56" height="56" alt="Mirror Earth (@mattshumer_)" /></a>
+  <a href="https://x.com/photonstorm/status/2120330010112434313" title="Tennis (Go Wild) by @photonstorm"><img src="../studio/src/motion/game/community/tennis-go-wild.jpg" width="56" height="56" alt="Tennis (Go Wild) (@photonstorm)" /></a>
+  <a href="https://x.com/op7418/status/2120694045299327187" title="Mist-Locked Mountain Gate by @op7418"><img src="../studio/src/motion/game/community/mist-locked-mountain-gate.jpg" width="56" height="56" alt="Mist-Locked Mountain Gate (@op7418)" /></a>
+  <a href="https://x.com/__morse/status/2122013410309153042" title="omw: Castle Valley by @__morse"><img src="../studio/src/motion/game/community/omw-castle-valley.jpg" width="56" height="56" alt="omw: Castle Valley (@__morse)" /></a>
+  <a href="https://x.com/loktar00/status/2120192761542615271" title="LANTERNFALL by @loktar00"><img src="../studio/src/motion/game/community/lanternfall.jpg" width="56" height="56" alt="LANTERNFALL (@loktar00)" /></a>
+  <a href="https://x.com/Andrew_Blumson/status/2120599812512833557" title="MAAD MAXXING by @Andrew_Blumson"><img src="../studio/src/motion/game/community/maad-maxxing.jpg" width="56" height="56" alt="MAAD MAXXING (@Andrew_Blumson)" /></a>
+  <a href="https://x.com/kevin_t_ngo/status/2119900487688622171" title="Gilt &amp; Gutter by @kevin_t_ngo"><img src="../studio/src/motion/game/community/gilt-and-gutter.jpg" width="56" height="56" alt="Gilt &amp; Gutter (@kevin_t_ngo)" /></a>
+  <a href="https://x.com/xikhar/status/2122682962647122403" title="Papertrails by @xikhar"><img src="../studio/src/motion/game/community/papertrails.jpg" width="56" height="56" alt="Papertrails (@xikhar)" /></a>
+  <a href="https://x.com/AravSrinivas/status/2122338465648103676" title="VICE '86 by @AravSrinivas"><img src="../studio/src/motion/game/community/vice-86.jpg" width="56" height="56" alt="VICE '86 (@AravSrinivas)" /></a>
+  <a href="https://x.com/FuSheng_0306/status/2121237878097207583" title="Starfall by @FuSheng_0306"><img src="../studio/src/motion/game/community/starfall-moba.jpg" width="56" height="56" alt="Starfall (@FuSheng_0306)" /></a>
+  <a href="https://x.com/aniketjart/status/2121793239175119279" title="Goku: Four-Star Road by @aniketjart"><img src="../studio/src/motion/game/community/goku-four-star-road.jpg" width="56" height="56" alt="Goku: Four-Star Road (@aniketjart)" /></a>
+  <a href="https://x.com/noclipepe/status/2119728047754547326" title="Rug Racers by @noclipepe"><img src="../studio/src/motion/game/community/rug-racers.jpg" width="56" height="56" alt="Rug Racers (@noclipepe)" /></a>
+  <a href="https://x.com/noclipepe/status/2119927838321328577" title="Dino Run: Locked In by @noclipepe"><img src="../studio/src/motion/game/community/rambo-dino.jpg" width="56" height="56" alt="Dino Run: Locked In (@noclipepe)" /></a>
+  <a href="https://x.com/AravSrinivas/status/2122713692324384793" title="HADAL by @AravSrinivas"><img src="../studio/src/motion/game/community/hadal.jpg" width="56" height="56" alt="HADAL (@AravSrinivas)" /></a>
+  <a href="https://x.com/emollick/status/2119876449494540554" title="I Would Have Gotten Away With It by @emollick"><img src="../studio/src/motion/game/community/i-would-have-gotten-away.jpg" width="56" height="56" alt="I Would Have Gotten Away With It (@emollick)" /></a>
+  <a href="https://x.com/petergyang/status/2119901658394358005" title="Turbo Tails by @petergyang"><img src="../studio/src/motion/game/community/turbo-tails.jpg" width="56" height="56" alt="Turbo Tails (@petergyang)" /></a>
+</p>
+
+> **版权声明**：上述社区作品仅作灵感展示与原页面跳转，不拷贝第三方源码，全部版权归原作者所有。如原作者希望调整署名、更新链接或移除展示，欢迎[提交 Issue](https://github.com/nexu-io/opengame/issues)，我们将第一时间处理。
+
 ## 贡献者
 
 感谢每一位参与共建的开发者与创作者——代码、游戏模板、Skill、文档、反馈与 Issue。
@@ -479,6 +517,7 @@ OpenGame 通过本地 stdio MCP 暴露完整的游戏开发与测试工具集（
 
 <a href="https://www.star-history.com/#nexu-io/opengame&amp;Date">
   <picture>
+    <source srcset="https://raw.githubusercontent.com/nexu-io/opengame/readme-charts/star-history.svg" />
     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io%2Fopengame&amp;type=Date&amp;theme=dark" />
     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io%2Fopengame&amp;type=Date" />
     <img alt="OpenGame Star History" src="https://api.star-history.com/svg?repos=nexu-io%2Fopengame&amp;type=Date" />
