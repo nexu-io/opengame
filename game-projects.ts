@@ -1847,18 +1847,18 @@ export class GameRuntime {
   }
   view(player: string) {
     const result = this.run(`(() => { const view=viewFor(state,${JSON.stringify(player)},ctx); if(view?.then)throw Error('viewFor must return synchronous JSON'); return JSON.stringify(view); })()`);
-    if (typeof result !== 'string' || result.length > 1024 * 1024) throw new GameError('viewFor must return JSON under 1 MiB');
+    if (typeof result !== 'string' || Buffer.byteLength(result) > 1024 * 1024) throw new GameError('viewFor must return JSON under 1 MiB');
     return JSON.parse(result);
   }
   referenceRoute(index: number) {
     if(!this.optionalExports.has('referenceRoute'))throw new GameError('logic.js does not export referenceRoute(playerIndex)');
     const result=this.run(`(()=>{if(typeof referenceRoute!=='function')throw Error('logic.js does not export referenceRoute(playerIndex)');return JSON.stringify(referenceRoute(${index}));})()`);
-    if(typeof result!=='string'||result.length>1024*1024)throw new GameError('referenceRoute must return a JSON route under 1 MiB');
+    if(typeof result!=='string'||Buffer.byteLength(result)>1024*1024)throw new GameError('referenceRoute must return a JSON route under 1 MiB');
     return JSON.parse(result);
   }
   summary(player: string) {
     const json=this.run(`JSON.stringify(${this.optionalExports.has('summarize')} && typeof summarize==='function'?summarize(JSON.parse(JSON.stringify(state))):viewFor(state,${JSON.stringify(player)},ctx))`);
-    if(typeof json!=='string'||json.length>32768)throw new GameError('Simulation summary must be JSON under 32 KiB; export summarize(state) for large views');
+    if(typeof json!=='string'||Buffer.byteLength(json)>32768)throw new GameError('Simulation summary must be JSON under 32 KiB; export summarize(state) for large views');
     return JSON.parse(json);
   }
   over(): { over: boolean; winners?: string[] } {
