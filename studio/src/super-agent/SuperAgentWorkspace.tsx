@@ -805,10 +805,15 @@ export function SuperAgentWorkspace({
     prevBusyRef.current = busy;
   }, [refreshResources]);
 
-  // Load selected chat & subscribe to SSE when active
+  const backgroundActiveChatId = !active && activeChat && (activeChat.state === 'running' || activeChat.state === 'waiting')
+    ? activeChat.id
+    : null;
+  const subscribedChatId = active ? chatId : backgroundActiveChatId;
+
+  // Load selected chat & keep SSE alive while active or while a task is running in the background
   useEffect(() => {
-    if (!active) return;
-    if (!chatId) {
+    if (!active && !subscribedChatId) return;
+    if (active && !subscribedChatId) {
       setActiveChat(null);
       setLoadingChat(false);
       setLoadFailed(false);
@@ -819,31 +824,35 @@ export function SuperAgentWorkspace({
       }
       return;
     }
+    if (!subscribedChatId) return;
 
     let cancelled = false;
-    const cached = chatRetry === 0 ? peekCachedSuperAgentChat(chatId) : undefined;
-    if (cached) {
-      applyChatSnapshot(cached, true);
-      setLoadingChat(false);
-    } else {
-      setLoadingChat(true);
+    const targetId = subscribedChatId;
+    if (active) {
+      const cached = chatRetry === 0 ? peekCachedSuperAgentChat(targetId) : undefined;
+      if (cached) {
+        applyChatSnapshot(cached, true);
+        setLoadingChat(false);
+      } else {
+        setLoadingChat(true);
+      }
+      setLoadFailed(false);
+      void getSuperAgentChat(targetId, { fresh: true })
+        .then(result => {
+          if (!cancelled && result.conversation !== cached) applyChatSnapshot(result.conversation, true);
+        })
+        .catch(() => {
+          if (!cancelled && !cached) setLoadFailed(true);
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingChat(false);
+        });
     }
-    setLoadFailed(false);
-    void getSuperAgentChat(chatId)
-      .then(result => {
-        if (!cancelled && result.conversation !== cached) applyChatSnapshot(result.conversation, true);
-      })
-      .catch(() => {
-        if (!cancelled && !cached) setLoadFailed(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingChat(false);
-      });
 
     let resyncTimer: number | null = null;
     const resyncChat = () => {
       if (cancelled) return;
-      void getSuperAgentChat(chatId)
+      void getSuperAgentChat(targetId, { fresh: true })
         .then(result => {
           if (!cancelled) applyChatSnapshot(result.conversation, false);
         })
@@ -864,7 +873,7 @@ export function SuperAgentWorkspace({
     document.addEventListener('visibilitychange', onVisibilityChange);
 
     const unsubscribe = subscribeSuperAgentChat(
-      chatId,
+      targetId,
       next => {
         if (resyncTimer !== null) {
           window.clearTimeout(resyncTimer);
@@ -881,7 +890,7 @@ export function SuperAgentWorkspace({
       document.removeEventListener('visibilitychange', onVisibilityChange);
       unsubscribe();
     };
-  }, [active, chatId, chatRetry, applyChatSnapshot]);
+  }, [active, subscribedChatId, chatRetry, applyChatSnapshot]);
 
   useEffect(() => {
     if (viewerOpen || (activeChat?.artifacts.length ?? 0) > 0) {

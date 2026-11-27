@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { designHttp, designProjectsFor } from '../design-projects.ts';
 import { GameProjects, gameHttp, gameProjectsFor } from '../game-projects.ts';
@@ -4324,6 +4324,45 @@ test('Super Agent ignores read-only openmotion_game_get on unrelated ready games
     assert.ok(afterArtifact);
     assert.equal(afterArtifact.title, 'Rain Temple · Play');
     assert.equal(afterArtifact.presentedAt, prevPresentedAt);
+  } finally {
+    await service.close();
+  }
+}));
+
+test('Super Agent preserves running state when an active external process lease exists and marks interrupted once the lease expires', () => fixture(async store => {
+  const service = new SuperAgentConversations(store);
+  try {
+    const chat = await service.create({ engine: 'codex' });
+    const chatPath = await service.file(chat.id);
+    const persisted = JSON.parse(await readFile(chatPath, 'utf8'));
+    persisted.state = 'running';
+    persisted.updatedAt = Date.now();
+    await writeFile(chatPath, JSON.stringify(persisted, null, 2));
+
+    // Write a live external lease owned by the parent process (alive and !== process.pid).
+    const leaseDir = path.join(store.directory, 'super-agent', 'leases');
+    await mkdir(leaseDir, { recursive: true });
+    const leasePath = path.join(leaseDir, `${chat.id}.json`);
+    await writeFile(leasePath, JSON.stringify({
+      pid: process.ppid,
+      startedAt: Date.now() - 1000,
+      heartbeatAt: Date.now(),
+    }));
+
+    const liveSnap = await service.get(chat.id);
+    assert.equal(liveSnap.state, 'running');
+    assert.equal(liveSnap.error, undefined);
+
+    // Expire the lease -> now readChat should report interrupted.
+    await writeFile(leasePath, JSON.stringify({
+      pid: process.ppid,
+      startedAt: Date.now() - 120_000,
+      heartbeatAt: Date.now() - 120_000,
+    }));
+
+    const expiredSnap = await service.get(chat.id);
+    assert.equal(expiredSnap.state, 'failed');
+    assert.match(expiredSnap.error ?? '', /Agent session was interrupted/);
   } finally {
     await service.close();
   }

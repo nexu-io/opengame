@@ -7841,20 +7841,18 @@
     animation: om-sa-spin 1s linear infinite;
   }
 
-  .om-sa-shimmer-text {
-    background: linear-gradient(
-      90deg,
-      var(--motion-muted) 0%,
-      var(--motion-muted) 38%,
-      var(--motion-strong) 50%,
-      var(--motion-muted) 62%,
-      var(--motion-muted) 100%
-    );
-    background-size: 220% 100%;
-    background-clip: text;
-    -webkit-background-clip: text;
-    color: transparent;
-    animation: om-sa-text-shimmer 2.2s linear infinite;
+  .om-sa-live-reply-icon:not([data-spinning]) {
+    color: var(--motion-strong);
+    animation: om-sa-thinking-icon-pulse 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes om-sa-thinking-icon-pulse {
+  0%, 100% {
+    opacity: 0.58;
+  }
+  50% {
+    opacity: 1;
   }
 }
 
@@ -7863,7 +7861,7 @@
     background-position: 100% 0;
   }
   100% {
-    background-position: -100% 0;
+    background-position: 0% 0;
   }
 }
 
@@ -7879,8 +7877,32 @@
 }
 
 .om-sa-live-status-label {
-  color: var(--motion-text);
+  color: var(--motion-strong);
   font-size: var(--motion-text-sm);
+  font-weight: var(--motion-weight-medium);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .om-sa-shimmer-text,
+  .om-sa-live-status-label.om-sa-shimmer-text,
+  .om-sa-reasoning-label.om-sa-shimmer-text {
+    background-image: linear-gradient(
+      105deg,
+      color-mix(in srgb, var(--motion-text) 56%, transparent) 0%,
+      color-mix(in srgb, var(--motion-text) 56%, transparent) 38%,
+      var(--motion-strong) 50%,
+      color-mix(in srgb, var(--motion-text) 56%, transparent) 62%,
+      color-mix(in srgb, var(--motion-text) 56%, transparent) 100%
+    );
+    background-size: 260% 100%;
+    background-repeat: no-repeat;
+    background-position: 100% 0;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    animation: om-sa-text-shimmer 1.8s ease-in-out infinite;
+  }
 }
 
 .om-sa-live-timer {
@@ -9948,6 +9970,8 @@
   border-radius: var(--motion-radius-xl);
   background: var(--motion-inset);
   overflow: hidden;
+  contain: layout paint;
+  isolation: isolate;
 }
 
 .om-super-agent .om-sa-queue-panel .om-sa-queue-head {
@@ -9960,15 +9984,15 @@
   padding: var(--motion-space-10) var(--motion-space-14);
   border: 0;
   border-radius: 0;
-  background: transparent;
+  background-color: transparent;
   justify-content: flex-start;
   text-align: left;
   cursor: pointer;
-  transition: background var(--motion-duration-fast) var(--motion-ease-out);
+  transition: background-color var(--motion-duration-fast) var(--motion-ease-out);
 }
 
 .om-super-agent .om-sa-queue-panel .om-sa-queue-head:hover:not(:disabled) {
-  background: var(--motion-hover);
+  background-color: var(--motion-hover);
 }
 
 .om-sa-queue-title {
@@ -10036,16 +10060,16 @@
   padding: var(--motion-space-6) var(--motion-space-8);
   border: 0;
   border-radius: var(--motion-radius-md);
-  background: transparent;
-  transition: background var(--motion-duration-fast) var(--motion-ease-out);
+  background-color: transparent;
+  transition: background-color var(--motion-duration-fast) var(--motion-ease-out);
 }
 
 .om-sa-queue-row:hover {
-  background: var(--motion-hover);
+  background-color: var(--motion-hover);
 }
 
 .om-sa-queue-row[data-editing] {
-  background: var(--motion-accent-soft);
+  background-color: var(--motion-accent-soft);
 }
 
 .om-sa-queue-main {
@@ -10116,21 +10140,21 @@
   padding: 0;
   border: 0;
   border-radius: var(--motion-radius-full);
-  background: transparent;
+  background-color: transparent;
   color: var(--motion-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--motion-duration-fast) var(--motion-ease-out), color var(--motion-duration-fast) var(--motion-ease-out);
+  transition: background-color var(--motion-duration-fast) var(--motion-ease-out), color var(--motion-duration-fast) var(--motion-ease-out);
 }
 
 .om-super-agent .om-sa-queue-row .om-sa-queue-action-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--motion-text) 10%, transparent);
+  background-color: color-mix(in srgb, var(--motion-text) 10%, transparent);
   color: var(--motion-text);
 }
 
 .om-super-agent .om-sa-queue-row .om-sa-queue-action-btn[data-tone='danger']:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--motion-danger) 12%, transparent);
+  background-color: color-mix(in srgb, var(--motion-danger) 12%, transparent);
   color: var(--motion-danger);
 }
 

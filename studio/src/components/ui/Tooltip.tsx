@@ -6,6 +6,7 @@
 import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
 import {
   cloneElement,
+  useCallback,
   useEffect,
   useId,
   useRef,
@@ -65,6 +66,7 @@ export function Tooltip({
   const container = portalContainer
     ?? (withinDialog ? boxRef.current?.closest("dialog") : null)
     ?? (document.fullscreenElement?.contains(boxRef.current) ? document.fullscreenElement as HTMLElement : undefined);
+  const resolveAnchor = useCallback(() => boxRef.current?.firstElementChild ?? null, []);
   useEffect(() => { if (unavailable) setOpen(false); }, [unavailable]);
 
   return (
@@ -79,7 +81,7 @@ export function Tooltip({
       {/* Dialogs and fullscreen paint above ordinary body portals. */}
       <BaseTooltip.Portal container={container}>
         <BaseTooltip.Positioner
-          anchor={() => boxRef.current?.firstElementChild ?? null}
+          anchor={resolveAnchor}
           side={resolvedSide}
           sideOffset={SIDE_OFFSET}
           collisionPadding={VIEWPORT_MARGIN}

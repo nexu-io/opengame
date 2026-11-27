@@ -1022,7 +1022,9 @@ function ReasoningStepRow({
       <span className="om-sa-reasoning-icon" data-streaming={isStreaming || undefined}>
         <RemixIcon name={isStreaming ? 'loader-4-line' : 'sparkling-line'} size={14} />
       </span>
-      <span className="om-sa-reasoning-label">{durationLabel}</span>
+      <span className={isStreaming ? 'om-sa-reasoning-label om-sa-shimmer-text' : 'om-sa-reasoning-label'}>
+        {durationLabel}
+      </span>
       {!isStreaming && message.text && (
         <span className="om-sa-tool-summary">{message.text.slice(0, 120)}</span>
       )}

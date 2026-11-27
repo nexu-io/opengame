@@ -1071,4 +1071,116 @@ describe('ExecutionTimeline creator-first progressive disclosure', () => {
     expect(downBtn().getAttribute('aria-pressed')).toBe('true');
     expect(onNotify).toHaveBeenCalledWith('感谢反馈', 'info');
   });
+
+  it('applies shimmer styling to active thinking labels and removes it when reasoning completes', async () => {
+    const now = Date.now();
+    const thinkingPhaseChat: SuperAgentChat = {
+      id: 'chat-thinking-shimmer',
+      title: 'Thinking shimmer test',
+      engine: 'codex',
+      model: 'default',
+      reasoning: 'default',
+      permissionMode: 'on-request',
+      state: 'running',
+      turnActivity: { phase: 'thinking', label: 'Codex', startedAt: now, updatedAt: now },
+      createdAt: now,
+      updatedAt: now,
+      messages: [
+        { id: 'u1', role: 'user', text: 'Build a puzzle game', createdAt: now },
+      ],
+      artifacts: [],
+      approvals: [],
+    };
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root!.render(
+        <I18nProvider initialLocale="en">
+          <ExecutionTimeline
+            chat={thinkingPhaseChat}
+            busy
+            sending={false}
+            engineLabel="Codex"
+            onOpenArtifactId={vi.fn()}
+            onPreviewAttachment={vi.fn()}
+            onApprove={vi.fn()}
+            onCopyText={vi.fn()}
+          />
+        </I18nProvider>,
+      );
+    });
+
+    const liveLabel = container.querySelector('.om-sa-live-reply-phase .om-sa-live-status-label');
+    expect(liveLabel?.classList.contains('om-sa-shimmer-text')).toBe(true);
+
+    const streamingReasoningChat: SuperAgentChat = {
+      ...thinkingPhaseChat,
+      messages: [
+        { id: 'u1', role: 'user', text: 'Build a puzzle game', createdAt: now },
+        { id: 'r1', role: 'reasoning', text: 'Planning mechanics…', status: 'streaming', createdAt: now + 1 },
+      ],
+    };
+
+    await act(async () => {
+      root!.render(
+        <I18nProvider initialLocale="en">
+          <ExecutionTimeline
+            chat={streamingReasoningChat}
+            busy
+            sending={false}
+            engineLabel="Codex"
+            onOpenArtifactId={vi.fn()}
+            onPreviewAttachment={vi.fn()}
+            onApprove={vi.fn()}
+            onCopyText={vi.fn()}
+          />
+        </I18nProvider>,
+      );
+    });
+
+    const summaryBtn = container.querySelector<HTMLButtonElement>('.om-sa-work-summary-btn');
+    if (summaryBtn && summaryBtn.getAttribute('aria-expanded') === 'false') {
+      await act(async () => summaryBtn.click());
+    }
+    const streamingReasoning = container.querySelector('.om-sa-reasoning-label');
+    expect(streamingReasoning?.classList.contains('om-sa-shimmer-text')).toBe(true);
+
+    const idleChat: SuperAgentChat = {
+      ...thinkingPhaseChat,
+      state: 'idle',
+      turnActivity: undefined,
+      messages: [
+        { id: 'u1', role: 'user', text: 'Build a puzzle game', createdAt: now },
+        { id: 'r1', role: 'reasoning', text: 'Planned mechanics.', status: 'completed', durationMs: 2400, createdAt: now + 1 },
+        { id: 'a1', role: 'assistant', text: 'Done.', createdAt: now + 3 },
+      ],
+    };
+
+    await act(async () => {
+      root!.render(
+        <I18nProvider initialLocale="en">
+          <ExecutionTimeline
+            chat={idleChat}
+            busy={false}
+            sending={false}
+            engineLabel="Codex"
+            onOpenArtifactId={vi.fn()}
+            onPreviewAttachment={vi.fn()}
+            onApprove={vi.fn()}
+            onCopyText={vi.fn()}
+          />
+        </I18nProvider>,
+      );
+    });
+
+    const completedSummaryBtn = container.querySelector<HTMLButtonElement>('.om-sa-work-summary-btn');
+    if (completedSummaryBtn && completedSummaryBtn.getAttribute('aria-expanded') === 'false') {
+      await act(async () => completedSummaryBtn.click());
+    }
+    const completedReasoning = container.querySelector('.om-sa-reasoning-label');
+    expect(completedReasoning?.classList.contains('om-sa-shimmer-text')).toBe(false);
+  });
 });
