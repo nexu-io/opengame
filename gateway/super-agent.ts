@@ -1206,6 +1206,18 @@ async function closeRpcAndWait(rpc?: AssetAgentRpc): Promise<void> {
   }
 }
 
+const SUPER_AGENT_LEASE_TTL_MS = 45_000;
+
+function isProcessAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException)?.code === 'EPERM';
+  }
+}
+
 export class SuperAgentConversations {
   readonly store: WorkspaceStore;
   readonly active = new Map<string, ActiveSuperAgentChat>();
@@ -1229,6 +1241,11 @@ export class SuperAgentConversations {
     this.store = store.workspaceStore ?? store;
     this.options = options;
     this.heartbeatTimer = setInterval(() => {
+      for (const [id, active] of this.active) {
+        if (!active.stopped && !active.deleted) {
+          void this.writeLease(id, active.turnStartedAt).catch(() => {});
+        }
+      }
       for (const [id, set] of this.listeners) {
         for (const res of set) {
           if (res.destroyed) {
@@ -1241,6 +1258,39 @@ export class SuperAgentConversations {
       }
     }, 15_000);
     this.heartbeatTimer.unref();
+  }
+
+  private async leaseFile(id: string) {
+    if (!isSuperAgentId(id)) throw new Error('CONVERSATION_NOT_FOUND');
+    return this.store.safePath(`leases/${id}.json`, this.root);
+  }
+
+  private async writeLease(id: string, startedAt: number): Promise<void> {
+    const file = await this.leaseFile(id);
+    await atomicAssetJson(file, {
+      pid: process.pid,
+      startedAt,
+      heartbeatAt: Date.now(),
+    });
+  }
+
+  private async removeLease(id: string): Promise<void> {
+    const file = await this.leaseFile(id);
+    await rm(file, { force: true }).catch(() => {});
+  }
+
+  private async hasLiveExternalLease(id: string): Promise<boolean> {
+    try {
+      const raw = await readFile(await this.leaseFile(id), 'utf8');
+      const lease = JSON.parse(raw) as { pid?: unknown; heartbeatAt?: unknown };
+      const pid = typeof lease?.pid === 'number' ? lease.pid : 0;
+      const heartbeatAt = typeof lease?.heartbeatAt === 'number' ? lease.heartbeatAt : 0;
+      if (!pid || pid === process.pid) return false;
+      if (Date.now() - heartbeatAt > SUPER_AGENT_LEASE_TTL_MS) return false;
+      return isProcessAlive(pid);
+    } catch {
+      return false;
+    }
   }
 
   get pending() {
@@ -1343,9 +1393,14 @@ export class SuperAgentConversations {
     }
     const chat: SuperAgentChat = JSON.parse(raw);
     if (chat.state === 'running' || chat.state === 'waiting') {
-      chat.state = 'failed';
-      chat.error = 'Agent session was interrupted. Send a message to continue.';
-      chat.approvals = [];
+      const ownedElsewhere = !this.starting.has(id) && !this.steering.has(id)
+        ? await this.hasLiveExternalLease(id)
+        : true;
+      if (!ownedElsewhere) {
+        chat.state = 'failed';
+        chat.error = 'Agent session was interrupted. Send a message to continue.';
+        chat.approvals = [];
+      }
     }
     chat.intent = inferSuperAgentIntent(chat);
     this.syncProjectDir(chat);
@@ -1834,7 +1889,46 @@ export class SuperAgentConversations {
     }
     set.add(res);
     res.write(`event: chat\ndata: ${JSON.stringify(snapshot)}\n\n`);
+    let externalPoll: NodeJS.Timeout | undefined;
+    let lastUpdatedAt = snapshot.updatedAt;
+    let lastState = snapshot.state;
+    const stopExternalPoll = () => {
+      if (externalPoll) {
+        clearInterval(externalPoll);
+        externalPoll = undefined;
+      }
+    };
+    if (!this.active.has(id) && (snapshot.state === 'running' || snapshot.state === 'waiting')) {
+      externalPoll = setInterval(() => {
+        if (res.destroyed || this.active.has(id)) {
+          stopExternalPoll();
+          return;
+        }
+        void this.get(id)
+          .then(latest => {
+            if (res.destroyed) {
+              stopExternalPoll();
+              return;
+            }
+            if (latest.updatedAt !== lastUpdatedAt || latest.state !== lastState) {
+              lastUpdatedAt = latest.updatedAt;
+              lastState = latest.state;
+              if (res.writableLength < 2 * 1024 * 1024) {
+                res.write(`event: chat\ndata: ${JSON.stringify(latest)}\n\n`);
+              }
+            }
+            if (latest.state !== 'running' && latest.state !== 'waiting') {
+              stopExternalPoll();
+            }
+          })
+          .catch(() => {
+            stopExternalPoll();
+          });
+      }, 1000);
+      externalPoll.unref();
+    }
     const detach = () => {
+      stopExternalPoll();
       const current = this.listeners.get(id);
       if (current) {
         current.delete(res);
@@ -2132,6 +2226,7 @@ export class SuperAgentConversations {
         timer: setTimeout(() => void this.stop(id, 'Agent session timed out. Existing projects and assets remain saved.'), 30 * 60_000),
       };
       this.active.set(id, active);
+      await this.writeLease(id, startedAt).catch(() => {});
 
       chat.requestReceipts ??= [];
       chat.requestReceipts.push({ requestId: input.requestId, inputHash: requestHash });
@@ -5181,6 +5276,7 @@ export class SuperAgentConversations {
         await closeRpcAndWait(active.rpc);
       }
       this.active.delete(id);
+      await this.removeLease(id).catch(() => {});
       active.finish();
     }
     if (shouldAutoDequeue) {

@@ -8868,3 +8868,77 @@ it('opens the Artifact Viewer publish panel directly from the game deliverable h
   expect(cardPublishBtn()?.getAttribute('aria-pressed')).toBe('false');
   expect(viewerPublishBtn()?.getAttribute('aria-pressed')).toBe('false');
 });
+
+it('keeps background SSE connected while a running chat is hidden (e.g. visiting Settings) and refreshes fresh state on return', async () => {
+  clearSuperAgentCache();
+  const runningChatId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  let serverChat: SuperAgentChat = {
+    ...sampleChat,
+    id: runningChatId,
+    title: 'Background Game Task',
+    intent: 'game',
+    state: 'running',
+    approvals: [],
+    turnActivity: { phase: 'thinking', label: 'Codex', startedAt: 1000, updatedAt: 1000 },
+    messages: [{ id: 'u1', role: 'user', text: 'Build a game', createdAt: 1000 }],
+    artifacts: [],
+  };
+
+  let chatFetchCount = 0;
+  const baseFetch = globalThis.fetch;
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    if (url === `${SUPER_AGENT_API}/chats` && (!init?.method || init.method === 'GET')) {
+      return json({ conversations: [summarizeSuperAgentChat(serverChat)] });
+    }
+    if (url === `${SUPER_AGENT_API}/chats/${runningChatId}` && (!init?.method || init.method === 'GET')) {
+      chatFetchCount += 1;
+      return json({ conversation: serverChat });
+    }
+    return baseFetch(input, init);
+  }) as typeof fetch;
+
+  const renderProps = (active: boolean, chatId: string | null) => (
+    <I18nProvider initialLocale="en">
+      <SuperAgentWorkspace
+        active={active}
+        chatId={chatId}
+        onChatIdChange={vi.fn()}
+        onOpenDesignProject={vi.fn()}
+        onOpenMotionProject={vi.fn()}
+        onOpenAsset={vi.fn()}
+        onOpenBrandKit={vi.fn()}
+        onOpenAgentSettings={vi.fn()}
+        onOpenMcp={vi.fn()}
+      />
+    </I18nProvider>
+  );
+
+  await act(async () => root.render(renderProps(true, runningChatId)));
+  await flush();
+  expect(chatFetchCount).toBeGreaterThanOrEqual(1);
+  const fetchesBeforeSettings = chatFetchCount;
+
+  // Navigate to Settings: active becomes false and route chatId becomes null, while task is still running.
+  await act(async () => root.render(renderProps(false, null)));
+  await flush();
+
+  // Task finishes in the background on the server while user is on Settings.
+  serverChat = {
+    ...serverChat,
+    state: 'idle',
+    turnActivity: undefined,
+    updatedAt: 2000,
+    messages: [
+      ...serverChat.messages,
+      { id: 'a1', role: 'assistant', text: 'Game finished in background.', createdAt: 2000 },
+    ],
+  };
+
+  // Return to Super Agent: must fetch fresh state (bypassing stale cache) and show completed task.
+  await act(async () => root.render(renderProps(true, runningChatId)));
+  await flush();
+  expect(chatFetchCount).toBeGreaterThan(fetchesBeforeSettings);
+  expect(container.textContent).toContain('Game finished in background.');
+});
