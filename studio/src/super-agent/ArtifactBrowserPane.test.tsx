@@ -425,7 +425,10 @@ describe('ArtifactBrowserPane Game Studio mode', () => {
     await act(async () => muteBtn.click());
     expect(muteBtn.getAttribute('aria-pressed')).toBe('true');
     expect(muteBtn.hasAttribute('data-muted')).toBe(true);
-    expect(postSpy).toHaveBeenCalledWith({ type: 'om:preview-audio', muted: true, volume: 1 }, '*');
+    expect(postSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'om:preview-audio', token: expect.any(String), muted: true, volume: 1 }),
+      '*',
+    );
 
     postSpy.mockClear();
     // When the injected audio guard signals ready, parent immediately re-syncs muted state
@@ -435,6 +438,33 @@ describe('ArtifactBrowserPane Game Studio mode', () => {
         data: { type: 'om:audio-guard-ready' },
       }));
     });
-    expect(postSpy).toHaveBeenCalledWith({ type: 'om:preview-audio', muted: true, volume: 1 }, '*');
+    expect(postSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'om:preview-audio', token: expect.any(String), muted: true, volume: 1 }),
+      '*',
+    );
+  });
+
+  it('reconciles Game Studio active tab to Preview when switching from game Code view to a web artifact', async () => {
+    const webArtifact: SuperAgentArtifact = {
+      id: 'web:docs',
+      kind: 'web',
+      title: 'Example Docs',
+      url: 'https://example.com',
+      updatedAt: 101,
+    };
+    await renderViewer([MY_GAME, webArtifact], MY_GAME.id, { studioMode: 'game' });
+
+    const codeTab = container.querySelector<HTMLButtonElement>('.om-sa-game-studio-tab[data-tab-id="code"]')!;
+    expect(codeTab).not.toBeNull();
+    await act(async () => codeTab.click());
+    expect(codeTab.getAttribute('aria-selected')).toBe('true');
+    expect(container.querySelector('.om-sa-game-browser-bar')).toBeNull();
+
+    // Switching to a web artifact (no Code view) must fall back to Preview so the browser bar stays visible
+    await renderViewer([MY_GAME, webArtifact], webArtifact.id, { studioMode: 'game' });
+
+    const previewTab = container.querySelector<HTMLButtonElement>('.om-sa-game-studio-tab[data-tab-id="preview"]')!;
+    expect(previewTab.getAttribute('aria-selected')).toBe('true');
+    expect(container.querySelector('.om-sa-game-browser-bar')).not.toBeNull();
   });
 });

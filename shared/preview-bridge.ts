@@ -451,11 +451,19 @@ export function injectViewportGuardHtml(rawHtml: Buffer | string): Buffer {
  * private master GainNode) and HTMLMediaElement (<audio>, <video>, new Audio()) so Studio can
  * mute/unmute and scale game volume cleanly even when a game provides no in-game sound toggle.
  */
-function buildAudioGuardScript(): string {
+export function buildAudioGuardScript(): string {
   return `<script data-om-audio-guard="1">
 (() => {
   if (window.__OM_AUDIO_GUARD__) return;
   window.__OM_AUDIO_GUARD__ = true;
+
+  var bridgeToken = '';
+  try {
+    var search = window.location && typeof window.location.search === 'string' ? window.location.search : '';
+    if (search && typeof URLSearchParams === 'function') {
+      bridgeToken = new URLSearchParams(search).get('omBridge') || '';
+    }
+  } catch {}
 
   var masterMuted = false;
   var masterVolume = 1;
@@ -517,7 +525,7 @@ function buildAudioGuardScript(): string {
   wrapAudioCtor('webkitAudioContext');
 
   // --- 2. HTMLMediaElement (<audio>, <video>, new Audio()) interception ---
-  var mediaElements = new Set();
+  var mediaRefs = typeof WeakRef === 'function' ? new Set() : null;
   var mediaState = new WeakMap();
   var MediaProto = typeof HTMLMediaElement !== 'undefined' ? HTMLMediaElement.prototype : null;
   var origVolDesc = MediaProto ? Object.getOwnPropertyDescriptor(MediaProto, 'volume') : null;
@@ -536,7 +544,9 @@ function buildAudioGuardScript(): string {
       } catch {}
       st = { volume: initialVol, muted: initialMuted };
       mediaState.set(el, st);
-      mediaElements.add(el);
+      if (mediaRefs) {
+        mediaRefs.add(new WeakRef(el));
+      }
     }
     return st;
   }
@@ -627,17 +637,26 @@ function buildAudioGuardScript(): string {
       } catch {}
     });
     scanDomMedia();
-    mediaElements.forEach(function(el) {
-      applyMedia(el);
-    });
+    if (mediaRefs) {
+      mediaRefs.forEach(function(ref) {
+        var el = ref.deref();
+        if (!el) {
+          mediaRefs.delete(ref);
+          return;
+        }
+        applyMedia(el);
+      });
+    }
     if (masterMuted && window.speechSynthesis && typeof window.speechSynthesis.cancel === 'function') {
       try { window.speechSynthesis.cancel(); } catch {}
     }
   }
 
   window.addEventListener('message', function(event) {
-    var msg = event && event.data;
+    if (!event || event.source !== window.parent) return;
+    var msg = event.data;
     if (!msg || typeof msg !== 'object' || msg.type !== 'om:preview-audio') return;
+    if (bridgeToken && msg.token !== bridgeToken) return;
     if (typeof msg.muted === 'boolean') masterMuted = msg.muted;
     if (typeof msg.volume === 'number') masterVolume = clamp01(msg.volume);
     applyAll();
@@ -646,7 +665,9 @@ function buildAudioGuardScript(): string {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', scanDomMedia, { once: true });
   }
-  try { parent.postMessage({ type: 'om:audio-guard-ready' }, '*'); } catch {}
+  try {
+    parent.postMessage(bridgeToken ? { type: 'om:audio-guard-ready', token: bridgeToken } : { type: 'om:audio-guard-ready' }, '*');
+  } catch {}
 })();
 </script>`;
 }

@@ -989,6 +989,7 @@ function useIframePreviewBridge({
   return {
     frameRef,
     iframeRef,
+    bridgeToken: bridgeTokenRef.current,
     bridgedPreviewUrl,
     pickedElement,
     syncPickMode,
@@ -1243,9 +1244,9 @@ function GameProjectArtifactView({
     const win = bridge.iframeRef.current?.contentWindow;
     if (!win) return;
     try {
-      win.postMessage({ type: 'om:preview-audio', muted: audioMuted, volume: audioVolume }, '*');
+      win.postMessage({ type: 'om:preview-audio', token: bridge.bridgeToken, muted: audioMuted, volume: audioVolume }, '*');
     } catch { /* ignore detached frame */ }
-  }, [audioMuted, audioVolume, bridge.iframeRef]);
+  }, [audioMuted, audioVolume, bridge.bridgeToken, bridge.iframeRef]);
 
   useEffect(() => {
     if (effectiveMode !== 'preview' || isExternalGame) return;
@@ -1891,6 +1892,7 @@ export function ArtifactBrowserPane({
   active = true,
   studioMode = 'default',
   chatId,
+  previewBrowserSessionId,
   chatRunning,
   workingDir,
   artifacts,
@@ -1926,6 +1928,7 @@ export function ArtifactBrowserPane({
   active?: boolean;
   studioMode?: 'default' | 'game';
   chatId: string | null;
+  previewBrowserSessionId?: string;
   chatRunning?: boolean;
   workingDir?: string;
   artifacts: SuperAgentArtifact[];
@@ -1959,6 +1962,11 @@ export function ArtifactBrowserPane({
   onOpenInBrandKit: (kitId?: string) => void;
 }) {
   const { t } = useI18n();
+  const fallbackPreviewSessionIdRef = useRef(
+    `preview-${Math.random().toString(36).slice(2, 8)}`,
+  );
+  const effectivePreviewBrowserSessionId = previewBrowserSessionId || fallbackPreviewSessionIdRef.current;
+  const browserSessionId = chatId || effectivePreviewBrowserSessionId;
   const [viewMode, setViewMode] = useState<'preview' | 'code' | 'trailer'>('preview');
   const [gameMetaEntry, setGameMetaEntry] = useState<{
     artifactId: string;
@@ -2381,9 +2389,13 @@ export function ArtifactBrowserPane({
 
   useEffect(() => {
     if (!pendingWebUrl) return;
+    if (!showNewTab && activeArtifact?.kind === 'web') {
+      setPendingWebUrl(null);
+      return;
+    }
     const timer = setTimeout(() => setPendingWebUrl(null), 10_000);
     return () => clearTimeout(timer);
-  }, [pendingWebUrl]);
+  }, [pendingWebUrl, showNewTab, activeArtifact?.kind, activeArtifact?.id]);
 
   const navigateWeb = (targetUrl: string) => {
     setPendingWebUrl(targetUrl);
@@ -3105,7 +3117,16 @@ export function ArtifactBrowserPane({
     </Popover>
   ) : null;
 
-  const activeGameStudioTab: GameStudioTabId = publishPanelOpen ? 'publish' : viewMode;
+  const hasPublishView = Boolean(!showNewTab && activeArtifact?.kind === 'game-project' && publishGameId);
+  const hasTrailerView = Boolean(!showNewTab && activeArtifact?.kind === 'game-project' && gameMeta?.trailerUrl);
+  const activeGameStudioTab: GameStudioTabId =
+    publishPanelOpen && hasPublishView
+      ? 'publish'
+      : viewMode === 'code' && hasModeSwitch
+        ? 'code'
+        : viewMode === 'trailer' && hasTrailerView
+          ? 'trailer'
+          : 'preview';
   const gameStudioTargetIcon = showNewTab || !activeArtifact
     ? 'global-line'
     : artifactTabIcon(activeArtifact.kind, activeArtifact.filePath || activeArtifact.title, activeArtifact.mimeType);
@@ -3153,8 +3174,8 @@ export function ArtifactBrowserPane({
           showNewTab={showNewTab}
           expanded={expanded}
           hasCodeView={hasModeSwitch}
-          hasPublishView={Boolean(!showNewTab && activeArtifact?.kind === 'game-project' && publishGameId)}
-          hasTrailerView={Boolean(!showNewTab && activeArtifact?.kind === 'game-project' && gameMeta?.trailerUrl)}
+          hasPublishView={hasPublishView}
+          hasTrailerView={hasTrailerView}
           hasPublished={Boolean(publishSession && (publishSession.published.length > 0 || publishSession.linkUrl))}
           targetIcon={gameStudioTargetIcon}
           targetDisplayLabel={gameStudioTargetLabel}
@@ -3865,7 +3886,7 @@ export function ArtifactBrowserPane({
             audioMuted={gameAudioMuted}
             audioVolume={gameAudioVolume}
           />
-        ) : activeArtifact.kind === 'web' && activeArtifact.url && chatId ? (
+        ) : activeArtifact.kind === 'web' && activeArtifact.url && browserSessionId ? (
           <div className="om-sa-web-stage">
             <div className="om-sa-web-stage-main" data-framed={Boolean(fixedViewport) || undefined}>
               <div
@@ -3883,10 +3904,11 @@ export function ArtifactBrowserPane({
                   }
                 >
                   <WebBrowser
+                    key={activeArtifact.id}
                     ref={webRef}
-                    sessionId={chatId}
+                    sessionId={browserSessionId}
                     tabId={safeBrowserTabId(activeArtifact.id)}
-                    endpoint={superAgentBrowserEndpoint(chatId, safeBrowserTabId(activeArtifact.id))}
+                    endpoint={superAgentBrowserEndpoint(chatId, safeBrowserTabId(activeArtifact.id), effectivePreviewBrowserSessionId)}
                     url={activeArtifact.url}
                     interactive={!annotateActive}
                     fixedViewport={fixedViewport}
