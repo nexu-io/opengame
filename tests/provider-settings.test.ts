@@ -913,6 +913,35 @@ test('production billing uses the authenticated summary and preserves HTTP refus
   assert.equal(denied.balance, undefined);
 }));
 
+test('referral rewards use the signed-in account and omit unavailable progress', t => fixture(async store => {
+  const account = new OpenDesignAccount(store.directory);
+  t.after(() => account.close());
+  let response = Response.json(null);
+  const fetchReferral = t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => {
+    assert.equal(url, 'https://amr-api.open-design.ai/api/v1/referrals/me');
+    assert.equal(init.redirect, 'error');
+    assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer test-control');
+    return response;
+  });
+
+  assert.equal(await account.referralRewards(), null);
+  assert.equal(fetchReferral.mock.callCount(), 0);
+  await mkdir(account.home, { recursive: true });
+  await writeFile(path.join(store.directory, 'account/session.json'), JSON.stringify({ id: 'test-session' }));
+  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({ profiles: { prod: {
+    apiUrl: 'https://amr-api.open-design.ai', user: { id: 'test' }, controlKey: 'test-control', controlKeyId: 'test-id', runtimeKey: 'test-runtime',
+  } } }));
+  const progress = { invitedCount: 0, inviteTarget: 5, resetCardsAvailable: 0 };
+  response = Response.json({ ...progress, referralCode: 'private-code', referralUrl: 'https://example.invalid' });
+  assert.deepEqual(await account.referralRewards(), progress);
+  assert.equal(fetchReferral.mock.callCount(), 1);
+  response = Response.json({ ...progress, inviteTarget: 0 });
+  assert.equal(await account.referralRewards(), null);
+  response = Response.json({ error: 'unavailable' }, { status: 503 });
+  assert.equal(await account.referralRewards(), null);
+  assert.equal(fetchReferral.mock.callCount(), 3);
+}));
+
 test('the subscription page opens in the system browser through a one-time account intent, falling back to the plain page', t => fixture(async store => {
   const account = new OpenDesignAccount(store.directory);
   await mkdir(account.home, { recursive: true });

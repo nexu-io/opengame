@@ -5,15 +5,23 @@ import { cleanupMounted, mountHost } from '../components/ui/mountHost.testHelper
 import { I18nProvider, LOCALE_STORAGE_KEY } from '../i18n/I18n';
 import { readStudioUiPreferences } from '../utils/studioUiPreferences';
 import { ApplicationAccountMenu } from './ApplicationChrome';
+import { gatewayRequest } from './gatewayClient';
 import { SettingsCenter } from './SettingsCenter';
+import type { AccountSummary } from '../../../shared/provider-directory';
 
+const accountMock = vi.hoisted(() => ({ account: null as AccountSummary | null }));
 vi.mock('./WorkspaceFrame', () => ({ useWorkspaceChrome: () => ({ openHome: vi.fn(), openLibrary: vi.fn(), switchingDisabled: false, navigationCollapsed: false }) }));
-vi.mock('./AccountSettings', () => ({ useAccountSummary: () => ({ account: null }), AccountSettings: () => null }));
+vi.mock('./AccountSettings', () => ({ useAccountSummary: () => accountMock, AccountSettings: () => null }));
 vi.mock('./ModelSwitcher', () => ({ ModelSwitcher: () => null }));
 vi.mock('./GitHubLink', () => ({ GitHubLink: () => null }));
 vi.mock('./gatewayClient', () => ({ gatewayRequest: vi.fn(async () => ({ version: 'test' })) }));
 
-beforeEach(() => { localStorage.clear(); history.replaceState(null, '', '/'); });
+beforeEach(() => {
+  localStorage.clear();
+  history.replaceState(null, '', '/');
+  accountMock.account = null;
+  vi.mocked(gatewayRequest).mockClear();
+});
 afterEach(() => {
   cleanupMounted();
   delete document.documentElement.dataset.theme;
@@ -21,6 +29,29 @@ afterEach(() => {
 });
 const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
 const click = async (element: Element | null) => { expect(element).not.toBeNull(); act(() => (element as HTMLElement).click()); await settle(); };
+
+it.each([true, false])('links to the Cloud rewards page with available progress %s', async available => {
+  accountMock.account = { state: 'signed-in', consoleUrl: 'https://open-design.ai/cloud' };
+  const progress = { invitedCount: 2, inviteTarget: 5, resetCardsAvailable: 1 };
+  vi.mocked(gatewayRequest).mockResolvedValueOnce(available ? progress : null);
+  mountHost(<I18nProvider initialLocale="en"><ApplicationAccountMenu settings={null} openSettings={() => {}} /></I18nProvider>);
+  expect(gatewayRequest).not.toHaveBeenCalled();
+  await click(document.querySelector('[aria-label="Account menu"]'));
+  const referral = document.querySelector<HTMLAnchorElement>('a[href*="/cloud/reset"]');
+  expect(gatewayRequest).toHaveBeenCalledWith('settings/account/referral');
+  expect(referral?.href).toBe('https://open-design.ai/cloud/reset?entry_source=client_entry');
+  expect(referral?.target).toBe('_blank');
+  expect(referral?.textContent).toContain('Share OpenDesign · Earn reset cards');
+  expect(referral?.textContent?.includes('2/5 teammates joined · 1 reset cards ready')).toBe(available);
+});
+
+it('keeps the rewards entry and progress request hidden when signed out', async () => {
+  accountMock.account = { state: 'signed-out', consoleUrl: 'https://open-design.ai/cloud' };
+  mountHost(<I18nProvider initialLocale="en"><ApplicationAccountMenu settings={null} openSettings={() => {}} /></I18nProvider>);
+  await click(document.querySelector('[aria-label="Account menu"]'));
+  expect(document.querySelector('a[href*="/cloud/reset"]')).toBeNull();
+  expect(gatewayRequest).not.toHaveBeenCalled();
+});
 
 it('switches the shared locale from the account submenu and keeps settings in sync', async () => {
   mountHost(<I18nProvider initialLocale="en"><ApplicationAccountMenu settings="general" openSettings={() => {}} /><SettingsCenter section="general" onSection={() => {}} openConnections={() => {}} /></I18nProvider>);

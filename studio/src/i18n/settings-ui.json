@@ -1,5 +1,7 @@
 {
   "zh-CN": {
+    "Share OpenDesign · Earn reset cards": "分享 OpenDesign · 赢取重置卡",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "已成功邀请 {invited}/{target} 位好友 · 可用 {cards} 张重置卡",
     "Go back": "返回",
     "Account": "账户",
     "Account menu": "账户菜单",
@@ -399,6 +401,8 @@
     "Could not save setting.": "无法保存设置。"
   },
   "ja": {
+    "Share OpenDesign · Earn reset cards": "OpenDesign を共有 · リセットカードを獲得",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "{invited}/{target} 名が参加 · リセットカード {cards} 枚利用可能",
     "Go back": "戻る",
     "Local Agents": "ローカル Agent",
     "Default Agent & models": "既定の Agent とモデル",
@@ -567,6 +571,8 @@
     "Could not save setting.": "設定を保存できませんでした。"
   },
   "ko": {
+    "Share OpenDesign · Earn reset cards": "OpenDesign 공유 · 리셋 카드 받기",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "팀원 {invited}/{target}명 합류 · 리셋 카드 {cards}장 보유",
     "Go back": "뒤로",
     "What's new": "새로운 소식",
     "Feedback": "피드백",
@@ -630,6 +636,8 @@
     "Could not save setting.": "설정을 저장할 수 없습니다."
   },
   "de": {
+    "Share OpenDesign · Earn reset cards": "OpenDesign teilen · Reset-Karten verdienen",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "{invited}/{target} Kollegen beigetreten · {cards} Reset-Karten bereit",
     "Go back": "Zurück",
     "What's new": "Neuigkeiten",
     "Feedback": "Feedback",
@@ -693,6 +701,8 @@
     "Could not save setting.": "Einstellung konnte nicht gespeichert werden."
   },
   "fr": {
+    "Share OpenDesign · Earn reset cards": "Partager OpenDesign · Gagner des cartes",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "{invited}/{target} collègues inscrits · {cards} cartes prêtes",
     "Go back": "Retour",
     "What's new": "Nouveautés",
     "Feedback": "Commentaires",
@@ -756,6 +766,8 @@
     "Could not save setting.": "Impossible d’enregistrer le paramètre."
   },
   "ru": {
+    "Share OpenDesign · Earn reset cards": "Делитесь OpenDesign · Получайте карты сброса",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "Присоединились {invited}/{target} · доступно карт: {cards}",
     "Go back": "Назад",
     "What's new": "Что нового",
     "Feedback": "Обратная связь",
@@ -819,6 +831,8 @@
     "Could not save setting.": "Не удалось сохранить настройку."
   },
   "es": {
+    "Share OpenDesign · Earn reset cards": "Comparte OpenDesign · Gana tarjetas de reinicio",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "{invited}/{target} unidos · {cards} tarjetas listas",
     "Go back": "Volver",
     "What's new": "Novedades",
     "Feedback": "Comentarios",
@@ -882,6 +896,8 @@
     "Could not save setting.": "No se pudo guardar el ajuste."
   },
   "pt-BR": {
+    "Share OpenDesign · Earn reset cards": "Compartilhe OpenDesign · Ganhe cartões",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "{invited}/{target} entraram · {cards} cartões prontos",
     "Go back": "Voltar",
     "What's new": "Novidades",
     "Feedback": "Feedback",
@@ -945,6 +961,8 @@
     "Could not save setting.": "Não foi possível salvar a configuração."
   },
   "it": {
+    "Share OpenDesign · Earn reset cards": "Condividi OpenDesign · Guadagna carte reset",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "{invited}/{target} colleghi uniti · {cards} carte pronte",
     "Go back": "Indietro",
     "What's new": "Novità",
     "Feedback": "Feedback",
@@ -1008,6 +1026,8 @@
     "Could not save setting.": "Impossibile salvare l’impostazione."
   },
   "tr": {
+    "Share OpenDesign · Earn reset cards": "OpenDesign Paylaş · Sıfırlama kartı kazan",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "{invited}/{target} arkadaş katıldı · {cards} sıfırlama kartı hazır",
     "Go back": "Geri",
     "What's new": "Yenilikler",
     "Feedback": "Geri bildirim",
