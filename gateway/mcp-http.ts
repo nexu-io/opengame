@@ -119,9 +119,11 @@ export class McpTokenStore {
     const task = this.queue
       .catch(() => {})
       .then(async () => {
-        const state = await this.load();
+        const state = structuredClone(await this.load());
         const result = await fn(state);
         await writeSettings(this.file, state);
+        // Readers must only observe token changes after their durable publication.
+        this.statePromise = Promise.resolve(state);
         return result;
       });
     this.queue = task.catch(() => {});
