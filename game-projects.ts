@@ -791,6 +791,20 @@ export function trailerTransition(previous:GameTrailerStatus,next:GameTrailerSta
   return next==='failed'&&trailerRunning(previous)||({recording:'composing',composing:'rendering',rendering:'ready'} as Record<string,string>)[previous]===next;
 }
 
+async function withGameHookDeadline<T>(operation: Promise<T>, name: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`window.__omGame.${name} timed out after 10000ms`)), 10000);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** Wait for async loading screens (phase==="loading" or disabled #start) before starting play. */
 async function waitForGameReady(page: Pick<Page, 'evaluate' | 'waitForFunction'>, waitForReadyMs = 10000) {
   if (waitForReadyMs <= 0) return;
@@ -1661,23 +1675,20 @@ server.listen(port, '127.0.0.1', () => {
         await startGameBrowserPage(page, !!recording);
       }));
       const readHook=async(page:Page)=>{
-        try{return await page.evaluate(async()=>{const hook=(window as any).__omGame;if(!hook||typeof hook.getState!=='function')return null;const value={state:await hook.getState(),stats:typeof hook.getStats==='function'?await hook.getStats():null};const json=JSON.stringify(value);if(json.length>65536)throw Error('Test hook state exceeds 64 KiB');return JSON.parse(json);});}
+        try{return await withGameHookDeadline(page.evaluate(async()=>{const hook=(window as any).__omGame;if(!hook||typeof hook.getState!=='function')return null;const value={state:await hook.getState(),stats:typeof hook.getStats==='function'?await hook.getStats():null};const json=JSON.stringify(value);if(json.length>65536)throw Error('Test hook state exceeds 64 KiB');return JSON.parse(json);}), 'getState()/getStats()');}
         catch(error){return {state:null,error:String(error)};}
       };
       const runSelfTests = async (page: Page) => {
         try {
-          return await Promise.race([
-            page.evaluate(async () => {
-              const hook = (window as any).__omGame;
-              const fn = typeof hook?.runSelfTests === 'function' ? hook.runSelfTests : typeof hook?.runSelfTest === 'function' ? hook.runSelfTest : null;
-              if (!fn) return null;
-              const raw = await fn();
-              const json = JSON.stringify(raw);
-              if (!json || json.length > 65536) throw Error('Self-test result exceeds 64 KiB');
-              return JSON.parse(json);
-            }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('window.__omGame.runSelfTests() timed out after 10000ms')), 10000)),
-          ]);
+          return await withGameHookDeadline(page.evaluate(async () => {
+            const hook = (window as any).__omGame;
+            const fn = typeof hook?.runSelfTests === 'function' ? hook.runSelfTests : typeof hook?.runSelfTest === 'function' ? hook.runSelfTest : null;
+            if (!fn) return null;
+            const raw = await fn();
+            const json = JSON.stringify(raw);
+            if (!json || json.length > 65536) throw Error('Self-test result exceeds 64 KiB');
+            return JSON.parse(json);
+          }), 'runSelfTests()');
         } catch (error) {
           return { __error: String(error) };
         }
@@ -1692,12 +1703,12 @@ server.listen(port, '127.0.0.1', () => {
         for(const a of actions){
           if(a.type==='wait')await new Promise(resolve=>setTimeout(resolve,a.ms));
           else if(a.type==='action'){
-            const dispatched = await page.evaluate(async (payload) => {
+            const dispatched = await withGameHookDeadline(page.evaluate(async (payload) => {
               const hook = (window as any).__omGame;
               if (typeof hook?.sendAction !== 'function') return { ok: false, reason: 'window.__omGame.sendAction is not defined' };
               await hook.sendAction(payload);
               return { ok: true };
-            }, a.action);
+            }, a.action), 'sendAction()');
             if (!dispatched.ok) throw new Error(dispatched.reason);
             await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
           }
