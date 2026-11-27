@@ -17,6 +17,7 @@ import {
 import { slug, validField, type EventFields } from '../tracking/core.ts';
 import { accountErrorKinds, accountStages, entitlementHookIds, providerSetupEntries, type EntitlementHookId, type ProviderSetupEntry, type omEvents } from '../tracking/events.ts';
 import { validHostContext, type HostContext } from '../tracking/host.ts';
+import { resolveRemoteTaskUpstreamCode } from '../tracking/tool-fields.ts';
 import { readSettings, writeSettings } from './settings-storage.ts';
 import { planMediaEntitlement } from './account-media.ts';
 import { registeredProvider } from '../shared/provider-registry.ts';
@@ -1282,9 +1283,7 @@ export class OpenDesignAccount {
     for (;;) {
       const task = await read();
       if (['failed', 'cancelled', 'canceled', 'expired'].includes(task.status)) {
-        const code = typeof task.error?.code === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(task.error.code)
-          ? task.error.code
-          : task.status === 'expired' ? 'video_content_expired' : undefined;
+        const code = resolveRemoteTaskUpstreamCode(task.status, task.error, 'video_content_expired');
         await progress('remote_failed');
         await onResult?.({ error: { ...(code ? { code } : {}), ...(typeof task.error?.retryable === 'boolean' ? { retryable: task.error.retryable } : {}) } }, true);
         throw withErrorMeta(new Error(jobMessages.taskFailed), { upstreamCode: code });
@@ -1376,8 +1375,8 @@ export class OpenDesignAccount {
     let completedTask: any;
     for (;;) {
       const task = await read();
-      if (['failed', 'cancelled', 'canceled'].includes(task.status)) {
-        const code = typeof task.error?.code === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(task.error.code) ? task.error.code : undefined;
+      if (['failed', 'expired', 'cancelled', 'canceled'].includes(task.status)) {
+        const code = resolveRemoteTaskUpstreamCode(task.status, task.error, 'expired');
         await progress('remote_failed');
         await onResult?.({ error: { ...(code ? { code } : {}), ...(typeof task.error?.retryable === 'boolean' ? { retryable: task.error.retryable } : {}) } }, true);
         throw withErrorMeta(new Error(jobMessages.taskFailed), { upstreamCode: code });
@@ -1393,10 +1392,10 @@ export class OpenDesignAccount {
     if (typeof initialAsset.size === 'number' && Number.isSafeInteger(initialAsset.size) && initialAsset.size >= 24) {
       return resumableDownload(directory, async () => {
         const task = await read();
-        if (['failed', 'cancelled', 'canceled'].includes(task.status)) {
+        if (['failed', 'expired', 'cancelled', 'canceled'].includes(task.status)) {
           await progress('remote_failed');
           throw withErrorMeta(new Error(jobMessages.taskFailed), {
-            upstreamCode: typeof task.error?.code === 'string' ? task.error.code : undefined,
+            upstreamCode: resolveRemoteTaskUpstreamCode(task.status, task.error, 'expired'),
           });
         }
         if (task.status !== 'succeeded') throw new Error(jobMessages.resultUnreadable);
@@ -1446,10 +1445,10 @@ export class OpenDesignAccount {
     };
     for (;;) {
       const task = await read();
-      if (['failed', 'cancelled', 'canceled'].includes(task.status)) {
+      if (['failed', 'expired', 'cancelled', 'canceled'].includes(task.status)) {
         await progress('remote_failed');
         throw withErrorMeta(new Error(jobMessages.taskFailed), {
-          upstreamCode: typeof task.error?.code === 'string' ? task.error.code : undefined,
+          upstreamCode: resolveRemoteTaskUpstreamCode(task.status, task.error, 'expired'),
         });
       }
       if (task.status === 'succeeded') break;
@@ -1458,10 +1457,10 @@ export class OpenDesignAccount {
     }
     return resumableDownload(directory, async () => {
       const task = await read();
-      if (['failed', 'cancelled', 'canceled'].includes(task.status)) {
+      if (['failed', 'expired', 'cancelled', 'canceled'].includes(task.status)) {
         await progress('remote_failed');
         throw withErrorMeta(new Error(jobMessages.taskFailed), {
-          upstreamCode: typeof task.error?.code === 'string' ? task.error.code : undefined,
+          upstreamCode: resolveRemoteTaskUpstreamCode(task.status, task.error, 'expired'),
         });
       }
       if (task.status !== 'succeeded') throw new Error(jobMessages.resultUnreadable);

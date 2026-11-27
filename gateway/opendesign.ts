@@ -5,7 +5,8 @@ import type { GenerationJob, Model } from '../shared/gateway.ts';
 import { isSfxModel } from '../shared/audio-kind.ts';
 import { openDesignImageReferenceCap } from '../shared/opendesign-models.ts';
 import { resolveGenerationParameters } from '../shared/generation-options.ts';
-import { apiJson, publicProviderFetch, ProviderError, retryRead, withErrorMeta, type Fetcher } from './network.ts';
+import { apiJson, publicProviderFetch, ProviderError, readUpstreamErrorCode, retryRead, withErrorMeta, type Fetcher } from './network.ts';
+import { resolveRemoteTaskUpstreamCode } from '../tracking/tool-fields.ts';
 import type { ProviderAdapter, ProviderContext } from './providers.ts';
 import {
   computeOpenDesignPerImageBudget,
@@ -305,19 +306,36 @@ export const opendesign: ProviderAdapter = {
         if (result.result && typeof result.result === 'object' && !Array.isArray(result.result) && JSON.stringify(result.result).length <= 2_000_000) await ctx.result?.(result.result);
         if (job.modality === 'video') {
           await ctx.progress('downloading');
-          return [await retryRead(async () => {
-            const response = await fetcher(taskUrl + '/content', { headers, redirect: 'error', signal: ctx.signal });
-            if ([301, 302, 303, 307, 308].includes(response.status) && response.headers.get('location')) return new URL(response.headers.get('location')!, taskUrl).href;
-            if (!response.ok) throw new ProviderError(`OpenDesign Cloud content HTTP ${response.status}`, response.status, undefined, 'download');
-            return Buffer.from(await response.arrayBuffer());
-          }, ctx.signal, 5, () => ctx.progress('reconnecting'), () => ctx.progress('downloading'))];
+          try {
+            return [await retryRead(async () => {
+              const response = await fetcher(taskUrl + '/content', { headers, redirect: 'error', signal: ctx.signal });
+              if ([301, 302, 303, 307, 308].includes(response.status) && response.headers.get('location')) return new URL(response.headers.get('location')!, taskUrl).href;
+              if (!response.ok) {
+                const upstreamCode = await readUpstreamErrorCode(response);
+                const isExpired = response.status === 410 || upstreamCode === 'video_content_expired' || upstreamCode === 'video_task_not_found';
+                throw new ProviderError(`OpenDesign Cloud content HTTP ${response.status}`, response.status, upstreamCode, isExpired ? 'api' : 'download');
+              }
+              return Buffer.from(await response.arrayBuffer());
+            }, ctx.signal, 5, () => ctx.progress('reconnecting'), () => ctx.progress('downloading'))];
+          } catch (error) {
+            const status = (error as { status?: number }).status;
+            const upstreamCode = (error as { upstreamCode?: string }).upstreamCode;
+            const errorSource = (error as { errorSource?: string }).errorSource;
+            if (errorSource === 'api' && (status === 410 || upstreamCode === 'video_content_expired' || upstreamCode === 'video_task_not_found')) {
+              const code = upstreamCode ?? 'video_content_expired';
+              await ctx.progress('remote_failed');
+              await ctx.result?.({ error: { code } }, true);
+              throw withErrorMeta(new Error(`OpenDesign Cloud video content expired (${code}); the remote task is terminal`, { cause: error }), { status, upstreamCode: code, errorSource: 'api' });
+            }
+            throw error;
+          }
         }
         const urls = result.assets?.map((asset: any) => asset.url).filter((url: unknown) => typeof url === 'string');
         if (!urls?.length) throw new Error('OpenDesign Cloud completed without media output');
         return urls;
       }
-      if (['failed', 'cancelled'].includes(result.status)) {
-        const code = typeof result.error?.code === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(result.error.code) ? result.error.code : undefined;
+      if (['failed', 'expired', 'cancelled', 'canceled'].includes(result.status)) {
+        const code = resolveRemoteTaskUpstreamCode(result.status, result.error, 'expired');
         await ctx.progress('remote_failed');
         await ctx.result?.({ error: { ...(code ? { code } : {}), ...(typeof result.error?.retryable === 'boolean' ? { retryable: result.error.retryable } : {}) } }, true);
         throw withErrorMeta(new Error(`OpenDesign Cloud task ${result.status}${code ? ` (${code})` : ''}; the remote task is terminal`), { upstreamCode: code });

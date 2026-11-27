@@ -10,7 +10,7 @@ import { atomicAssetJson, assetHash } from './asset-library.ts';
 import type { CapabilityScriptContext, CapabilityScriptOutput, CapabilityScriptStage, CapabilityScriptTelemetryMeta } from './capability-scripts.ts';
 import { optimizeGlbTexturesForPublish } from './glb-optimize.ts';
 import { boundedUpstreamCode, ProviderError, publicProviderFetch, retryRead, withErrorMeta, type Fetcher } from './network.ts';
-import type { MediaGenerationMode, MediaGenerationPipelineStep } from '../tracking/tool-fields.ts';
+import { isExplicitSafetyRejectionText, resolveRemoteTaskUpstreamCode, type MediaGenerationMode, type MediaGenerationPipelineStep } from '../tracking/tool-fields.ts';
 import { cloud3dModels, cloudSpatialCatalog, cloudWorldModels, mediaSubmitHeaders, productionApi, type Cloud3dModelEntry } from './opendesign.ts';
 import { detectReferenceImageMime, uploadOpenDesignReference } from './reference-upload.ts';
 import { gatewayFor } from './service.ts';
@@ -429,12 +429,15 @@ async function tripoJson<T = any>(
   }
   if (!res.ok) {
     const detail = parsed?.error?.message || parsed?.error || parsed?.message || parsed?.detail || text.slice(0, 300);
-    const upstreamCode = boundedUpstreamCode(parsed?.error)
-      ?? boundedUpstreamCode(parsed?.error?.code)
+    const rawCode = boundedUpstreamCode(parsed?.error?.code)
       ?? boundedUpstreamCode(parsed?.error?.error_code)
       ?? boundedUpstreamCode(parsed?.error_code)
-      ?? boundedUpstreamCode(parsed?.code);
-    throw new ProviderError(`3D gateway HTTP ${res.status} on ${endpoint}: ${String(detail)}`, res.status, upstreamCode, 'api');
+      ?? boundedUpstreamCode(parsed?.code)
+      ?? boundedUpstreamCode(parsed?.error);
+    const upstreamCode = ((!rawCode || rawCode === 'provider_error') && isExplicitSafetyRejectionText(typeof detail === 'string' ? detail : undefined))
+      ? 'content_policy_violation'
+      : rawCode;
+    throw new ProviderError(`3D gateway HTTP ${res.status} on ${endpoint}`, res.status, upstreamCode, 'api');
   }
   return parsed as T;
 }
@@ -595,14 +598,21 @@ async function submitAndWaitTask(
       const artifacts = Array.isArray(polled.artifacts) ? polled.artifacts : [];
       return { taskId, status, artifacts, raw: polled };
     }
-    if (status === 'failed' || status === 'cancelled' || status === 'canceled' || status === 'error') {
+    if (status === 'failed' || status === 'expired' || status === 'cancelled' || status === 'canceled' || status === 'error') {
       const errMsg = polled?.error?.message || polled?.error || polled?.message || status;
-      const upstreamCode = typeof polled?.error?.code === 'string'
-        ? polled.error.code
-        : typeof polled?.code === 'string' ? polled.code : undefined;
+      const explicitCode = boundedUpstreamCode(polled?.error?.code)
+        ?? boundedUpstreamCode(polled?.error?.error_code)
+        ?? boundedUpstreamCode(polled?.error_code)
+        ?? boundedUpstreamCode(polled?.code)
+        ?? boundedUpstreamCode(polled?.error);
+      const upstreamCode = resolveRemoteTaskUpstreamCode(
+        status,
+        { code: explicitCode, message: typeof errMsg === 'string' ? errMsg : undefined },
+        'expired',
+      );
       config.telemetry?.report('remote_failed', { pipelineStep, mode, remoteId: taskId, remoteTerminal: true });
       throw withErrorMeta(
-        new Error(`3D task ${taskId} (${String(payload.operation ?? 'unknown')}) ${status}: ${String(errMsg)}`),
+        new Error(`3D task ${taskId} (${String(payload.operation ?? 'unknown')}) ${status}; the remote task is terminal`),
         { ...(upstreamCode ? { upstreamCode } : {}), errorSource: 'api' },
       );
     }

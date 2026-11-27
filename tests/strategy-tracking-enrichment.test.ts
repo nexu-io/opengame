@@ -24,6 +24,7 @@ import {
   extractUpstreamErrorCode,
   mediaGenerationError,
   mediaGenerationErrorCategory,
+  resolveRemoteTaskUpstreamCode,
   safeCapabilityId,
   superAgentError,
   toolInputFields,
@@ -2141,6 +2142,250 @@ test('Multimodal failure attribution blind spots: AMR upstream codes, CONTENT_BL
   assert.equal(codexRes?.properties.failure_phase, 'generating');
   assert.equal(codexRes?.properties.error_code, 'EMPTY_OUTPUT');
   assert.equal(codexRes?.properties.error_category, 'upstream_error');
+
+  // 6) AMR timeout, capacity/server_busy, execution/persistence codes, safety-text fallback, and 3D string error code shape
+  for (const timeoutCode of ['provider_deadline_exceeded', 'media_link_timeout', 'media_operation_timeout', 'upstream_timeout'] as const) {
+    const err = new ProviderError('Remote task failed', 504, timeoutCode);
+    assert.equal(extractUpstreamErrorCode(err), timeoutCode);
+    assert.equal(mediaGenerationError(err, 'remote_task'), 'TIMEOUT');
+    assert.equal(mediaGenerationErrorCategory('TIMEOUT', 'remote_task', 'amr_account'), 'timeout');
+  }
+  for (const busyCode of ['server_busy', 'upstream_capacity_unavailable'] as const) {
+    const err = new ProviderError('Service busy', 503, busyCode);
+    assert.equal(extractUpstreamErrorCode(err), busyCode);
+    assert.equal(mediaGenerationError(err, 'submitting'), 'RATE_LIMITED');
+    assert.equal(mediaGenerationErrorCategory('RATE_LIMITED', 'submitting', 'amr_account'), 'rate_limit');
+  }
+  assert.equal(extractUpstreamErrorCode(new ProviderError('Connection refused', 503, 'audio_upstream_unavailable')), 'audio_upstream_unavailable');
+  assert.equal(mediaGenerationError(new ProviderError('Connection refused', 503, 'audio_upstream_unavailable'), 'submitting'), 'PROVIDER_UNAVAILABLE');
+  for (const retainedCode of ['execution_interrupted', 'media_persistence_failed', 'image_task_expired', 'video_content_expired', 'video_task_not_found', 'expired', 'upstream_error'] as const) {
+    assert.equal(extractUpstreamErrorCode(new ProviderError('failed', 502, retainedCode)), retainedCode);
+  }
+  assert.equal(mediaGenerationError(new ProviderError('expired', undefined, 'expired'), 'remote_task'), 'TIMEOUT');
+  assert.equal(resolveRemoteTaskUpstreamCode('failed', { code: 'provider_error', message: 'Prompt rejected by safety policy' }), 'content_policy_violation');
+  assert.equal(resolveRemoteTaskUpstreamCode('expired', undefined, 'expired'), 'expired');
+  assert.equal(resolveRemoteTaskUpstreamCode('expired', undefined, 'video_content_expired'), 'video_content_expired');
+  // Safety text beats generic HTTP 400 and legacy HTTP 502 provider_error rejection wording,
+  // but NEVER a 400 validation message mentioning "safety policy" or a 502/503 safety-service outage
+  assert.equal(mediaGenerationError(new ProviderError('Content policy rejected the prompt.', 400), 'submitting'), 'CONTENT_BLOCKED');
+  assert.equal(mediaGenerationError(new ProviderError('Blocked by safety system: this content is unavailable', 400), 'submitting'), 'CONTENT_BLOCKED');
+  assert.equal(mediaGenerationError(new ProviderError('Content is unavailable because it was blocked by the safety system', 400), 'submitting'), 'CONTENT_BLOCKED');
+  assert.equal(mediaGenerationError(new ProviderError('Missing required safety policy configuration', 400), 'submitting'), 'INVALID_REQUEST');
+  assert.equal(mediaGenerationError(new ProviderError('Invalid parameter: expected a content policy violation enum value', 400), 'submitting'), 'INVALID_REQUEST');
+  assert.equal(mediaGenerationError(new ProviderError('The request was rejected by the safety system.', 502, 'provider_error'), 'remote_task'), 'CONTENT_BLOCKED');
+  assert.equal(mediaGenerationError(new ProviderError('The safety system returned a bad gateway response.', 502, 'provider_error'), 'submitting'), 'UPSTREAM_5XX');
+  assert.equal(mediaGenerationError(new ProviderError('Content safety system unavailable', 503), 'submitting'), 'UPSTREAM_5XX');
+  // Explicit invalid_request still stays INVALID_REQUEST
+  assert.equal(mediaGenerationError(new ProviderError('Invalid parameter', 400, 'invalid_request'), 'submitting'), 'INVALID_REQUEST');
+
+  // 7) End-to-end OpenDesign Cloud poll & download fixtures:
+  //    (a) terminal `expired` with `error.code: 'timeout'` -> TIMEOUT
+  //    (b) terminal `expired` without `error.code` -> upstream_error_code='expired' -> TIMEOUT
+  //    (c) legacy pre-#1297 failed image poll (`provider_error` + explicit safety message) -> CONTENT_BLOCKED without leaking provider text
+  //    (d) video `/content` 410 `video_content_expired` -> remote_terminal=true, is_resumable=false (never DOWNLOAD_FAILED/resumable)
+  const cloudFixturesGateway = new ModelGateway(store, {
+    tracking,
+    pollMs: 5,
+    fetcher: async (url, init = {}) => {
+      const target = String(url);
+      if (target.endsWith('/api/v1/media/models?include_audio=true')) {
+        return Response.json({
+          models: [
+            { model: 'seedance-2.0', kind: 'video', capabilities: {} },
+            { model: 'seedream-5.5', kind: 'image', capabilities: {} },
+          ],
+        });
+      }
+      if (target.endsWith('/videos/tasks') && init.method === 'POST') {
+        const body = JSON.parse(String(init.body ?? '{}')) as { prompt?: string };
+        const id = body.prompt === 'Expire bare' ? 'vid-exp-bare' : body.prompt === 'Content 410' ? 'vid-410' : body.prompt === 'Content 404 structured' ? 'vid-404-struct' : 'vid-exp-1';
+        return Response.json({ task_id: id, status: 'queued' }, { status: 202 });
+      }
+      if (target.endsWith('/images/generations') && init.method === 'POST') {
+        return Response.json({ task_id: 'img-legacy-policy', status: 'queued' }, { status: 202 });
+      }
+      if (target.endsWith('/videos/tasks/vid-exp-1')) {
+        return Response.json({ task_id: 'vid-exp-1', status: 'expired', error: { code: 'timeout', message: 'The request timed out. Please retry.' } });
+      }
+      if (target.endsWith('/videos/tasks/vid-exp-bare')) {
+        return Response.json({ task_id: 'vid-exp-bare', status: 'expired' });
+      }
+      if (target.endsWith('/videos/tasks/vid-410')) {
+        return Response.json({ task_id: 'vid-410', status: 'succeeded' });
+      }
+      if (target.endsWith('/videos/tasks/vid-410/content')) {
+        return Response.json({ error: 'video_content_expired' }, { status: 410 });
+      }
+      if (target.endsWith('/videos/tasks/vid-404-struct')) {
+        return Response.json({ task_id: 'vid-404-struct', status: 'succeeded' });
+      }
+      if (target.endsWith('/videos/tasks/vid-404-struct/content')) {
+        return Response.json({ error: 'not_found', code: 'video_task_not_found' }, { status: 404 });
+      }
+      if (target.endsWith('/images/tasks/img-legacy-policy')) {
+        return Response.json({
+          task_id: 'img-legacy-policy',
+          status: 'failed',
+          error: { code: 'provider_error', message: 'Prompt rejected by safety policy on supplier XYZ' },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    },
+  });
+  await cloudFixturesGateway.configureProvider('opendesign', { apiKey: 'od-secret-key', baseUrl: 'https://amr-api.open-design.ai' });
+  await cloudFixturesGateway.listModels({ provider: 'opendesign', refresh: true });
+  const expiredVidJob = await cloudFixturesGateway.submit({ modality: 'video', prompt: 'Expire me', model: 'opendesign:seedance-2.0', library: { title: 'Expired vid' } }, codexHost, { entrySurface: 'studio' });
+  const bareExpiredVidJob = await cloudFixturesGateway.submit({ modality: 'video', prompt: 'Expire bare', model: 'opendesign:seedance-2.0', library: { title: 'Bare expired vid' } }, codexHost, { entrySurface: 'studio' });
+  const content410VidJob = await cloudFixturesGateway.submit({ modality: 'video', prompt: 'Content 410', model: 'opendesign:seedance-2.0', library: { title: 'Content 410 vid' } }, codexHost, { entrySurface: 'studio' });
+  const content404StructVidJob = await cloudFixturesGateway.submit({ modality: 'video', prompt: 'Content 404 structured', model: 'opendesign:seedance-2.0', library: { title: 'Content 404 struct vid' } }, codexHost, { entrySurface: 'studio' });
+  const legacyPolicyImgJob = await cloudFixturesGateway.submit({ modality: 'image', prompt: 'Legacy policy', model: 'opendesign:seedream-5.5', library: { title: 'Legacy policy img' } }, codexHost, { entrySurface: 'studio' });
+  for (let i = 0; i < 12; i++) {
+    await cloudFixturesGateway.tick();
+    if (!cloudFixturesGateway.active.size) break;
+    await Promise.all([...cloudFixturesGateway.active.values()].map(task => task.done));
+  }
+  while (tracking.pending() > 0) await tracking.flush();
+  const expiredRes = events.find(e => e.event === 'media_generation_result' && e.properties.job_id === expiredVidJob.id);
+  assert.equal(expiredRes?.properties.failure_phase, 'remote_task');
+  assert.equal(expiredRes?.properties.remote_task_id, 'vid-exp-1');
+  assert.equal(expiredRes?.properties.upstream_error_code, 'timeout');
+  assert.equal(expiredRes?.properties.error_code, 'TIMEOUT');
+  assert.equal(expiredRes?.properties.error_category, 'timeout');
+
+  const bareExpiredRes = events.find(e => e.event === 'media_generation_result' && e.properties.job_id === bareExpiredVidJob.id);
+  assert.equal(bareExpiredRes?.properties.failure_phase, 'remote_task');
+  assert.equal(bareExpiredRes?.properties.remote_task_id, 'vid-exp-bare');
+  assert.equal(bareExpiredRes?.properties.upstream_error_code, 'expired');
+  assert.equal(bareExpiredRes?.properties.error_code, 'TIMEOUT');
+  assert.equal(bareExpiredRes?.properties.error_category, 'timeout');
+
+  const content410Res = events.find(e => e.event === 'media_generation_result' && e.properties.job_id === content410VidJob.id);
+  assert.equal(content410Res?.properties.remote_terminal, true);
+  assert.equal(content410Res?.properties.is_resumable, false);
+  assert.equal(content410Res?.properties.failure_phase, 'remote_task');
+  assert.equal(content410Res?.properties.remote_task_id, 'vid-410');
+  assert.equal(content410Res?.properties.upstream_error_code, 'video_content_expired');
+  assert.notEqual(content410Res?.properties.error_code, 'DOWNLOAD_FAILED');
+
+  const content404StructRes = events.find(e => e.event === 'media_generation_result' && e.properties.job_id === content404StructVidJob.id);
+  assert.equal(content404StructRes?.properties.remote_terminal, true);
+  assert.equal(content404StructRes?.properties.is_resumable, false);
+  assert.equal(content404StructRes?.properties.failure_phase, 'remote_task');
+  assert.equal(content404StructRes?.properties.remote_task_id, 'vid-404-struct');
+  assert.equal(content404StructRes?.properties.upstream_error_code, 'video_task_not_found');
+  assert.notEqual(content404StructRes?.properties.error_code, 'DOWNLOAD_FAILED');
+
+  const legacyPolicyRes = events.find(e => e.event === 'media_generation_result' && e.properties.job_id === legacyPolicyImgJob.id);
+  assert.equal(legacyPolicyRes?.properties.failure_phase, 'remote_task');
+  assert.equal(legacyPolicyRes?.properties.remote_task_id, 'img-legacy-policy');
+  assert.equal(legacyPolicyRes?.properties.upstream_error_code, 'content_policy_violation');
+  assert.equal(legacyPolicyRes?.properties.error_code, 'CONTENT_BLOCKED');
+  assert.equal(legacyPolicyRes?.properties.error_category, 'content_policy');
+  const savedLegacyJob = await cloudFixturesGateway.getJob(legacyPolicyImgJob.id);
+  assert.equal(savedLegacyJob?.error?.includes('supplier XYZ'), false);
+
+  // BYOK / custom channels never emit remote_task_id even when a remote ID exists
+  const byokRes = events.find(e => e.event === 'media_generation_result' && e.properties.route_channel === 'byok_builtin');
+  assert.ok(byokRes, 'expected a byok_builtin result event in fixture');
+  assert.equal(byokRes?.properties.remote_task_id, undefined);
+  await cloudFixturesGateway.close();
+
+  // Private OpenDesign Cloud origin must NEVER emit remote_task_id; step transitions clear previous step's remoteId
+  const privateCloudGateway = new ModelGateway(store, {
+    tracking,
+    pollMs: 5,
+    fetcher: async (url, init = {}) => {
+      const target = String(url);
+      if (target.endsWith('/api/v1/media/models?include_audio=true')) {
+        return Response.json({ models: [{ model: 'seedream-5.5', kind: 'image', capabilities: {} }] });
+      }
+      if (target.endsWith('/images/generations') && init.method === 'POST') {
+        return Response.json({ task_id: 'private-task-secret-1', status: 'queued' }, { status: 202 });
+      }
+      if (target.endsWith('/images/tasks/private-task-secret-1')) {
+        return Response.json({ task_id: 'private-task-secret-1', status: 'failed', error: { code: 'provider_error' } });
+      }
+      return new Response('not found', { status: 404 });
+    },
+  });
+  await privateCloudGateway.configureProvider('opendesign', { apiKey: 'od-private-key', baseUrl: 'https://private-amr.example.com' });
+  await privateCloudGateway.listModels({ provider: 'opendesign', refresh: true });
+  const privateImgJob = await privateCloudGateway.submit({ modality: 'image', prompt: 'Private origin', model: 'opendesign:seedream-5.5', library: { title: 'Private img' } }, codexHost, { entrySurface: 'studio' });
+  for (let i = 0; i < 6; i++) {
+    await privateCloudGateway.tick();
+    if (!privateCloudGateway.active.size) break;
+    await Promise.all([...privateCloudGateway.active.values()].map(task => task.done));
+  }
+  while (tracking.pending() > 0) await tracking.flush();
+  const privateImgRes = events.find(e => e.event === 'media_generation_result' && e.properties.job_id === privateImgJob.id);
+  assert.equal(privateImgRes?.properties.has_remote_id, true);
+  assert.equal(privateImgRes?.properties.remote_task_id, undefined);
+  await privateCloudGateway.close();
+
+  const { createStageTimingTracker, recordMediaGenerationResult } = await import('../gateway/media-telemetry.ts');
+  const stageTracker = createStageTimingTracker('precheck');
+  stageTracker.markStage('polling', { pipelineStep: 'base', remoteId: 'tripo-base-1' });
+  assert.equal(stageTracker.remoteId, 'tripo-base-1');
+  stageTracker.markStage('submitting', { pipelineStep: 'rig' });
+  assert.equal(stageTracker.hasRemoteId, true);
+  assert.equal(stageTracker.remoteId, undefined);
+
+  // amr_account retains remote_task_id for official AMR origin (even when signed out / CONFIG_CHANGED)
+  // while whitespace-padded or non-official origins are safely omitted
+  const acctJobId = randomUUID();
+  const paddedJobId = randomUUID();
+  recordMediaGenerationResult(tracking, {
+    modality: 'video',
+    executorKind: 'gateway',
+    providerKind: 'account',
+    routeChannel: 'amr_account',
+    modelProvider: 'account',
+    modelId: 'seedance-2.5-flash',
+    entrySurface: 'studio',
+    destination: 'library',
+    referenceCount: 0,
+    isEdit: false,
+    jobId: acctJobId,
+    attemptKind: 'initial',
+    jobState: 'failed',
+    assetCount: 0,
+    durationMs: 1200,
+    endToEndMs: 1200,
+    hasRemoteId: true,
+    remoteTaskId: 'mvt_account_signed_out_1',
+    providerOrigin: 'https://amr-api.open-design.ai',
+    failurePhase: 'polling',
+    cause: new Error('Account changed after submit'),
+  }, codexHost);
+  recordMediaGenerationResult(tracking, {
+    modality: 'image',
+    executorKind: 'gateway',
+    providerKind: 'account',
+    routeChannel: 'amr_account',
+    modelProvider: 'account',
+    modelId: 'seedream-5.5',
+    entrySurface: 'studio',
+    destination: 'library',
+    referenceCount: 0,
+    isEdit: false,
+    jobId: paddedJobId,
+    attemptKind: 'initial',
+    jobState: 'failed',
+    assetCount: 0,
+    durationMs: 500,
+    endToEndMs: 500,
+    hasRemoteId: true,
+    remoteTaskId: ' mit_padded_1 ',
+    providerOrigin: 'https://amr-api.open-design.ai',
+    failurePhase: 'remote_task',
+    cause: new ProviderError('failed', 502, 'provider_error'),
+  }, codexHost);
+  while (tracking.pending() > 0) await tracking.flush();
+  const acctRes = events.find(e => e.event === 'media_generation_result' && e.properties.job_id === acctJobId);
+  assert.equal(acctRes?.properties.remote_task_id, 'mvt_account_signed_out_1');
+  assert.equal(acctRes?.properties.error_code, 'CONFIG_CHANGED');
+  const paddedRes = events.find(e => e.event === 'media_generation_result' && e.properties.job_id === paddedJobId);
+  assert.equal(paddedRes?.properties.remote_task_id, undefined);
 
   await gateway.close();
   tracking.close();

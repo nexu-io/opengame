@@ -9,7 +9,7 @@ import { builtinModels, discoverModels, modelKey, providerIds, providerLabels, v
 import { detectAgents, generateCodexImage } from './agents.ts';
 import { downloadMedia, mediaType, publicProviderFetch, ProviderError, retryRead, type Fetcher } from './network.ts';
 import { providerAdapters, waveSpeedModels } from './providers.ts';
-import { cloudModels } from './opendesign.ts';
+import { cloudModels, productionApi } from './opendesign.ts';
 import { ProviderConnections, type GatewayConfig } from './connections.ts';
 import { isGatewayProvider, isMediaProvider, registeredProvider } from '../shared/provider-registry.ts';
 import { compatibleProvider } from './compatible.ts';
@@ -401,6 +401,8 @@ export class ModelGateway {
       reconnectedCount: details.reconnectedCount,
       remoteTerminal: typeof job.remoteTerminal === 'boolean' ? job.remoteTerminal : undefined,
       hasRemoteId: Boolean(job.remoteId),
+      remoteTaskId: job.remoteId,
+      providerOrigin: job.model.provider === 'account' ? productionApi : job.providerOrigin,
       isResumable: job.state === 'failed' ? resumableJob(job) : undefined,
       savePending: job.state !== 'completed' ? Boolean(job.savePending) : undefined,
       totalOutputBytes,

@@ -80,10 +80,14 @@ export type MediaGenerationCancelSource = typeof mediaGenerationCancelSources[nu
 export const mediaGenerationUpstreamErrorCodes = [
   'unauthorized', 'invalid_request', 'tier_model_not_entitled', 'tier_request_kind_not_entitled',
   'model_access_denied', 'insufficient_balance', 'tier_limit_exceeded', 'video_concurrency_limit_exceeded', 'provider_error',
-  'provider_concurrency_exceeded', 'upstream_rate_limited', 'upstream_request_failed',
-  'upstream_provider_forbidden', 'audio_outcome_unknown',
-  'request_state_unknown', 'media_execution_unknown', 'asset_too_large', 'unsupported_media_type',
-  'content_policy_violation', 'safety_blocked', 'rate_limit_exceeded', 'timeout',
+  'provider_concurrency_exceeded', 'upstream_rate_limited', 'upstream_capacity_unavailable', 'server_busy',
+  'upstream_request_failed', 'upstream_error',
+  'upstream_provider_forbidden', 'audio_outcome_unknown', 'audio_upstream_unavailable', 'audio_metering_unavailable',
+  'request_state_unknown', 'media_execution_unknown', 'execution_interrupted',
+  'media_persistence_failed', 'image_task_expired', 'video_content_expired', 'video_task_not_found', 'content_expired', 'expired',
+  'asset_too_large', 'unsupported_media_type',
+  'content_policy_violation', 'safety_blocked', 'rate_limit_exceeded',
+  'timeout', 'provider_deadline_exceeded', 'media_link_timeout', 'media_operation_timeout', 'upstream_timeout',
   'cancelled', 'internal_error', 'service_unavailable', 'other',
 ] as const;
 export type MediaGenerationUpstreamErrorCode = typeof mediaGenerationUpstreamErrorCodes[number];
@@ -341,6 +345,69 @@ function inspectWrappedCause(error: unknown): 'timeout' | 'provider_unavailable'
   return undefined;
 }
 
+function isSafetyOutageText(lower: string): boolean {
+  return lower.includes('safety system unavailable')
+    || lower.includes('safety service unavailable')
+    || lower.includes('moderation service unavailable')
+    || lower.includes('moderation system unavailable')
+    || lower.includes('service unavailable')
+    || lower.includes('temporarily unavailable')
+    || lower.includes('unreachable')
+    || lower.includes('service error')
+    || lower.includes('internal error')
+    || lower.includes('bad gateway');
+}
+
+export function isExplicitSafetyRejectionText(text: unknown): boolean {
+  if (typeof text !== 'string' || !text.trim()) return false;
+  const lower = text.toLowerCase();
+  if (isSafetyOutageText(lower)) return false;
+  return lower.includes('rejected as a result of our safety')
+    || lower.includes('rejected by the safety')
+    || lower.includes('rejected by the content safety')
+    || lower.includes('rejected by safety')
+    || lower.includes('rejected by content safety')
+    || lower.includes('rejected by safety policy')
+    || lower.includes('rejected by content policy')
+    || lower.includes('blocked by the safety')
+    || lower.includes('blocked by the content safety')
+    || lower.includes('blocked by safety')
+    || lower.includes('blocked by content safety')
+    || lower.includes('content policy rejected')
+    || lower.includes('violates content policy')
+    || lower.includes('violated content policy')
+    || lower.includes('prohibited_content')
+    || lower.includes('violates policy')
+    || lower.includes('violates our usage policies')
+    || lower.includes('violated our usage policies')
+    || lower.includes('violates platform security policy')
+    || lower.includes('flagged by the safety')
+    || lower.includes('flagged by safety')
+    || lower.includes('disallowed by safety');
+}
+
+export function resolveRemoteTaskUpstreamCode(
+  status: unknown,
+  error: unknown,
+  fallbackExpiredCode: 'expired' | 'video_content_expired' = 'expired',
+): string | undefined {
+  const errObj = error && typeof error === 'object' && !Array.isArray(error)
+    ? error as { code?: unknown; message?: unknown }
+    : undefined;
+  const rawCode = typeof errObj?.code === 'string' && /^[a-zA-Z0-9_-]{1,100}$/.test(errObj.code.trim())
+    ? errObj.code.trim()
+    : undefined;
+  const rawMsg = typeof errObj?.message === 'string' ? errObj.message : typeof error === 'string' ? error : undefined;
+  if ((!rawCode || rawCode === 'provider_error') && isExplicitSafetyRejectionText(rawMsg)) {
+    return 'content_policy_violation';
+  }
+  if (rawCode) return rawCode;
+  if (typeof status === 'string' && status.trim().toLowerCase() === 'expired') {
+    return fallbackExpiredCode;
+  }
+  return undefined;
+}
+
 export function mediaGenerationError(error: unknown, phase?: string): MediaGenerationErrorCode {
   if (phase === 'cancelled') return 'CANCELLED';
   if (phase === 'interrupted') return 'WORKER_INTERRUPTED';
@@ -352,8 +419,18 @@ export function mediaGenerationError(error: unknown, phase?: string): MediaGener
   const lower = text.toLowerCase();
   const causeKind = status === undefined && !upstreamCode ? inspectWrappedCause(error) : undefined;
   if (lower.startsWith('save_not_available:')) return 'SAVE_UNAVAILABLE';
-  // Timeouts (local deadline, subprocess kill timeout, or remote timeout) take precedence over generic phase buckets.
-  if (upstreamCode === 'timeout' || lower.includes('timed out') || lower.includes('timeout') || causeKind === 'timeout') return 'TIMEOUT';
+  // Timeouts (local deadline, subprocess kill timeout, or remote timeout/expiry) take precedence over generic phase buckets.
+  if (
+    upstreamCode === 'timeout'
+    || upstreamCode === 'expired'
+    || upstreamCode === 'provider_deadline_exceeded'
+    || upstreamCode === 'media_link_timeout'
+    || upstreamCode === 'media_operation_timeout'
+    || upstreamCode === 'upstream_timeout'
+    || lower.includes('timed out')
+    || lower.includes('timeout')
+    || causeKind === 'timeout'
+  ) return 'TIMEOUT';
   const localCode = error && typeof error === 'object' && 'code' in error && typeof (error as { code?: unknown }).code === 'string'
     ? (error as { code: string }).code
     : undefined;
@@ -372,14 +449,31 @@ export function mediaGenerationError(error: unknown, phase?: string): MediaGener
   if (upstreamCode === 'content_policy_violation' || upstreamCode === 'safety_blocked') return 'CONTENT_BLOCKED';
   if (upstreamCode === 'insufficient_balance' || status === 402) return 'BALANCE_LOW';
   if (upstreamCode === 'tier_model_not_entitled' || upstreamCode === 'tier_request_kind_not_entitled' || upstreamCode === 'model_access_denied') return 'PLAN_NOT_ENTITLED';
-  if (upstreamCode === 'tier_limit_exceeded' || upstreamCode === 'video_concurrency_limit_exceeded' || upstreamCode === 'rate_limit_exceeded' || upstreamCode === 'provider_concurrency_exceeded' || upstreamCode === 'upstream_rate_limited' || status === 429) return 'RATE_LIMITED';
-  if (upstreamCode === 'upstream_provider_forbidden') return 'PROVIDER_UNAVAILABLE';
+  if (
+    upstreamCode === 'tier_limit_exceeded'
+    || upstreamCode === 'video_concurrency_limit_exceeded'
+    || upstreamCode === 'rate_limit_exceeded'
+    || upstreamCode === 'provider_concurrency_exceeded'
+    || upstreamCode === 'upstream_rate_limited'
+    || upstreamCode === 'upstream_capacity_unavailable'
+    || upstreamCode === 'server_busy'
+    || status === 429
+  ) return 'RATE_LIMITED';
+  if (upstreamCode === 'upstream_provider_forbidden' || upstreamCode === 'audio_upstream_unavailable') return 'PROVIDER_UNAVAILABLE';
   if (upstreamCode === 'unauthorized' || status === 401) return 'AUTH_REJECTED';
-  if (upstreamCode === 'invalid_request' || upstreamCode === 'asset_too_large' || upstreamCode === 'unsupported_media_type' || status === 400 || status === 413 || status === 422) return 'INVALID_REQUEST';
+  if (upstreamCode === 'invalid_request' || upstreamCode === 'asset_too_large' || upstreamCode === 'unsupported_media_type') return 'INVALID_REQUEST';
+  const explicitSafetyRejection = isExplicitSafetyRejectionText(text);
+  const allowLooseSafetyText = status === undefined && !isSafetyOutageText(lower)
+    && (lower.includes('content policy') || lower.includes('safety policy') || lower.includes('safety system'));
+  if (
+    (status === undefined && (explicitSafetyRejection || allowLooseSafetyText))
+    || (status !== undefined && status >= 400 && status < 500 && explicitSafetyRejection)
+    || (status === 502 && upstreamCode === 'provider_error' && explicitSafetyRejection)
+  ) return 'CONTENT_BLOCKED';
+  if (status === 400 || status === 413 || status === 422) return 'INVALID_REQUEST';
   if (status !== undefined && status >= 500 && status <= 599) return 'UPSTREAM_5XX';
   if (upstreamCode === 'upstream_request_failed' || phase === 'remote_task') return 'REMOTE_FAILED';
   if (causeKind === 'provider_unavailable' || lower.includes('codex cli is no longer installed')) return 'PROVIDER_UNAVAILABLE';
-  if (lower.includes('content policy') || lower.includes('safety policy') || lower.includes('safety system') || lower.includes('prohibited_content') || lower.includes('violates policy') || lower.includes('violates platform security policy')) return 'CONTENT_BLOCKED';
   if (lower.includes('plan does not include') || lower.includes('upgrade your plan')) return 'PLAN_NOT_ENTITLED';
   if (lower.includes('balance') || lower.includes('credit') || lower.includes('insufficient') || lower.includes('quota') || lower.includes('entitlement')) return 'BALANCE_LOW';
   const decisiveNonAuthCode = upstreamCode === 'cancelled';

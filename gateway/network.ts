@@ -31,11 +31,11 @@ export async function readUpstreamErrorCode(response: Response, maxBytes = 65_53
       error_code?: unknown;
     };
     const errorObj = typeof errBody?.error === 'object' && errBody.error ? errBody.error : undefined;
-    return boundedUpstreamCode(errBody?.error)
-      ?? boundedUpstreamCode(errorObj?.code)
+    return boundedUpstreamCode(errorObj?.code)
       ?? boundedUpstreamCode(errorObj?.error_code)
       ?? boundedUpstreamCode(errBody?.error_code)
-      ?? boundedUpstreamCode(errBody?.code);
+      ?? boundedUpstreamCode(errBody?.code)
+      ?? boundedUpstreamCode(errBody?.error);
   } catch {
     /* Non-JSON or oversized error responses simply omit upstreamCode. */
     return undefined;
