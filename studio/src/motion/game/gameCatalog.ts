@@ -57,7 +57,7 @@ export const communityGames: GameCard[] = [
 
 // More viral games collected from social media (community/more-games.json), merged by view count after the curated six.
 type MoreGame = { id: string; title: string; description: string; genre: GameGenre; style: GameStyle | null; url: string; author: string; postUrl: string; model: string;
-  embeddable: boolean; views?: { value: number; label: string }; ipRisk?: string; zh?: { title?: string; description?: string } };
+  embeddable: boolean; views?: { value: number; label: string }; ipRisk?: string; zh?: { title?: string; description?: string }; tags?: string[] };
 const moreGameFiles = import.meta.glob('./community/more-games.json', { eager: true, import: 'default' }) as Record<string, MoreGame[]>;
 const genreIds = new Set<string>(gameGenres);
 const moreViews = new Map<string, number>([['community-saltline', 4_470_000], ['community-little-prince', 3_920_000], ['community-sky-reach', 424_000],
@@ -66,7 +66,7 @@ for (const item of (Object.values(moreGameFiles)[0] ?? []).filter(item => item.u
   if (communityGames.some(game => game.id === 'community-' + item.id)) continue;
   const game = community(item.id, item.title, item.description, item.genre,
     { url: item.url, author: item.author, postUrl: item.postUrl, model: item.model || 'Unknown', embeddable: item.embeddable }, '2026-11-20T00:00:00.000Z');
-  communityGames.push({ ...game, plays: 0, style: item.style ?? game.style, i18n: item.zh ? { 'zh-CN': { title: item.zh.title, description: item.zh.description } } : undefined });
+  communityGames.push({ ...game, plays: 0, style: item.style ?? game.style, tags: item.tags, i18n: item.zh ? { 'zh-CN': { title: item.zh.title, description: item.zh.description } } : undefined });
   moreViews.set(game.id, item.views?.value ?? 0);
 }
 // One ranking for every social-media game: views on the creator's original X post (2026-11-20).
@@ -185,6 +185,12 @@ export const gameApi = {
 
 export function formatPlays(value: number, locale: string) {
   return new Intl.NumberFormat(locale, { notation: value >= 10000 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(value);
+}
+
+/** Model tag for community games made with Claude Fable 5.2: a card badge and a market filter. */
+export const FABLE_TAG = 'Fable 5.2';
+export function isFableGame(game: Pick<GameCard, 'tags'>): boolean {
+  return Array.isArray(game.tags) && game.tags.some(tag => tag.trim().toLowerCase() === FABLE_TAG.toLowerCase());
 }
 
 /** Prominent curated badge/filter tag for high-grossing mini-game templates. */

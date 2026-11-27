@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CURATED_TOP_EARNING_ORDER } from '../../../../shared/game-contract';
 import { trailerProjectHref } from './GameStudio';
-import { bundledGames, isLocalOnly, isTopEarningGame, needsGameService, TOP_EARNING_TAG } from './gameCatalog';
+import { bundledGames, communityGames, FABLE_TAG, isFableGame, isLocalOnly, isTopEarningGame, needsGameService, TOP_EARNING_TAG } from './gameCatalog';
 
 describe('trailerProjectHref', () => {
   it('routes to the canonical /editor/:projectId URL instead of reusing the Game Studio pathname', () => {
@@ -84,5 +84,25 @@ describe('gameCatalog multi-file detection and internal tags', () => {
     expect(new Set(CURATED_TOP_EARNING_ORDER).size).toBe(CURATED_TOP_EARNING_ORDER.length);
     const topIds = bundledGames.filter(isTopEarningGame).map(game => game.id);
     expect(topIds.slice(0, CURATED_TOP_EARNING_ORDER.length)).toEqual([...CURATED_TOP_EARNING_ORDER]);
+  });
+});
+
+describe('Fable 5.2 community games', () => {
+  it('tags only playable community games whose creator credits Fable 5.2', () => {
+    const fable = communityGames.filter(isFableGame);
+    expect(fable.length).toBeGreaterThanOrEqual(50);
+    for (const game of fable) {
+      expect(game.external?.embeddable).toBe(true);
+      expect(game.external?.model).toContain(FABLE_TAG);
+      expect(game.external?.url).toMatch(/^https:\/\//);
+      expect(game.external?.postUrl).toMatch(/^https:\/\/x\.com\//);
+      expect(game.cover).toBeTruthy();
+    }
+  });
+
+  it('matches the tag case-insensitively and ignores untagged games', () => {
+    expect(isFableGame({ tags: [' fable 5.2 '] })).toBe(true);
+    expect(isFableGame({ tags: [TOP_EARNING_TAG] })).toBe(false);
+    expect(isFableGame({})).toBe(false);
   });
 });

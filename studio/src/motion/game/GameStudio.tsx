@@ -19,7 +19,7 @@ import { MotionIcon } from '../icons';
 import { projectHref } from '../workspaceRouting';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { GameMasonry, interleavePortrait } from './GameMasonry';
-import { bundledGames, communityGames, communityRemixPrompt, composeBrief, coverUrl, formatPlays, gameApi, gameSource, isIsolatedGameFrame, isTopEarningGame, storedInstruction, genreCovers, genreLabels, settingCovers, styleCovers, genrePlaceholders, isLocalOnly, playableUrl, rememberInstruction, settingLabels, styleLabels, TOP_EARNING_TAG } from './gameCatalog';
+import { bundledGames, communityGames, communityRemixPrompt, composeBrief, coverUrl, formatPlays, gameApi, gameSource, isIsolatedGameFrame, isTopEarningGame, isFableGame, FABLE_TAG, storedInstruction, genreCovers, genreLabels, settingCovers, styleCovers, genrePlaceholders, isLocalOnly, playableUrl, rememberInstruction, settingLabels, styleLabels, TOP_EARNING_TAG } from './gameCatalog';
 import { buildGameContextTags, buildGameHiddenInstructions, buildGameUserPrompt, toGameArtifact, toGameCapabilityRef } from './gameSuperAgent';
 import { optionId as optionFilter } from '../reporting';
 import { reportGameAction, reportGameClick, reportGameCreate, reportGameDetailShown, reportGameHandoffShown, reportGameSearch } from './gameTracking';
@@ -62,7 +62,7 @@ export function GameStudio({
   const [games, setGames] = useState<GameCard[]>(bundledGames);
   const [offline, setOffline] = useState(false);
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<GameGenre | 'all' | 'portrait' | 'top-earning'>('all');
+  const [category, setCategory] = useState<GameGenre | 'all' | 'portrait' | 'top-earning' | 'fable'>('all');
   const [sort, setSort] = useState<Sort>('relevance');
   // The open project is tracked by id so polling updates reach it.
   // ?game=<id> opens that game's detail page directly (used by links from Assets and Super Agent).
@@ -248,6 +248,7 @@ export function GameStudio({
       && (category === 'all'
         || (category === 'portrait' ? game.orientation === 'portrait'
           : category === 'top-earning' ? isTopEarningGame(game)
+          : category === 'fable' ? isFableGame(game)
           : game.genre === category)));
     const list = needle
       ? rankSearchResults(byCategory, needle, game => ({
@@ -287,8 +288,8 @@ export function GameStudio({
       { id: 'featured', title: t('Templates'), icon: 'gamepad-line', games: visible },
     ] : [{
       id: 'all',
-      title: category === 'all' ? t('All games') : category === 'portrait' ? t('Portrait games') : category === 'top-earning' ? TOP_EARNING_TAG : t('{genre} games', { genre: t(genreLabels[category]) }),
-      icon: category === 'top-earning' ? 'sparkling-fill' : 'gamepad-line',
+      title: category === 'all' ? t('All games') : category === 'portrait' ? t('Portrait games') : category === 'top-earning' ? TOP_EARNING_TAG : category === 'fable' ? FABLE_TAG : t('{genre} games', { genre: t(genreLabels[category]) }),
+      icon: category === 'top-earning' ? 'sparkling-fill' : category === 'fable' ? 'pen-nib-line' : 'gamepad-line',
       games: visible,
     }]),
   ];
@@ -352,6 +353,8 @@ export function GameStudio({
               <RemixIcon name="layout-grid-line" size={15} />{t('All')}</Button>
             <Button variant="plain" role="tab" className="om-game-genre-chip om-game-genre-chip--featured" aria-selected={category === 'top-earning'} onClick={() => { if (category !== 'top-earning') reportGameClick('game_market', 'category_select', null, optionFilter('top-earning')); setCategory('top-earning'); }}>
               <RemixIcon name="sparkling-fill" size={15} />{TOP_EARNING_TAG}</Button>
+            <Button variant="plain" role="tab" className="om-game-genre-chip om-game-genre-chip--model" aria-selected={category === 'fable'} onClick={() => { if (category !== 'fable') reportGameClick('game_market', 'category_select', null, optionFilter('fable')); setCategory('fable'); }}>
+              <RemixIcon name="pen-nib-line" size={15} />{FABLE_TAG}</Button>
             {gameGenres.map(id => <Button key={id} variant="plain" role="tab" className="om-game-genre-chip" aria-selected={category === id} onClick={() => { if (category !== id) reportGameClick('game_market', 'category_select', null, optionFilter(id)); setCategory(id); }}>
               {genreCovers[id] && <img src={genreCovers[id]!} alt="" />}{t(genreLabels[id])}</Button>)}
             <Button variant="plain" role="tab" className="om-game-genre-chip" aria-selected={category === 'portrait'} onClick={() => { if (category !== 'portrait') reportGameClick('game_market', 'category_select', null, optionFilter('portrait')); setCategory('portrait'); }}><RemixIcon name="smartphone-line" size={15} />{t('Portrait')}</Button>
@@ -426,6 +429,7 @@ function GameTile({ game, coverAspectRatio, preview, locale, onOpen }: {
       {cover ? <img src={cover} alt="" loading="lazy" decoding="async" /> : <span className="om-game-tile-placeholder">{title}</span>}
       {preview}
       {topEarning && !status && !(game.external && !game.external.embeddable) && <span className="om-game-tag-featured"><RemixIcon name="sparkling-fill" size={12} />{TOP_EARNING_TAG}</span>}
+      {isFableGame(game) && !status && <span className="om-game-tag-model"><RemixIcon name="pen-nib-line" size={12} />{FABLE_TAG}</span>}
       {game.orientation === 'portrait' && !game.multiplayer && <span className="om-game-badge"><RemixIcon name="smartphone-line" size={13} />{t('Portrait')}</span>}
       {status && <span className="om-game-status" data-tone={game.status}>{game.status === 'building' && <RemixIcon name="loader-4-line" size={13} />}{t(status)}</span>}
       {game.external && !game.external.embeddable && <span className="om-game-status"><RemixIcon name="external-link-line" size={13} />{t('External link')}</span>}
@@ -539,6 +543,7 @@ function GameProject({ game, offline, onClose, onRemix, onChange, onOpenMcp, onC
       <IconButton ref={close} variant="ghost" className="motion-icon-button" aria-label={t('All games')} onClick={onClose} icon={<RemixIcon name="arrow-left-line" size={18} />} />
       <h1 className="om-subtitle">{gameTitle(game)}</h1>
       {isTopEarningGame(game) && <span className="om-game-tag-pill"><RemixIcon name="sparkling-fill" size={13} />{TOP_EARNING_TAG}</span>}
+      {isFableGame(game) && <span className="om-game-tag-pill om-game-tag-pill--model"><RemixIcon name="pen-nib-line" size={13} />{FABLE_TAG}</span>}
     </header>
     <aside className="om-game-project-side">
       <div className="om-game-project-body">

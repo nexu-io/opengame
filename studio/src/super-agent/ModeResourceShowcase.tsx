@@ -29,6 +29,8 @@ import {
   genreHomeCovers,
   genreLabels,
   isTopEarningGame,
+  isFableGame,
+  FABLE_TAG,
   TOP_EARNING_TAG,
 } from '../motion/game/gameCatalog';
 import {
@@ -1203,9 +1205,11 @@ export function ModeResourceShowcase({
       case 'game': {
         const topEarningCount = publishedGameTemplates.filter(isTopEarningGame).length;
         const portraitCount = publishedGameTemplates.filter(g => g.orientation === 'portrait').length;
+        const fableCount = publishedGameTemplates.filter(isFableGame).length;
         return [
           { id: 'all', label: 'All games', count: publishedGameTemplates.length },
           ...(topEarningCount > 0 ? [{ id: 'top-earning', label: TOP_EARNING_TAG, count: topEarningCount }] : []),
+          ...(fableCount > 0 ? [{ id: 'fable', label: FABLE_TAG, count: fableCount }] : []),
           ...(myGames.length > 0 ? [{ id: 'mine', label: 'My games', count: myGames.length }] : []),
           ...gameGenres.map(g => ({
             id: `genre:${g}`,
@@ -1509,6 +1513,8 @@ export function ModeResourceShowcase({
       ? myGames
       : activeFilter === 'top-earning'
         ? publishedGameTemplates.filter(isTopEarningGame)
+        : activeFilter === 'fable'
+          ? publishedGameTemplates.filter(isFableGame)
         : activeFilter === 'portrait'
           ? publishedGameTemplates.filter(g => g.orientation === 'portrait')
           : activeFilter.startsWith('genre:')
@@ -1978,7 +1984,8 @@ export function ModeResourceShowcase({
                 }}
               >
                 {id === 'top-earning' && <RemixIcon name="sparkling-fill" size={12} />}
-                <span>{id === 'top-earning' ? TOP_EARNING_TAG : t(label)}</span>
+                {id === 'fable' && <RemixIcon name="pen-nib-line" size={12} />}
+                <span>{id === 'top-earning' ? TOP_EARNING_TAG : id === 'fable' ? FABLE_TAG : t(label)}</span>
                 {typeof count === 'number' && <span className="om-sa-tab-count">{count}</span>}
               </Button>
             ))}
@@ -2170,6 +2177,12 @@ export function ModeResourceShowcase({
                         <span className="om-sa-game-top-badge">
                           <RemixIcon name="sparkling-fill" size={11} />
                           <span>{TOP_EARNING_TAG}</span>
+                        </span>
+                      )}
+                      {isFableGame(game) && !status && !isTopEarning && (
+                        <span className="om-sa-game-model-badge">
+                          <RemixIcon name="pen-nib-line" size={11} />
+                          <span>{FABLE_TAG}</span>
                         </span>
                       )}
                       {status && (

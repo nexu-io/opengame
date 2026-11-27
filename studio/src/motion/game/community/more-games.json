@@ -22,7 +22,10 @@
       "description": "在梵高《星月夜》里骑行，收集光球送进教堂尖顶。"
     },
     "cover": "community/starry-nightrider.jpg",
-    "secondary": "试玩页显示 59,199 位玩家进入画作 · 2026-11-20"
+    "secondary": "试玩页显示 59,199 位玩家进入画作 · 2026-11-20",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "uno-com-escada",
@@ -46,7 +49,10 @@
       "title": "车顶扛梯子的 Uno 赛车",
       "description": "开着车顶绑梯子的 1996 年菲亚特 Uno 跑赛道，车、树林和引擎声都由代码生成。"
     },
-    "cover": "community/uno-com-escada.jpg"
+    "cover": "community/uno-com-escada.jpg",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "what-the-water-keeps",
@@ -70,7 +76,10 @@
       "title": "水留下的东西",
       "description": "第一人称乘小船一夜穿过八个梦境般的场景，WASD 划船转向。"
     },
-    "cover": "community/what-the-water-keeps.jpg"
+    "cover": "community/what-the-water-keeps.jpg",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "evensong",
@@ -94,7 +103,10 @@
       "title": "晚祷",
       "description": "黑暗奇幻魂系 Boss 战：翻滚、格挡、锁定、喝药。"
     },
-    "cover": "community/evensong.jpg"
+    "cover": "community/evensong.jpg",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "mirror-earth",
@@ -119,7 +131,10 @@
       "description": "任选地球上的真实地点步行、开车或开直升机，天气与现实同步，按 B 可破坏眼前建筑。"
     },
     "cover": "community/mirror-earth.jpg",
-    "coverSource": "原帖视频第 6 秒画面（自动化浏览器里只加载到地图读取阶段）"
+    "coverSource": "原帖视频第 6 秒画面（自动化浏览器里只加载到地图读取阶段）",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "tennis-go-wild",
@@ -143,7 +158,10 @@
       "title": "网球（放飞版）",
       "description": "看着像《Pong》，玩起来才发现玩法会不断变化。"
     },
-    "cover": "community/tennis-go-wild.jpg"
+    "cover": "community/tennis-go-wild.jpg",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "mist-locked-mountain-gate",
@@ -167,7 +185,10 @@
       "title": "雾锁山门",
       "description": "水墨风 3D 动作游戏，连招、闪避、让石像归位，全部打包在一个 30MB 的 HTML 里。"
     },
-    "cover": "community/mist-locked-mountain-gate.jpg"
+    "cover": "community/mist-locked-mountain-gate.jpg",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "omw-castle-valley",
@@ -191,7 +212,10 @@
       "title": "油画城堡山谷",
       "description": "第一人称拿火把和剑走进油画笔触的城堡山谷，可挥剑、跳跃。"
     },
-    "cover": "community/omw-castle-valley.jpg"
+    "cover": "community/omw-castle-valley.jpg",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "lanternfall",
@@ -215,7 +239,10 @@
       "title": "灯落",
       "description": "斜视角小队战斗，带四名职业角色在黑暗荒原中点灯推进。"
     },
-    "cover": "community/lanternfall.jpg"
+    "cover": "community/lanternfall.jpg",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "maad-maxxing",
@@ -239,7 +266,10 @@
       "title": "疯狂麦克斯式狂飙",
       "description": "沙漠战车跑酷：转向、撞击、加速冲过掠夺者，没有任何模型和贴图，全是代码。"
     },
-    "cover": "community/maad-maxxing.jpg"
+    "cover": "community/maad-maxxing.jpg",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "gilt-and-gutter",
@@ -263,7 +293,10 @@
       "title": "镀金与阴沟",
       "description": "1 对 1 第一人称射击，两名可选角色各有武器。"
     },
-    "cover": "community/gilt-and-gutter.jpg"
+    "cover": "community/gilt-and-gutter.jpg",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "papertrails",
@@ -287,7 +320,10 @@
       "title": "纸艺小径",
       "description": "在无尽的立体书纸艺世界里散步，树、房子、山丘从地面折叠升起。"
     },
-    "cover": "community/papertrails.jpg"
+    "cover": "community/papertrails.jpg",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "vice-86",
@@ -311,7 +347,10 @@
       "title": "罪恶 '86",
       "description": "1986 年霓虹迈阿密的开放世界驾驶，自写 WebGL2 渲染器，雨、车、引擎声都是代码生成。"
     },
-    "cover": "community/vice-86.jpg"
+    "cover": "community/vice-86.jpg",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "starfall-moba",
@@ -336,7 +375,10 @@
       "description": "浏览器里的 5v5 MOBA：1 名真人加 9 名 AI 英雄，美术和音效全部程序生成。"
     },
     "cover": "community/starfall-moba.jpg",
-    "secondary": "试玩页显示 27,948 位召唤师、累计访问 43,791 次 · 2026-11-20"
+    "secondary": "试玩页显示 27,948 位召唤师、累计访问 43,791 次 · 2026-11-20",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "goku-four-star-road",
@@ -361,7 +403,10 @@
       "description": "《龙珠》同人动作游戏，小悟空闯红缎带军营地寻找四星珠。"
     },
     "cover": "community/goku-four-star-road.jpg",
-    "secondary": "Crayon 页面显示 15,155 次游玩 · 2026-11-20"
+    "secondary": "Crayon 页面显示 15,155 次游玩 · 2026-11-20",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "rug-racers",
@@ -409,7 +454,10 @@
       "title": "兰博小恐龙",
       "description": "把 Chrome 断网小恐龙做成 3D，绑上兰博头巾，在沙漠里跳跃、下蹲躲仙人掌。"
     },
-    "cover": "community/rambo-dino.jpg"
+    "cover": "community/rambo-dino.jpg",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "hadal",
@@ -433,7 +481,10 @@
       "title": "深渊潜航",
       "description": "从阳光礁石潜入马里亚纳海沟，游泳、登上潜艇，下潜途中寻找 18 处发现。"
     },
-    "cover": "community/hadal.jpg"
+    "cover": "community/hadal.jpg",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "i-would-have-gotten-away",
@@ -457,7 +508,10 @@
       "title": "本来我能逃掉的",
       "description": "反向《史酷比》：你扮成怪物当反派，把访客吓出庄园，别被孩子们揭穿面具。"
     },
-    "cover": "community/i-would-have-gotten-away.jpg"
+    "cover": "community/i-would-have-gotten-away.jpg",
+    "tags": [
+      "Fable 5.2"
+    ]
   },
   {
     "id": "turbo-tails",
@@ -481,6 +535,1073 @@
       "title": "涡轮尾巴",
       "description": "卡通 3D 卡丁车，6 个动物车手，漂移、跳台、吃金币攒涡轮，支持单人和多人。"
     },
-    "cover": "community/turbo-tails.jpg"
+    "cover": "community/turbo-tails.jpg",
+    "tags": [
+      "Fable 5.2"
+    ]
+  },
+  {
+    "id": "portals-endless-worlds",
+    "title": "Portals: Endless Worlds",
+    "description": "25,000 agents built 450+ code-only 3D worlds inspired by books, art and places, linked by portals you drift through.",
+    "genre": "story",
+    "style": "3d",
+    "url": "https://portals-endless-worlds.netlify.app/",
+    "author": "@emollick",
+    "postUrl": "https://x.com/emollick/status/2119918307457577163",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 111987,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 1936,
+    "postedAt": "Mon Nov 09 22:21:25 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "无尽传送门世界",
+      "description": "2.5 万个 Agent 用代码搭出 450 多个 3D 世界，穿过传送门在世界之间漫游。"
+    },
+    "cover": "community/portals-endless-worlds.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "feed-the-backrooms",
+    "title": "Feed the Backrooms",
+    "description": "The Backrooms, reversed: you are the monster and your job is to catch people.",
+    "genre": "horror",
+    "style": "3d",
+    "url": "https://feed-backrooms.vercel.app",
+    "author": "@LexnLin",
+    "postUrl": "https://x.com/LexnLin/status/2119966127149429093",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 7074,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 96,
+    "postedAt": "Tue Nov 10 01:31:26 +0000 2026",
+    "ipRisk": "取材网络都市传说「后室」（Backrooms，社区共创设定），无商业游戏 IP",
+    "embeddable": true,
+    "zh": {
+      "title": "后室：你当怪物",
+      "description": "反转的「后室」玩法：这次你是怪物，任务是把闯进来的人抓住。"
+    },
+    "cover": "community/feed-the-backrooms.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "cloud-stunt-3d",
+    "title": "Cloud Stunt 3D",
+    "description": "A 3D stunt game above the clouds, generated in 30 minutes.",
+    "genre": "casual",
+    "style": "3d",
+    "url": "https://finderchangchang.github.io/cloud-stunt-3d/",
+    "author": "@jev_chat",
+    "postUrl": "https://x.com/jev_chat/status/2120015641151426838",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 100691,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 328,
+    "postedAt": "Tue Nov 10 04:48:11 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "云端特技 3D",
+      "description": "在云层上空做特技的 3D 小游戏，30 分钟生成。"
+    },
+    "cover": "community/cloud-stunt-3d.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "tilt-labyrinth",
+    "title": "Tilt Labyrinth",
+    "description": "A wooden ball maze in 2,000 lines of three.js. Fable profiled it from 55 ms to 9 ms per frame on its own.",
+    "genre": "casual",
+    "style": "3d",
+    "url": "https://blog.silencestar.com/posts/tilt-labyrinth/play/",
+    "author": "@mylifcc",
+    "postUrl": "https://x.com/mylifcc/status/2120054646282870910",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 4332,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 32,
+    "postedAt": "Tue Nov 10 07:23:11 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "木头滚珠迷宫",
+      "description": "倾斜木盒把小球滚进终点；2,000 行 three.js，AI 自己把每帧从 55ms 优化到 9ms。"
+    },
+    "cover": "community/tilt-labyrinth.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "vippi",
+    "title": "Vippi",
+    "description": "A COD-style shooter in a rainy night city.",
+    "genre": "shooter",
+    "style": "3d",
+    "url": "https://vippi.vercel.app/",
+    "author": "@Shrit1401",
+    "postUrl": "https://x.com/Shrit1401/status/2120060593763926314",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 415,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 2,
+    "postedAt": "Tue Nov 10 07:46:49 +0000 2026",
+    "ipRisk": "玩法参照《使命召唤》类射击，未使用其角色和素材",
+    "embeddable": true,
+    "zh": {
+      "title": "雨夜突击",
+      "description": "雨夜城市里的《使命召唤》式第一人称射击，可选关卡和难度。"
+    },
+    "cover": "community/vippi.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "crosstown-nyc",
+    "title": "CROSSTOWN",
+    "description": "\"Rockstar took 8 years. Fable 5.2 is gonna do it in 7 days.\" Only part of the city is in so far; press B to send feedback.",
+    "genre": "racing",
+    "style": "3d",
+    "url": "https://nyc.somethingbig.ai/",
+    "author": "@mattshumer_",
+    "postUrl": "https://x.com/mattshumer_/status/2120282133503820150",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 3851370,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 7515,
+    "postedAt": "Tue Nov 10 22:27:08 +0000 2026",
+    "ipRisk": "真实城市纽约街景；作者帖子提到 Rockstar，游戏内无 GTA 素材",
+    "embeddable": true,
+    "zh": {
+      "title": "纽约开放世界（早期试玩）",
+      "description": "在纽约街头开车的开放世界早期版本，目前只开放部分城区，按 B 可提反馈。"
+    },
+    "cover": "community/crosstown-nyc.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "the-waking-river",
+    "title": "The Waking River",
+    "description": "One prompt and a few follow-ups: five sleeping worlds that wake as you sail through, with a score made from code.",
+    "genre": "story",
+    "style": "3d",
+    "url": "https://rivergame-kappa.vercel.app",
+    "author": "@flxrnc",
+    "postUrl": "https://x.com/flxrnc/status/2120494277528580110",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 5740,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 95,
+    "postedAt": "Wed Nov 11 12:30:07 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "苏醒之河",
+      "description": "乘船穿过五个沉睡的世界，船行到哪里，哪里就苏醒；配乐也由代码生成。"
+    },
+    "cover": "community/the-waking-river.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "giant-leap",
+    "title": "Giant Leap",
+    "description": "Jump from the Moon to the Earth. You just jump.",
+    "genre": "casual",
+    "style": "3d",
+    "url": "https://giant-leap.vercel.app",
+    "author": "@handsher_NGU",
+    "postUrl": "https://x.com/handsher_NGU/status/2120287667141374212",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 1082,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 22,
+    "postedAt": "Tue Nov 10 22:49:07 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "一跃回地球",
+      "description": "站在月球上，只靠跳跃一路跳回地球。"
+    },
+    "cover": "community/giant-leap.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "cozy-lisbon",
+    "title": "Cozy Lisbon",
+    "description": "A one-prompt cozy game about a little plane flying over Lisbon.",
+    "genre": "casual",
+    "style": "3d",
+    "url": "https://cozylisbon.vercel.app",
+    "author": "@goncalo_canhoto",
+    "postUrl": "https://x.com/goncalo_canhoto/status/2119932946346094690",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 14974,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 171,
+    "postedAt": "Mon Nov 09 23:19:35 +0000 2026",
+    "ipRisk": "真实城市里斯本",
+    "embeddable": true,
+    "zh": {
+      "title": "飞越里斯本",
+      "description": "开着小飞机在里斯本上空慢慢飞，收集明信片，没有计时也不会坠机。"
+    },
+    "cover": "community/cozy-lisbon.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "hitofude",
+    "title": "HITOFUDE",
+    "description": "Every frame brushed in code as sumi ink on paper. The boss erases the level; your sword is a paintbrush.",
+    "genre": "platformer",
+    "style": null,
+    "url": "https://shubhu121.github.io/hitdude/play/",
+    "author": "@positronx_",
+    "postUrl": "https://x.com/positronx_/status/2120374208043876422",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 5723,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 54,
+    "postedAt": "Wed Nov 11 04:33:00 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "一笔",
+      "description": "每一帧都是代码画出的水墨；Boss 会擦掉关卡，你的剑是一支毛笔。"
+    },
+    "cover": "community/hitofude.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "thermal",
+    "title": "Thermal",
+    "description": "A little hang glider game: ride the thermals and reach the target.",
+    "genre": "casual",
+    "style": "3d",
+    "url": "https://loktar00.github.io/llm-test-pages/fable52-hang-glider/",
+    "author": "@loktar00",
+    "postUrl": "https://x.com/loktar00/status/2121005021131083851",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 2160,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 40,
+    "postedAt": "Thu Nov 12 22:19:38 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "乘风滑翔",
+      "description": "驾驶滑翔伞借热气流爬升，飞到终点目标。"
+    },
+    "cover": "community/thermal.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "harbor-lights-grand-prix",
+    "title": "Harbor Lights Grand Prix",
+    "description": "One HTML file: 20 pixel cars on a 22-corner street circuit, with a betting window before each race (play money).",
+    "genre": "racing",
+    "style": "pixel",
+    "url": "https://tetriss22.github.io/harbor-gp/",
+    "author": "@Tetriss112",
+    "postUrl": "https://x.com/Tetriss112/status/2120946576663134308",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 895,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 33,
+    "postedAt": "Thu Nov 12 18:27:23 +0000 2026",
+    "ipRisk": "赛前下注只用虚拟筹码",
+    "embeddable": true,
+    "zh": {
+      "title": "港口大奖赛",
+      "description": "像素小岛上 20 辆车跑 22 个弯的街道赛，赛前可以用虚拟筹码下注。"
+    },
+    "cover": "community/harbor-lights-grand-prix.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "cozy-bakery",
+    "title": "Cozy Bakery",
+    "description": "An Overcooked-style co-op cooking game around Portugal, 1 to 4 players, works on mobile.",
+    "genre": "casual",
+    "style": "3d",
+    "url": "https://cozybakery.vercel.app",
+    "author": "@goncalo_canhoto",
+    "postUrl": "https://x.com/goncalo_canhoto/status/2120530199649432063",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 2678,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 19,
+    "postedAt": "Wed Nov 11 14:52:51 +0000 2026",
+    "ipRisk": "玩法类似《Overcooked》，角色与素材原创",
+    "embeddable": true,
+    "zh": {
+      "title": "葡式合作厨房",
+      "description": "《Overcooked》式的合作做饭：做蛋挞和 francesinha，1–4 人，手机也能玩。"
+    },
+    "cover": "community/cozy-bakery.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "nightclub-drift",
+    "title": "NightClub",
+    "description": "A browser drift racing game with a worldwide leaderboard, built from an empty folder in 72 hours.",
+    "genre": "racing",
+    "style": "3d",
+    "url": "https://www.nightclub-driftspeed.xyz/",
+    "author": "@Story91_",
+    "postUrl": "https://x.com/Story91_/status/2121016763190059194",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 13390,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 20,
+    "postedAt": "Thu Nov 12 23:06:17 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "夜店漂移",
+      "description": "浏览器里的漂移赛车，带全球排行榜，72 小时从空文件夹做出来。"
+    },
+    "cover": "community/nightclub-drift.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "kestrel-head",
+    "title": "Kestrel Head",
+    "description": "Built on the author's own Rust + WebGPU engine: a Porsche 992 GT3 R modeled in Blender and a 3 km island circuit. Controller support.",
+    "genre": "racing",
+    "style": "3d",
+    "url": "https://samg-coder.github.io/solstice-racing/",
+    "author": "@SamGCoder",
+    "postUrl": "https://x.com/SamGCoder/status/2120044542087070066",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 2747,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 56,
+    "postedAt": "Tue Nov 10 06:43:02 +0000 2026",
+    "ipRisk": "出现真实车型保时捷 992 GT3 R 外观",
+    "embeddable": true,
+    "zh": {
+      "title": "红隼岬赛车",
+      "description": "作者自研 Rust + WebGPU 引擎上的赛车：保时捷 992 GT3 R 跑 3 公里海岛赛道，支持手柄。"
+    },
+    "cover": "community/kestrel-head.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "go-for-launch",
+    "title": "Go for Launch",
+    "description": "A full Earth-to-Moon cockpit game from one prompt, with three difficulties, live gauges and mission control on the radio.",
+    "genre": "story",
+    "style": "3d",
+    "url": "https://clockendbader.github.io/fable-builds/go-for-launch/",
+    "author": "@clockendbader",
+    "postUrl": "https://x.com/clockendbader/status/2121251400533631304",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 324,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 5,
+    "postedAt": "Fri Nov 13 14:38:39 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "发射许可",
+      "description": "从地球飞到月球的驾驶舱游戏：三档难度、实时仪表，无线电里有任务控制中心。"
+    },
+    "cover": "community/go-for-launch.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "unsung-vale",
+    "title": "Unsung Vale",
+    "description": "A third-person open-world RPG demo. No assets: everything on screen is made with code.",
+    "genre": "story",
+    "style": "3d",
+    "url": "https://unsung-vale.vercel.app/",
+    "author": "@LexnLin",
+    "postUrl": "https://x.com/LexnLin/status/2121253191748669705",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 13718,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 303,
+    "postedAt": "Fri Nov 13 14:45:46 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "无名之谷",
+      "description": "第三人称开放世界 RPG 试玩版，没用任何素材，画面全由代码生成。"
+    },
+    "cover": "community/unsung-vale.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "infall",
+    "title": "INFALL",
+    "description": "You are the black hole: swallow everything around you. Built from the single instruction \"go crazy and blow my mind\".",
+    "genre": "casual",
+    "style": "3d",
+    "url": "https://infall-game.vercel.app",
+    "author": "@AugustCastilIo",
+    "postUrl": "https://x.com/AugustCastilIo/status/2121350653037756557",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 466,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 4,
+    "postedAt": "Fri Nov 13 21:13:03 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "坠落：你就是黑洞",
+      "description": "扮演一个黑洞吞噬周围的一切；提示词只有一句「放开做，让我大吃一惊」。"
+    },
+    "cover": "community/infall.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "aussie-outback-4x4",
+    "title": "Aussie Outback 4x4",
+    "description": "Off-roading in the Australian bush: mud, creek crossings, rock crawling, diff locks and dynamic weather, on the author's own Rust + WebGPU engine.",
+    "genre": "racing",
+    "style": "3d",
+    "url": "https://rust4x4.com/",
+    "author": "@SamGCoder",
+    "postUrl": "https://x.com/SamGCoder/status/2121513178303811931",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 1740,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 31,
+    "postedAt": "Sat Nov 14 07:58:52 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "澳洲越野 4x4",
+      "description": "在澳洲丛林越野：泥地、涉溪、攀岩、差速锁和动态天气，跑在作者自研的 Rust + WebGPU 引擎上。"
+    },
+    "cover": "community/aussie-outback-4x4.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "midnight-grid",
+    "title": "Midnight Grid",
+    "description": "An open-world driving game from one prompt: race through the city, crash into traffic and get chased by the cops. Every car, building, texture and sound is generated in code.",
+    "genre": "racing",
+    "style": "3d",
+    "url": "https://mikenevermiss.github.io/midnight-grid/",
+    "author": "@mikenevermiss",
+    "postUrl": "https://x.com/mikenevermiss/status/2121900977959612500",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 4186,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 28,
+    "postedAt": "Sun Nov 15 09:39:50 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "午夜城市飙车",
+      "description": "开放世界城市驾驶：飙车、撞车、被警察追，车辆、建筑和音效全由代码生成。"
+    },
+    "cover": "community/midnight-grid.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "monster-math",
+    "title": "Monster Math",
+    "description": "A Pokémon-inspired K-5 math practice and tutoring game. Open source under MIT.",
+    "genre": "casual",
+    "style": "pixel",
+    "url": "https://monstermath.ai-created.com",
+    "author": "@AIandDesign",
+    "postUrl": "https://x.com/AIandDesign/status/2122108555356778615",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 1114,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 28,
+    "postedAt": "Sun Nov 15 23:24:41 +0000 2026",
+    "ipRisk": "玩法参照《宝可梦》收集对战，形象原创",
+    "embeddable": true,
+    "zh": {
+      "title": "怪兽数学",
+      "description": "收集小怪兽的小学数学练习游戏，答题对战，MIT 开源。"
+    },
+    "cover": "community/monster-math.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "xiyou-x",
+    "title": "Xiyou X",
+    "description": "A tower defense test build with eight levels, five difficulties and special character cards to draw. Runs in desktop and mobile browsers, best in landscape.",
+    "genre": "casual",
+    "style": null,
+    "url": "https://nisen0808-web.github.io/xiyou-td-play/",
+    "author": "@PhyrexNi",
+    "postUrl": "https://x.com/PhyrexNi/status/2122602578978709908",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 32457,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 59,
+    "postedAt": "Tue Nov 17 08:07:45 +0000 2026",
+    "ipRisk": "取材《西游记》（古典名著，已进入公有领域）",
+    "embeddable": true,
+    "zh": {
+      "title": "西游 X",
+      "description": "西游题材塔防：八个关卡、五种难度，可抽特殊角色卡，横屏体验更好。"
+    },
+    "cover": "community/xiyou-x.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "hello-jello",
+    "title": "Hello Jello",
+    "description": "A cute jelly physics toy: click and drag to stretch and fling a bunch of wobbly jellies.",
+    "genre": "casual",
+    "style": "minimal",
+    "url": "https://jello.sixfingerpunch.com/",
+    "author": "@photonstorm",
+    "postUrl": "https://x.com/photonstorm/status/2122879821986627587",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 697,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 6,
+    "postedAt": "Wed Nov 18 02:29:25 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "果冻乐园",
+      "description": "点住果冻拖动、甩动，看一群软乎乎的果冻晃来晃去的物理小玩具。"
+    },
+    "cover": "community/hello-jello.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "fall-line",
+    "title": "Fall Line",
+    "description": "A downhill mountain bike game in three.js, playable in the browser with a keyboard.",
+    "genre": "racing",
+    "style": "3d",
+    "url": "https://fallline-9zo.pages.dev",
+    "author": "@BananaOfMercy",
+    "postUrl": "https://x.com/BananaOfMercy/status/2123037856398733438",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 18074,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 290,
+    "postedAt": "Wed Nov 18 12:57:23 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "山地速降",
+      "description": "用键盘骑山地车从山顶一路速降，作者骑了 7 天逐版调手感。"
+    },
+    "cover": "community/fall-line.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "tachyon-sprint",
+    "title": "Tachyon Sprint",
+    "description": "A racing game running entirely in Chrome on WebGPU, on an engine the author wrote from scratch.",
+    "genre": "racing",
+    "style": "3d",
+    "url": "https://satyam-fp.github.io/race/v1/",
+    "author": "@_satyam_ai",
+    "postUrl": "https://x.com/_satyam_ai/status/2123787482747764918",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 30659,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 140,
+    "postedAt": "Fri Nov 20 14:36:08 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "超光速冲刺",
+      "description": "完全跑在 Chrome WebGPU 上的赛车游戏，引擎由作者从零写成。"
+    },
+    "cover": "community/tachyon-sprint.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "ebb",
+    "title": "EBB",
+    "description": "A physics platformer where you play as water that melts, freezes and floats to solve puzzles. Entirely procedural, 190 KB, built in one hour.",
+    "genre": "platformer",
+    "style": "3d",
+    "url": "https://ebb.tesana.com",
+    "author": "@Rubzem",
+    "postUrl": "https://x.com/Rubzem/status/2124142554371502140",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 54133,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 694,
+    "postedAt": "Sat Nov 21 14:07:04 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "潮汐水滴",
+      "description": "扮演一团会融化、结冰、飘起来的水解谜闯关；全程序化生成，只有 190 KB。"
+    },
+    "cover": "community/ebb.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "turbo-stack",
+    "title": "Turbo Stack",
+    "description": "A racing game drawn with sprite stacking, where layers of pixel art are stacked so a car can be seen from any angle.",
+    "genre": "racing",
+    "style": "pixel",
+    "url": "https://turbo-stack-nine.vercel.app",
+    "author": "@blueemi99",
+    "postUrl": "https://x.com/blueemi99/status/2124207899501101247",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 2124,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 48,
+    "postedAt": "Sat Nov 21 18:26:43 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "像素叠叠赛车",
+      "description": "用一层层像素画叠出立体感的赛车游戏，赛车转到任何角度都能看。"
+    },
+    "cover": "community/turbo-stack.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "maple-run",
+    "title": "Maple Run",
+    "description": "A Subway Surfers-style runner through a maple-season railway; upload any character image and run as it.",
+    "genre": "casual",
+    "style": "3d",
+    "url": "https://maple-run-fable.vercel.app",
+    "author": "@nan_in_space",
+    "postUrl": "https://x.com/nan_in_space/status/2125041219244015900",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 953,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 14,
+    "postedAt": "Tue Nov 24 01:38:02 +0000 2026",
+    "ipRisk": "玩法类似《地铁跑酷》，角色与场景原创",
+    "embeddable": true,
+    "zh": {
+      "title": "枫叶跑酷",
+      "description": "在枫叶季的铁路上跑酷，可上传任意角色图片变成你的跑者。"
+    },
+    "cover": "community/maple-run.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "brushwild",
+    "title": "Brushwild",
+    "description": "A procedural open-world action RPG in a single ~300 kB HTML file, every pixel drawn by shaders in pen and coloured pencil.",
+    "genre": "story",
+    "style": null,
+    "url": "https://kevintngo.github.io/procedural-rpg/",
+    "author": "@kevin_t_ngo",
+    "postUrl": "https://x.com/kevin_t_ngo/status/2125321244686029289",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 201096,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 2694,
+    "postedAt": "Tue Nov 24 20:10:45 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "笔绘荒野",
+      "description": "钢笔加彩铅画风的程序化开放世界动作 RPG，整个游戏是一个约 300 KB 的 HTML 文件。"
+    },
+    "cover": "community/brushwild.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "little-city",
+    "title": "Little City",
+    "description": "A sandbox city builder inspired by Townscaper: place a few blocks and watch them become a hand-drawn town that comes to life.",
+    "genre": "casual",
+    "style": null,
+    "url": "https://littlecity.io",
+    "author": "@sprezzyyy",
+    "postUrl": "https://x.com/sprezzyyy/status/2125321545665192054",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 67650,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 1023,
+    "postedAt": "Tue Nov 24 20:11:57 +0000 2026",
+    "ipRisk": "玩法受《Townscaper》启发，画面原创",
+    "embeddable": true,
+    "zh": {
+      "title": "手绘小城",
+      "description": "放下几个方块，它们会自己长成手绘风的小镇并热闹起来的造城沙盒。"
+    },
+    "cover": "community/little-city.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "voidlight-depths",
+    "title": "Voidlight Depths",
+    "description": "A space dungeon crawler that fits in a single 164 kB HTML file. No assets: every texture, model and sound is generated in code.",
+    "genre": "shooter",
+    "style": "3d",
+    "url": "https://kevintngo.github.io/voidlight/",
+    "author": "@kevin_t_ngo",
+    "postUrl": "https://x.com/kevin_t_ngo/status/2125982976483975534",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 89313,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 1033,
+    "postedAt": "Thu Nov 26 16:00:15 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "虚光深渊",
+      "description": "太空题材的地牢探险，整个游戏只有 164 KB，贴图、模型和音效都由代码生成。"
+    },
+    "cover": "community/voidlight-depths.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "firefly-jar",
+    "title": "Firefly Jar",
+    "description": "A summer evening when you were eight: wander the meadow, catch twenty fireflies in a glass jar before dark, then let them go. Plays in the browser.",
+    "genre": "casual",
+    "style": "3d",
+    "url": "https://starknightt.github.io/firefly-jar",
+    "author": "@prasenx",
+    "postUrl": "https://x.com/prasenx/status/2125980702336549056",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 5373,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 121,
+    "postedAt": "Thu Nov 26 15:51:12 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "萤火虫罐子",
+      "description": "八岁那年的夏夜：天黑前在草地上捉二十只萤火虫装进罐子，再把它们放走。"
+    },
+    "cover": "community/firefly-jar.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "cratefall",
+    "title": "CRATEFALL",
+    "description": "A brand-new MMO that Fable 5.2 one-shot in about 18 hours with 70 subagents. Plays in the browser.",
+    "genre": "story",
+    "style": "voxel",
+    "url": "https://raynos.github.io/showcase-zone-clean-room/",
+    "author": "@Raynos",
+    "postUrl": "https://x.com/Raynos/status/2126017168613466409",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 331,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 5,
+    "postedAt": "Thu Nov 26 18:16:07 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "箱落",
+      "description": "AI 用约 18 小时、70 个子 Agent 一次做成的全新网页 MMO。"
+    },
+    "cover": "community/cratefall.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "save-the-world",
+    "title": "Save the World",
+    "description": "A 3D street game where Fable built the street, found the models and sounds, and recorded the trailer by playing it.",
+    "genre": "shooter",
+    "style": "3d",
+    "url": "https://save-the-world-fable.vercel.app/",
+    "author": "@global_techgirl",
+    "postUrl": "https://x.com/global_techgirl/status/2120246750459961453",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 4020,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 63,
+    "postedAt": "Tue Nov 10 20:06:32 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "拯救世界",
+      "description": "街道、3D 模型和音效都由 AI 制作或挑选，宣传片也是它自己玩着录的；电脑上玩最好。"
+    },
+    "cover": "community/save-the-world.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "palette-rider",
+    "title": "PaletteRider",
+    "description": "Ride a bicycle through cities from Klee's Castle and Sun and Van Gogh's Café Terrace at Night; the music was made by Fable 5.2 too.",
+    "genre": "casual",
+    "style": null,
+    "url": "https://aashishgtbit.github.io/PaletteRider/",
+    "author": "@Aashish_Tiwari_",
+    "postUrl": "https://x.com/Aashish_Tiwari_/status/2120963463610880150",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 498,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 10,
+    "postedAt": "Thu Nov 12 19:34:29 +0000 2026",
+    "ipRisk": "改编克利《城堡与太阳》、梵高《夜晚露天咖啡座》等名画（均已进入公有领域）",
+    "embeddable": true,
+    "zh": {
+      "title": "骑进名画",
+      "description": "骑自行车穿过克利、梵高等名画里的城市，音乐也由 AI 制作。"
+    },
+    "cover": "community/palette-rider.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "ramayana-sacred-fires",
+    "title": "Ramayana",
+    "description": "A third-person action-adventure as Rama: cross an open valley, protect the sages and find secrets.",
+    "genre": "story",
+    "style": "3d",
+    "url": "https://thaxnay.com/ramayana/",
+    "author": "@Thaxnay",
+    "postUrl": "https://x.com/Thaxnay/status/2124574054296219939",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 82111,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 980,
+    "postedAt": "Sun Nov 22 18:41:41 +0000 2026",
+    "ipRisk": "取材史诗《罗摩衍那》（已进入公有领域）",
+    "embeddable": true,
+    "zh": {
+      "title": "罗摩衍那：圣火",
+      "description": "扮演罗摩穿过山谷、守护修行的仙人、寻找隐藏彩蛋的第三人称动作冒险。"
+    },
+    "cover": "community/ramayana-sacred-fires.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "ballpoint-dominion",
+    "title": "Ballpoint Dominion",
+    "description": "A real-time strategy game on one sheet of paper. Pick the Sunrise or Dusk faction, gather ink, draw an army and take the page.",
+    "genre": "casual",
+    "style": null,
+    "url": "https://ballpoint-dominion.vercel.app/",
+    "author": "@kevin_t_ngo",
+    "postUrl": "https://x.com/kevin_t_ngo/status/2124669366512001493",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 20827,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 405,
+    "postedAt": "Mon Nov 23 01:00:26 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "圆珠笔领地",
+      "description": "一张纸上的即时战略：选日出或黄昏阵营，采墨水画出军队，把整页纸打下来。"
+    },
+    "cover": "community/ballpoint-dominion.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
+  },
+  {
+    "id": "unwritten",
+    "title": "UNWRITTEN",
+    "description": "An ASCII open-world action game: something is deleting the world one word at a time, and you are the last Scribe who can write it back.",
+    "genre": "story",
+    "style": "ascii",
+    "url": "https://tetriss22.github.io/unwritten/",
+    "author": "@Tetriss112",
+    "postUrl": "https://x.com/Tetriss112/status/2125302656616849796",
+    "model": "Claude Fable 5.2",
+    "views": {
+      "value": 890,
+      "label": "X 浏览 · 2026-11-28"
+    },
+    "likes": 49,
+    "postedAt": "Tue Nov 24 18:56:54 +0000 2026",
+    "ipRisk": "无",
+    "embeddable": true,
+    "zh": {
+      "title": "未书之地",
+      "description": "字符画开放世界动作游戏：世界正被一个词一个词删掉，你是最后能把它写回来的抄写员。"
+    },
+    "cover": "community/unwritten.jpg",
+    "tags": [
+      "Fable 5.2"
+    ],
+    "source": "awesome-fable-5.2"
   }
 ]
