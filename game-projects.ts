@@ -917,21 +917,27 @@ export class GameProjects {
     return card.source === 'template' ? { ...card, dir: await this.hosted.directory(id, card.dir) } : card;
   }
   async get(id: string): Promise<GameCard> {
+    return this.readCard(id, () => jsonFile<Record<string, Viewer>>(path.join(this.root, '.state.json'), {}));
+  }
+  private async readCard(id: string, readViewerState: () => Promise<Record<string, Viewer>>): Promise<GameCard> {
     await this.ensureStorage();
     const { dir, source } = await this.locateCard(id);
     const { rawPrompt: _rawPrompt, kit: _kit, trailer:_storedTrailer, pristineTemplateCopy: _pristineTemplateCopy, ...stored } = await jsonFile<StoredGame>(path.join(dir, 'game.json'));
-    const state = await jsonFile<Record<string, Viewer>>(path.join(this.root, '.state.json'), {});
+    const state = await readViewerState();
     const viewer = (Object.hasOwn(state, id) ? state[id] : undefined) ?? { plays: 0, reaction: 0, favorite: false };
     const trailer=await this.readTrailer(id);
     return { ...stored, ...(trailer?{trailer}:{}), remixOf: stored.remixOf ?? null, cover: stored.cover && !/^(?:[a-z]+:|\/)/i.test(stored.cover) ? `/api/games/${id}/play/${cleanGamePath(stored.cover)}` : stored.cover ?? null, id, source, playUrl: `/api/games/${id}/play/index.html`, plays: (stored.plays ?? 0) + viewer.plays, likes: (stored.likes ?? 0) + Number(viewer.reaction === 1), dislikes: (stored.dislikes ?? 0) + Number(viewer.reaction === -1), reaction: viewer.reaction, favorite: viewer.favorite };
   }
   async catalog(): Promise<GameCatalog> {
     const games: GameCard[] = [], issues: GameCatalogIssue[] = [];
+    // One list request shares one viewer snapshot; later requests always load fresh state.
+    let viewerState: Promise<Record<string, Viewer>> | undefined;
+    const readViewerState = () => viewerState ??= jsonFile<Record<string, Viewer>>(path.join(this.root, '.state.json'), {});
     for (const root of [this.templates, this.root]) {
       const entries = await readdir(root, { withFileTypes: true }).catch(e => { if (e.code === 'ENOENT') return []; throw e; });
       // One unreadable folder (an interrupted create, a malformed game.json) is reported, not allowed to hide every other game.
       for (const entry of entries) if (entry.isDirectory() && !entry.name.startsWith('.')) {
-        try { games.push(await this.get(entry.name)); }
+        try { games.push(await this.readCard(entry.name, readViewerState)); }
         catch (error) { issues.push({ id: entry.name, message: (error as Error).message }); }
       }
     }
