@@ -2152,6 +2152,8 @@ export function attachGameRooms(server: Server, workspace: string) {
             active.runtime.setup(players); active.started=true;
             active.timer=setInterval(()=>{
               try {
+                // Expire disconnected memberships even when nobody joins again.
+                prune();
                 if(!active.ended) active.runtime.tick(++active.tick);
                 for(const input of active.queue.splice(0)) active.runtime.apply(input.player,input.action);
                 for(const p of active.clients) if(p.joined) p.send({ type:'state',view:active.runtime.view(p.id),tick:active.tick });
