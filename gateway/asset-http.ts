@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { attachmentDisposition } from '../shared/http-header.ts';
+import { attachmentDisposition, parseSingleByteRange } from '../shared/http-header.ts';
 import { constants } from 'node:fs';
 import { mkdir, open, rm } from 'node:fs/promises';
 import path from 'node:path';
@@ -47,11 +47,9 @@ export async function assetHttp(req: IncomingMessage, res: ServerResponse, url: 
     if (!info.isFile() || info.size !== version.bytes) throw new Error('Asset file is missing or changed');
     let start = 0, end = info.size - 1, status = 200;
     if (req.headers.range) {
-      const match = req.headers.range.match(/^bytes=(\d*)-(\d*)$/);
-      if (!match || !match[1] && !match[2]) { res.writeHead(416, { 'Content-Range': `bytes */${info.size}` }); res.end(); return true; }
-      start = match[1] ? Number(match[1]) : Math.max(0, info.size - Number(match[2]));
-      end = match[1] && match[2] ? Math.min(Number(match[2]), info.size - 1) : info.size - 1;
-      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= info.size) { res.writeHead(416, { 'Content-Range': `bytes */${info.size}` }); res.end(); return true; }
+      const range = parseSingleByteRange(req.headers.range, info.size);
+      if (!range) { res.writeHead(416, { 'Content-Range': `bytes */${info.size}` }); res.end(); return true; }
+      ({ start, end } = range);
       status = 206; res.setHeader('Content-Range', `bytes ${start}-${end}/${info.size}`);
     }
     const title = url.searchParams.get('title');

@@ -20,7 +20,7 @@ import { ensureRuntime, execute, pluginRoot, HYPERFRAMES_VERSION } from './hyper
 import { verificationBinaries } from './scripts/verify-export.ts';
 import type { Duplex } from 'node:stream';
 import { injectPreviewBridgeHtml, injectViewportGuardHtml, isValidPreviewBridgeToken } from './shared/preview-bridge.ts';
-import { attachmentDisposition } from './shared/http-header.ts';
+import { attachmentDisposition, parseSingleByteRange } from './shared/http-header.ts';
 import { HostedGameTemplates } from './shared/hosted-game-templates.ts';
 import { lfsPointer } from './shared/repository-template-catalog.ts';
 import { zip } from './scripts/zip.mjs';
@@ -1612,7 +1612,7 @@ server.listen(port, '127.0.0.1', () => {
         }
       }
       if(req.method==='GET'&&url.pathname==='/favicon.ico'){res.writeHead(204);res.end();return;}
-      if(req.method!=='GET'||!url.pathname.startsWith(`/api/games/${id}/play/`)){res.writeHead(404);res.end();return;}
+      if(!['GET','HEAD'].includes(req.method??'')||!url.pathname.startsWith(`/api/games/${id}/play/`)){res.writeHead(404);res.end();return;}
       void gameHttp(req,res,url,path.dirname(this.root),async()=>({})).catch(()=>{res.writeHead(500);res.end();});
     });
     const closeRooms=attachGameRooms(server,path.dirname(this.root));
@@ -1967,7 +1967,7 @@ export async function gameHttp(req: IncomingMessage, res: ServerResponse, url: U
       res.end(archive.data);
       return true;
     }
-    if (action === 'play' && req.method === 'GET') {
+    if (action === 'play' && ['GET', 'HEAD'].includes(req.method ?? '')) {
       const entry=!rest.length||(rest.length===1&&rest[0]==='index.html');
       if (options.isolatedPreview && !canUseIsolatedPreview(await service.get(id))) return json(404, { error: 'Game preview unavailable' });
       if (entry && req.headers?.['sec-fetch-dest'] === 'document' && options.localPreviewUrl && canUseIsolatedPreview(await service.get(id))) {
@@ -2027,7 +2027,27 @@ export async function gameHttp(req: IncomingMessage, res: ServerResponse, url: U
       const isolation = options.isolatedPreview ? "; object-src 'none'; base-uri 'none'" : '';
       const csp = `sandbox allow-scripts allow-forms allow-pointer-lock allow-popups allow-modals${sandbox}; default-src 'self' data: blob: ${playOrigins} ${assetOrigins}; connect-src 'self' blob: data: ${playOrigins} ${assetOrigins} ${sockets} ${gameCdnOrigins}; script-src 'self' 'unsafe-inline' 'unsafe-eval' ${playOrigins} ${gameCdnOrigins}; style-src 'self' 'unsafe-inline' ${playOrigins}; form-action 'none'; worker-src 'none'${isolation}`;
       const originHeaders = options.isolatedPreview ? { 'Origin-Agent-Cluster': '?1', 'Referrer-Policy': 'no-referrer' } : { 'Access-Control-Allow-Origin': '*' };
-      res.writeHead(200, { ...originHeaders, 'Content-Type':file.mime, 'Content-Length':payload.length, 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff', ...(executable ? { 'Content-Security-Policy': csp } : {}) }); res.end(payload); return true;
+      let status = 200, body = payload;
+      // HEAD describes the complete representation. With no validator available,
+      // an If-Range request must also receive the complete current representation.
+      const rangeHeader = req.headers?.range;
+      if (req.method === 'GET' && rangeHeader && req.headers?.['if-range'] === undefined
+        && /^bytes=/i.test(rangeHeader) && !rangeHeader.includes(',')) {
+        const canonicalRange = rangeHeader.replace(/^bytes=[ \t]*/i, 'bytes=').replace(/[ \t]*$/, '');
+        const range = parseSingleByteRange(canonicalRange, payload.length);
+        if (!range) {
+          res.writeHead(416, { ...originHeaders, 'Content-Range': `bytes */${payload.length}`, 'Content-Length': 0, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' });
+          res.end();
+          return true;
+        }
+        const { start, end } = range;
+        status = 206;
+        body = payload.subarray(start, end + 1);
+        res.setHeader('Content-Range', `bytes ${start}-${end}/${payload.length}`);
+      }
+      res.writeHead(status, { ...originHeaders, 'Content-Type':file.mime, 'Content-Length':body.length, 'Accept-Ranges':'bytes', 'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff', ...(executable ? { 'Content-Security-Policy': csp } : {}) });
+      res.end(req.method === 'HEAD' ? undefined : body);
+      return true;
     }
     if (parts.length === 2 && req.method === 'POST') {
       if (action === 'capture-cover') return json(200,await service.captureCover(id,await input(req, LIMIT)));

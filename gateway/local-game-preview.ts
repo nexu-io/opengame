@@ -12,7 +12,7 @@ export async function startLocalGamePreview(workspace: string, runtimeRoot?: str
     try {
       const url = new URL(req.url || '/', 'http://127.0.0.1');
       const match = /^\/(?:motion-)?api\/games\/([A-Za-z0-9_-]{1,101})\/play\/.+/.exec(url.pathname);
-      if (req.method !== 'GET' || !req.url?.startsWith('/') || req.url.startsWith('//')
+      if (!['GET', 'HEAD'].includes(req.method ?? '') || !req.url?.startsWith('/') || req.url.startsWith('//')
         || !match || req.headers.host !== `${previewHostname(match[1])}:${port}`) {
         res.writeHead(404).end();
         return;
