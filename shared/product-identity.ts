@@ -69,7 +69,6 @@ type NodeUrlLike = {
   fileURLToPath(url: URL | string): string;
 };
 type NodeProcessLike = {
-  execPath?: string;
   env?: Record<string, string | undefined>;
   getBuiltinModule?: (specifier: string) => unknown;
 };
@@ -84,54 +83,40 @@ function readNodeBuiltins(): { proc: NodeProcessLike; fs: NodeFsLike; path: Node
   return { proc, fs, path, url };
 }
 
-// Read only source identity metadata. Git may reject a partial or foreign-owned checkout.
-const readWorktreeConfigs = `
-  const fs = require('node:fs');
-  const path = require('node:path');
-  const rootDir = process.argv[1];
-  function read(file) {
-    try { return fs.readFileSync(file, 'utf8'); } catch { return ''; }
-  }
-  const pointer = /^gitdir:\\s*(.+)$/im.exec(read(path.join(rootDir, '.git')));
-  if (!pointer) process.exit(0);
-  const gitDir = path.resolve(rootDir, pointer[1].trim());
-  const localConfig = read(path.join(gitDir, 'config'));
-  const commonDir = read(path.join(gitDir, 'commondir')).trim();
-  const commonConfig = commonDir ? read(path.resolve(gitDir, commonDir, 'config')) : '';
-  process.stdout.write(JSON.stringify([localConfig, commonConfig]));
-`;
-
-function configProductId(config: string): ProductId | undefined {
-  const { origin, upstream } = parseGitConfigRemoteUrls(config);
-  return productIdFromRepositoryRef(origin) ?? productIdFromRepositoryRef(upstream);
-}
-
-function worktreeProductId(rootDir: string, proc: NodeProcessLike): ProductId | undefined {
-  const child = proc.getBuiltinModule?.('node:child_process') as typeof import('node:child_process') | undefined;
-  if (!child || !proc.execPath) return undefined;
-  try {
-    // Keep potentially blocked reads of external metadata out of the startup process.
-    const configs = child.execFileSync(proc.execPath, ['--input-type=commonjs', '-e', readWorktreeConfigs, '--', rootDir], {
-      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 500, killSignal: 'SIGKILL', windowsHide: true,
-    });
-    if (configs) {
-      const [local, common] = JSON.parse(configs) as [string, string];
-      return configProductId(local) ?? configProductId(common);
-    }
-  } catch { /* Source metadata is optional. */ }
-  return undefined;
-}
-
-function gitProductId(rootDir: string, { proc, fs, path }: NonNullable<ReturnType<typeof readNodeBuiltins>>): ProductId | undefined {
+function readGitConfigTexts(rootDir: string, fs: NodeFsLike, path: NodePathLike): string[] {
   const gitEntry = path.join(rootDir, '.git');
+  let info: { isDirectory(): boolean; isFile(): boolean };
   try {
-    const info = fs.statSync(gitEntry);
-    if (info.isFile()) return worktreeProductId(rootDir, proc);
-    if (info.isDirectory()) {
-      return configProductId(fs.readFileSync(path.join(gitEntry, 'config'), 'utf8'));
-    }
-  } catch { /* Source metadata is optional. */ }
-  return undefined;
+    info = fs.statSync(gitEntry);
+  } catch {
+    return [];
+  }
+  const candidates: string[] = [];
+  if (info.isDirectory()) {
+    candidates.push(path.join(gitEntry, 'config'));
+  } else if (info.isFile()) {
+    try {
+      const pointer = fs.readFileSync(gitEntry, 'utf8');
+      const match = /^gitdir:\s*(.+)$/im.exec(pointer);
+      if (match?.[1]) {
+        const gitDir = path.resolve(rootDir, match[1].trim());
+        candidates.push(path.join(gitDir, 'config'));
+        try {
+          const commonDirRaw = fs.readFileSync(path.join(gitDir, 'commondir'), 'utf8').trim();
+          if (commonDirRaw) {
+            candidates.push(path.join(path.resolve(gitDir, commonDirRaw), 'config'));
+          }
+        } catch { /* Standard non-worktree gitfile has no commondir. */ }
+      }
+    } catch { /* Ignore unreadable .git file. */ }
+  }
+  const contents: string[] = [];
+  for (const configPath of candidates) {
+    try {
+      contents.push(fs.readFileSync(configPath, 'utf8'));
+    } catch { /* Ignore missing config candidate. */ }
+  }
+  return contents;
 }
 
 export function resolveNodeProductId(options: {
@@ -159,8 +144,13 @@ export function resolveNodeProductId(options: {
   if (fromGithubRepo) return fromGithubRepo;
 
   if (builtins && rootDir) {
-    const product = gitProductId(rootDir, builtins);
-    if (product) return product;
+    for (const configText of readGitConfigTexts(rootDir, builtins.fs, builtins.path)) {
+      const remotes = parseGitConfigRemoteUrls(configText);
+      const fromOrigin = productIdFromRepositoryRef(remotes.origin);
+      if (fromOrigin) return fromOrigin;
+      const fromUpstream = productIdFromRepositoryRef(remotes.upstream);
+      if (fromUpstream) return fromUpstream;
+    }
   }
 
   return 'openmotion';

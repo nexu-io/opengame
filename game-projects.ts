@@ -1157,17 +1157,6 @@ server.listen(port, '127.0.0.1', () => {
       .slice(0, 60) || game.id;
     return { filename: `${slug}.zip`, data: zip(entries) };
   }
-  async readByTitle(title: string, relative: string) {
-    const normalize = (value: string) => value.normalize('NFKC').trim().toLowerCase();
-    const wanted = normalize(title);
-    const { games } = await this.catalog();
-    const matches = games.filter(game => [game.title, ...Object.values(game.i18n ?? {}).map(locale => locale?.title)]
-      .some(name => typeof name === 'string' && normalize(name) === wanted));
-    const ids = [...new Set(matches.map(game => game.id))];
-    if (!ids.length) throw new GameError('No game with that exact title', 404);
-    if (ids.length !== 1) throw new GameError('More than one game has that title. Pass the game ID.', 409);
-    return this.read(ids[0], relative);
-  }
   async read(id: string, relative: string) {
     if (!textExtensions.test(relative) || relative.toLowerCase() === 'game.json' || relative.toLowerCase().startsWith('trailer/')) throw new GameError('Only game text source may be read');
     const file = await safeFile((await this.locate(id)).dir, relative);
@@ -1891,7 +1880,7 @@ export async function dispatchGameTool(name: string, args: any, workspace: strin
   switch (name.replace(/^(?:openmotion|motion)_game_/,'')) {
     case 'create': return createSinglePlayerGame(service, args?.brief ?? args);
     case 'get': return service.detail(args.id);
-    case 'read_file': return args.title === undefined ? service.read(args.id, args.path) : service.readByTitle(args.title, args.path);
+    case 'read_file': return service.read(args.id,args.path);
     case 'write_files':
       assertSinglePlayerAuthoring((await service.get(args.id)).multiplayer);
       return service.write(args.id,args.files);

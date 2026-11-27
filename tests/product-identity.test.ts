@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { existsSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -94,7 +93,7 @@ test('resolveNodeProductId follows strict priority across env, build-info, GITHU
       'openmotion',
     );
 
-    // 5. A partial worktree only needs its Git pointer, commondir, and config
+    // 5. Git worktree (.git file -> gitdir -> commondir/config) resolves cleanly
     const bareCommon = path.join(tempRoot, 'worktree-host', '.git');
     const worktreeMeta = path.join(bareCommon, 'worktrees', 'feat-branch');
     const worktreeDir = path.join(tempRoot, 'worktree-checkout');
@@ -104,8 +103,6 @@ test('resolveNodeProductId follows strict priority across env, build-info, GITHU
     await writeFile(path.join(worktreeMeta, 'commondir'), '../..\n');
     await writeFile(path.join(worktreeDir, '.git'), `gitdir: ${worktreeMeta}\n`);
     assert.equal(resolveNodeProductId({ rootDir: worktreeDir, env: {} }), 'opengame');
-    await writeFile(path.join(worktreeMeta, 'config'), '[remote "origin"]\n\turl = git@github.com:nexu-io/openmotion.git\n');
-    assert.equal(resolveNodeProductId({ rootDir: worktreeDir, env: {} }), 'openmotion');
 
     // 6. Upstream fallback when origin is an unrelated fork name
     const forkDir = path.join(tempRoot, 'fork-repo');
@@ -124,23 +121,6 @@ test('resolveNodeProductId follows strict priority across env, build-info, GITHU
     assert.equal(resolveNodeProductId({ rootDir: emptyDir, env: {} }), 'openmotion');
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test('a blocked external Git metadata read cannot stall product identity', { skip: process.platform === 'win32' }, async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'om-blocked-worktree-'));
-  try {
-    const worktree = path.join(root, 'checkout');
-    const gitDir = path.join(root, 'external-git');
-    await mkdir(worktree);
-    await mkdir(gitDir);
-    await writeFile(path.join(worktree, '.git'), `gitdir: ${gitDir}\n`);
-    execFileSync('mkfifo', [path.join(gitDir, 'commondir')]);
-    const start = performance.now();
-    assert.equal(resolveNodeProductId({ rootDir: worktree, env: {} }), 'openmotion');
-    assert.ok(performance.now() - start < 2_000, 'Worktree lookup has a bounded fallback');
-  } finally {
-    await rm(root, { recursive: true, force: true });
   }
 });
 

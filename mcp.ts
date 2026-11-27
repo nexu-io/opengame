@@ -31,7 +31,7 @@ import { templateConfig } from './shared/template-config.ts';
 import { createMcpClientState, negotiateTemplatePresentation, showTemplateRecommendations, templatePresentationName, templatePresentationUriPrefix } from './shared/mcp-template-recommendations.ts';
 import type { McpClientState } from './shared/mcp-template-recommendations.ts';
 import { gameToolAnnotations } from './shared/game-tools.ts';
-import { hasMcpEnvelope, loadModernMcpSdk, mcpEnvelopeVersion, modernMcpVersion, withMcpDiscoveryEnvelope, type ModernMcpSdk } from './shared/mcp-modern.ts';
+import { hasMcpEnvelope, loadModernMcpSdk, type ModernMcpSdk } from './shared/mcp-modern.ts';
 import { resolvePublicOrigin } from './gateway/agent-runtimes.ts';
 import { compactRuntimeUpdateNotice, maybeAutoUpdateBeforeCreation, shouldAutoUpdateForToolCall, type RuntimeUpdateNotice, type SourceUpdateApplyResult, type SourceUpdateCheckResult } from './shared/source-update.ts';
 
@@ -249,13 +249,7 @@ async function invokeRpc(message: any, store: WorkspaceStore, registry: ReturnTy
     }
     catch (error) { return { jsonrpc: '2.0', id: message.id, error: { code: -32602, message: (error as Error).message } }; }
   }
-  if (message.method === 'tools/list') {
-    // The registry always fits on a single page and never issues cursors.
-    if (message.params?.cursor !== undefined) {
-      return { jsonrpc: '2.0', id: message.id, error: { code: -32602, message: 'Invalid tools/list cursor' } };
-    }
-    return result({ tools: effectiveRegistry.tools });
-  }
+  if (message.method === 'tools/list') return result({ tools: effectiveRegistry.tools });
   if (message.method === 'tools/call') {
     try {
       if (registry.profile !== 'phase1') {
@@ -402,18 +396,8 @@ if (isMain(import.meta.url)) {
     if (!line.trim()) continue;
     let response;
     try {
-      const message = withMcpDiscoveryEnvelope(JSON.parse(line)) as JSONRPCMessage;
+      const message: JSONRPCMessage = JSON.parse(line);
       if (hasMcpEnvelope(message)) {
-        const requested = mcpEnvelopeVersion(message);
-        if (message.jsonrpc === '2.0' && 'method' in message && 'id' in message &&
-          typeof requested === 'string' && requested !== modernMcpVersion) {
-          process.stdout.write(JSON.stringify({
-            jsonrpc: '2.0', id: message.id, error: {
-              code: -32022, message: 'Unsupported protocol version', data: { requested, supported: [modernMcpVersion] },
-            },
-          }) + '\n');
-          continue;
-        }
         if (!modern) {
           const sdk = await loadModernMcpSdk();
           modern = sdk.serveStdio(() => modernMcpServer(sdk, store), {

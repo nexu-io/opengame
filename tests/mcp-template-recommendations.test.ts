@@ -147,7 +147,7 @@ test('presentation carries every supported conversation language without changin
 
 test('actual stdio preserves negotiated UI state and disabling template cards retains the final-video Tool', () => fixture(async store => {
   const requests = [message('initialize', { protocolVersion: '2025-06-18', capabilities }), message('tools/list'),
-    message('tools/call', { name, arguments: { templateIds: ids } }), message('tools/list', { cursor: 'invalid' })];
+    message('tools/call', { name, arguments: { templateIds: ids } })];
   const input = requests.map(item => JSON.stringify(item)).join('\n') + '\n';
   for (const disabled of [false, true]) {
     const child = spawnSync(process.execPath, ['--experimental-strip-types', 'mcp.ts'], {
@@ -158,7 +158,6 @@ test('actual stdio preserves negotiated UI state and disabling template cards re
     assert.equal(child.status, 0, child.stderr);
     const responses = child.stdout.trim().split('\n').map(line => JSON.parse(line));
     assert.equal(responses[1].result.tools.length, disabled ? 40 : 41);
-    assert.equal(responses[3].error.code, -32602);
     if (disabled) assert.equal(responses[2].result.structuredContent.error.code, 'MCP_TOOL_NOT_EXPOSED');
     else assert.deepEqual(responses[2].result.structuredContent.cards.map((card: any) => card.templateId), ids);
   }
@@ -189,24 +188,11 @@ test('actual stdio accepts stateless discovery and request-scoped MCP Apps capab
     return reply.result;
   }
   try {
-    const probe = message('server/discover');
-    child.stdin.write(JSON.stringify(probe) + '\n');
-    const discovered = JSON.parse((await lines.next()).value);
-    assert.equal(discovered.id, probe.id);
-    assert.ok(discovered.result.supportedVersions.includes(version));
     assert.ok((await request('server/discover')).supportedVersions.includes(version));
     const list = await request('tools/list', {}, capabilities);
     assert.ok(list.tools.some((tool: { name: string }) => tool.name === name));
     const plain = await request('tools/list');
     assert.ok(!plain.tools.some((tool: { name: string }) => tool.name === name));
-    const unsupported = message('tools/list', { _meta: {
-      [PROTOCOL_VERSION_META_KEY]: '1999-01-01', [CLIENT_CAPABILITIES_META_KEY]: {},
-    } });
-    child.stdin.write(JSON.stringify(unsupported) + '\n');
-    const rejected = JSON.parse((await lines.next()).value);
-    assert.equal(rejected.id, unsupported.id);
-    assert.equal(rejected.error.code, -32022);
-    assert.deepEqual(rejected.error.data.supported, discovered.result.supportedVersions);
     const selected = await request('tools/call', { name, arguments: { templateIds: ids } }, capabilities);
     assert.equal(selected.resultType, 'complete');
     assert.deepEqual(selected.structuredContent.cards.map((card: { templateId: string }) => card.templateId), ids);

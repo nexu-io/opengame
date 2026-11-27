@@ -103,13 +103,7 @@ export function normalizeToolInput<T = unknown>(schema: any, value: T): T {
     const variants: any[] = schema.oneOf;
     const discriminator = ['action', 'command', 'operation'].find(key =>
       variants.every(variant => variant.properties?.[key]?.enum?.length === 1));
-    if (!discriminator) {
-      if (schema.type !== 'object') return value;
-      const fields = value as Record<string, unknown>;
-      const candidates = variants.filter(variant => variant.type === 'object' && variant.required?.length
-        && variant.required.every((key: string) => Object.hasOwn(fields, key)));
-      return candidates.length === 1 ? normalizeToolInput(candidates[0], value) : value;
-    }
+    if (!discriminator) return value;
     const rawCommand = (value as Record<string, unknown>)[discriminator];
     const command = typeof rawCommand === 'string' ? rawCommand.trim() : rawCommand;
     const selected = variants.find(variant => variant.properties[discriminator].enum[0] === command);
@@ -186,12 +180,9 @@ export function validateInput(schema: any, value: any, field = 'arguments', know
       const discriminator = ['action', 'command', 'operation'].find(key =>
         variants.every(variant => variant.properties?.[key]?.enum?.length === 1));
       const allowedCommands = discriminator ? variants.map(v => v.properties[discriminator].enum[0]).join(', ') : '';
-      const requiredSets = variants.every(variant => variant.required?.length)
-        ? variants.map(variant => `[${variant.required.join(', ')}]`).join(' or ')
-        : '';
       const message = allowedCommands
         ? `${field} must match one ${discriminator} (${allowedCommands}) and its required fields`
-        : `${field} must match exactly one allowed schema${requiredSets ? ` with required fields ${requiredSets}` : ''}`;
+        : field + ' must match one action and its required fields';
       if (variants.every(variant => variant.type === 'object') && (!value || typeof value !== 'object' || Array.isArray(value))) {
         throw new ToolInputError(message, knownField, 'invalid_type');
       }

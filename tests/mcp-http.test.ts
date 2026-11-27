@@ -6,7 +6,7 @@ import { startServer } from '../server.ts';
 import { gameProjectsFor } from '../game-projects.ts';
 import { MCP_HTTP_PATH, MCP_STATUS_API, MCP_TOKENS_API } from '../shared/mcp-http.ts';
 import { fixture } from './fixtures.ts';
-import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY, SUBSCRIPTION_ID_META_KEY } from '@modelcontextprotocol/server';
+import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/server';
 
 test('Streamable HTTP /mcp supports initialize, tools/list, tools/call, scoped tokens, SSE GET, and DELETE termination', () =>
   fixture(async store => {
@@ -284,34 +284,12 @@ test('strict MCP 2026-07-28 HTTP clients discover, read and call without a sessi
     const discovery = await request('server/discover');
     assert.equal(discovery.status, 200);
     assert.equal(discovery.headers.get('mcp-session-id'), null);
-    assert.equal(discovery.headers.get('mcp-protocol-version'), version);
     assert.ok((await discovery.json()).result.supportedVersions.includes(version));
-    const probe = await fetch(url, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method: 'server/discover' }),
-    });
-    assert.equal(probe.status, 200);
-    assert.equal(probe.headers.get('mcp-protocol-version'), version);
-    assert.ok((await probe.json()).result.supportedVersions.includes(version));
     const listed = (await (await request('tools/list', {}, capabilities)).json()).result.tools;
     assert.ok(listed.some((tool: { name: string }) => tool.name === 'openmotion_show_template_recommendations'));
     const plain = (await (await request('tools/list')).json()).result.tools;
     assert.ok(plain.some((tool: { name: string }) => tool.name === 'openmotion_game_get'));
     assert.ok(!plain.some((tool: { name: string }) => tool.name === 'openmotion_show_template_recommendations'));
-    assert.equal((await (await request('tools/list', { cursor: 'unknown' })).json()).error.code, -32602);
-    const subscription = await request('subscriptions/listen', { notifications: { toolsListChanged: true } });
-    assert.equal(subscription.status, 200);
-    assert.match(subscription.headers.get('content-type') ?? '', /^text\/event-stream/);
-    const frames = (await subscription.text()).split('\n').filter(line => line.startsWith('data: '))
-      .map(line => JSON.parse(line.slice(6)));
-    assert.equal(frames[0].method, 'notifications/subscriptions/acknowledged');
-    assert.deepEqual(frames[0].params.notifications, {});
-    const subscriptionId = frames[1].id;
-    assert.equal(frames[0].params._meta[SUBSCRIPTION_ID_META_KEY], subscriptionId);
-    assert.equal(frames[1].result._meta[SUBSCRIPTION_ID_META_KEY], subscriptionId);
-    assert.equal(frames[1].result.resultType, 'complete');
-    assert.equal(frames.length, 2);
-
     const workflow = await request('resources/read', { uri: 'openmotion://workflow/game/start' });
     assert.ok((await workflow.json()).result.contents[0].text.includes('openmotion_game'));
     const { game } = await gameProjectsFor(store.directory).create({

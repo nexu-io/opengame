@@ -44,9 +44,7 @@ export function createModernMcpServer(discovery: Discovery, dispatch: Dispatch) 
 }
 
 export async function runModernMcpHttp(request: Request, payload: unknown, factory: () => Server) {
-  // The catalog is static and declares no change notifications. The SDK
-  // acknowledges the empty filter and immediately completes the SSE exchange.
-  const handler = createMcpHandler(factory, { legacy: 'reject', responseMode: 'json', maxSubscriptions: 1 });
+  const handler = createMcpHandler(factory, { legacy: 'reject', responseMode: 'json', maxSubscriptions: 0 });
   try {
     const response = await handler.fetch(request, { parsedBody: payload });
     return { status: response.status, headers: Object.fromEntries(response.headers), body: Buffer.from(await response.arrayBuffer()) };
