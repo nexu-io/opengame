@@ -311,6 +311,7 @@ export class OpenDesignAccount {
   /** In-flight `logout --retry-pending`. The connector rewrites the credentials file, so sign-in and sign-out wait for it. */
   private revoking?: Promise<void>;
   private revocationChecked = false;
+  private revocationRetryPending = false;
   /** The connector exited with confirmed credentials and the session and model catalogue are being set up. */
   private syncing = false;
   /** Times since the sign-in click, for the attempt record. */
@@ -443,14 +444,25 @@ export class OpenDesignAccount {
   private async profile(): Promise<Profile | undefined> { return (await this.credentials()).profiles?.prod; }
   /** Retries revocations the connector could not deliver at sign-out; the file is removed once nothing is left to revoke. */
   private retryRevocations() {
-    if (this.revoking || this.connecting || this.signingOut) return;
+    if (this.connecting || this.signingOut) return;
+    if (this.revoking) { this.revocationRetryPending = true; return; }
     this.revocationChecked = true;
+    this.revocationRetryPending = false;
     const generation = this.generation;
+    let pending = true;
     this.revoking = this.run(['logout', '--retry-pending', '--json']).then(async output => {
-      if (JSON.parse(output).revocationPending !== false || generation !== this.generation || this.connecting || this.signingOut) return;
+      pending = JSON.parse(output).revocationPending !== false;
+      if (pending || generation !== this.generation || this.connecting || this.signingOut) return;
       const file = await this.credentials(), profile = file.profiles?.prod;
       if (!file.pendingRevocations?.length && !profile?.controlKey && !profile?.runtimeKey && !profile?.pendingLogin) await rm(path.join(this.home, 'config.json'), { force: true });
-    }).catch(() => { /* Still queued; retried on the next refresh. */ }).finally(() => { this.revoking = undefined; });
+    }).catch(() => { /* Still queued; retried on the next refresh. */ }).finally(() => {
+      this.revoking = undefined;
+      if (this.revocationRetryPending && pending && generation === this.generation && !this.connecting && !this.signingOut) {
+        this.retryRevocations();
+      } else {
+        this.revocationRetryPending = false;
+      }
+    });
   }
   /** Support logs omit identities; only successful telemetry may carry the confirmed account ID. */
   private finish(attempt: AccountAttempt, outcome: SignInRecord['outcome'], errorCode?: AccountErrorCode, amrUserId?: string, connector?: ConnectorUnavailable) {
@@ -675,7 +687,7 @@ export class OpenDesignAccount {
     if (profile.apiUrl?.replace(/\/$/, '') !== productionApi) {
       return JSON.parse(await this.run(['billing', 'summary', '--format', 'json']));
     }
-    const response = await fetch(productionApi + '/api/v1/billing/summary', {
+    const response = await (this.options.fetcher ?? fetch)(productionApi + '/api/v1/billing/summary', {
       headers: { Authorization: 'Bearer ' + profile.controlKey, Accept: 'application/json' },
       redirect: 'error', signal: AbortSignal.timeout(15_000),
     });
@@ -1009,10 +1021,12 @@ export class OpenDesignAccount {
     const generation = this.generation;
     const identity = await this.identity();
     if (!(await this.profile())?.runtimeKey || !identity || generation !== this.generation) return [];
+    const access = await this.mediaAccess();
     if (!refresh) {
       // Another workspace may have signed in again since this catalogue was cached.
       const stored = this.cachedModels.length && this.cachedIdentity === identity ? this.cachedModels : await readSettings<DirectoryModel[]>(path.join(this.root, 'models.json'), []);
-      return generation === this.generation ? withBuiltinAudio(stored) : [];
+      if (generation !== this.generation) return [];
+      return access ? withBuiltinAudio(stored) : stored.filter(model => model.kind === 'text');
     }
     const requestId = ++this.modelRequestId;
     const data = JSON.parse(await this.run(['model', 'list', '--all', '--format', 'json']));
@@ -1020,21 +1034,20 @@ export class OpenDesignAccount {
     const models: DirectoryModel[] = data.data.filter((row: any) => typeof row.id === 'string' && /^[\w./:-]{1,180}$/.test(row.id)).map((row: any) => ({
       id: 'account:' + row.id, provider: 'account', modelId: row.id, label: String(row.label || row.id), kind: 'text', enabled: row.enabled !== false, source: 'live',
     }));
-    // Production accounts discover media models directly via HTTP (sharing OPEN_DESIGN_MEDIA_MODELS_PATH & parser with Cloud);
-    // custom/non-production connector environments fall back to `vela media models --json`.
-    const directAccess = await this.controlAccess().catch(() => undefined);
-    const media = directAccess
-      ? await apiJson(
-          this.options.fetcher ?? fetch,
-          `${directAccess.baseUrl}${OPEN_DESIGN_MEDIA_MODELS_PATH}`,
-          { headers: { Authorization: `Bearer ${directAccess.key}` } },
-          { timeoutMs: 15_000, maxBytes: 16 * 1024 * 1024 },
-        )
-      : JSON.parse(await this.run(['media', 'models', '--json']));
-    if (!Array.isArray(media.models)) throw new Error('OpenDesign media catalogue is unavailable');
-    for (const parsed of parseOpenDesignMediaCatalog(media.models, 'account')) {
-      const { modality, ...rest } = parsed;
-      models.push({ ...rest, kind: modality });
+    // Media discovery shares the exact same production access predicate as 3D (`controlAccess`) and media generation (`mediaAccess`).
+    // Non-production/custom connector profiles do not advertise account media models that direct HTTP generation cannot submit.
+    if (access) {
+      const media = await apiJson(
+        this.options.fetcher ?? fetch,
+        `${access.baseUrl}${OPEN_DESIGN_MEDIA_MODELS_PATH}`,
+        { headers: { Authorization: `Bearer ${access.key}` } },
+        { timeoutMs: 15_000, maxBytes: 16 * 1024 * 1024 },
+      );
+      if (!Array.isArray(media.models)) throw new Error('OpenDesign media catalogue is unavailable');
+      for (const parsed of parseOpenDesignMediaCatalog(media.models, 'account')) {
+        const { modality, ...rest } = parsed;
+        models.push({ ...rest, kind: modality });
+      }
     }
     if (generation !== this.generation) return [];
     await this.commit(generation, async () => {
@@ -1044,20 +1057,18 @@ export class OpenDesignAccount {
       this.cachedModels = [...new Map(models.map(model => [model.id, model])).values()]; this.cachedIdentity = identity;
       await writeSettings(path.join(this.root, 'models.json'), this.cachedModels);
     });
-    return generation === this.generation ? withBuiltinAudio(this.cachedModels) : [];
+    return generation === this.generation ? (access ? withBuiltinAudio(this.cachedModels) : this.cachedModels) : [];
   }
   async identity() { await this.adopt(); return (await readSettings<{ id?: string }>(path.join(this.root, 'session.json'), {})).id; }
-  async controlAccess(): Promise<{ baseUrl: string; key: string } | undefined> {
-    const profile = await this.profile();
-    if (!signedInProfile(profile) || !profile?.controlKey || profile.apiUrl?.replace(/\/$/, '') !== productionApi) return undefined;
-    return { baseUrl: productionApi, key: profile.controlKey };
-  }
   private async mediaAccess(): Promise<{ baseUrl: string; key: string; keyId: string } | undefined> {
     const profile = await this.profile();
     if (!signedInProfile(profile) || !profile?.controlKey || !profile.controlKeyId) return undefined;
-    const configuredApi = profile.apiUrl?.trim().replace(/\/$/, '');
-    if (configuredApi && configuredApi !== productionApi) return undefined;
+    if (profile.apiUrl?.trim().replace(/\/$/, '') !== productionApi) return undefined;
     return { baseUrl: productionApi, key: profile.controlKey, keyId: profile.controlKeyId };
+  }
+  async controlAccess(): Promise<{ baseUrl: string; key: string } | undefined> {
+    const access = await this.mediaAccess();
+    return access ? { baseUrl: access.baseUrl, key: access.key } : undefined;
   }
   private redactSecret(value: unknown, secret: string): unknown {
     if (!secret) return value;

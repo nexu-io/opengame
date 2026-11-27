@@ -102,7 +102,7 @@ test('account first-frame video rejects fixed ratios before submitting, uploads 
   account.identity = async () => 'fixture-session';
   account.summary = async () => ({ state: 'signed-in' } as AccountSummary);
   await mkdir(account.home, { recursive: true });
-  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({ profiles: { prod: { user: { id: 'test' }, controlKey: 'test-control', controlKeyId: 'test-id', runtimeKey: 'test-runtime' } } }));
+  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({ profiles: { prod: { apiUrl: 'https://amr-api.open-design.ai', user: { id: 'test' }, controlKey: 'test-control', controlKeyId: 'test-id', runtimeKey: 'test-runtime' } } }));
   const model: Model = { id: 'account:wan-2.7', provider: 'account', modelId: 'wan-2.7', label: 'Wan', modality: 'video', mode: 'text-to-video', source: 'live', maxInputImages: 1, defaults: { ratio: '16:9' } };
   const job = { id: fixtureJobId, model, modality: 'video', prompt: 'Walk forward', providerOrigin: 'fixture-session', parameters: { ratio: '16:9' } } as GenerationJob;
   try {
@@ -146,7 +146,7 @@ test('account image jobs with a transparent background or several references go 
   account.identity = async () => 'fixture-session';
   account.summary = async () => ({ state: 'signed-in' } as AccountSummary);
   await mkdir(account.home, { recursive: true });
-  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({ profiles: { prod: { user: { id: 'test' }, controlKey: 'test-control', controlKeyId: 'test-id', runtimeKey: 'test-runtime' } } }));
+  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({ profiles: { prod: { apiUrl: 'https://amr-api.open-design.ai', user: { id: 'test' }, controlKey: 'test-control', controlKeyId: 'test-id', runtimeKey: 'test-runtime' } } }));
   const references = await Promise.all(['one', 'two'].map(async name => { const file = path.join(store.directory, name + '.png'); await writeFile(file, png); return { file, mimeType: 'image/png', bytes: png.length }; }));
   const model: Model = { id: 'account:gpt-image-2.6-sunburst', provider: 'account', modelId: 'gpt-image-2.6-sunburst', label: 'GPT Image 2.6 Sunburst', modality: 'image', mode: 'text-to-image', source: 'live', supportsImageReference: true, maxInputImages: 16 };
   const job = { id: fixtureJobId, model, modality: 'image', prompt: 'Keep only the speaker.', providerOrigin: 'fixture-session', parameters: { background: 'transparent', quality: 'low' } } as unknown as GenerationJob;
@@ -346,6 +346,28 @@ test('account catalogue preserves capabilities and submits video duration and na
   const fetcher = (async (input: any, init: any = {}) => {
     const url = String(input), method = (init.method ?? 'GET').toUpperCase();
     const apiPath = url.replace('https://amr-api.open-design.ai/api/v1/media', '');
+    if (method === 'GET' && apiPath === '/models?include_audio=true') {
+      return Response.json({
+        models: [
+          {
+            model: 'doubao-seedance-2-5-260628', kind: 'video',
+            capabilities: {
+              durations: { values: [5, 4, ...Array.from({ length: 25 }, (_, i) => i + 6)], default: 5 },
+              ratios: { values: ['16:9', '9:16', 'adaptive'], default: '16:9' },
+              resolutions: { values: ['720p', '480p', '1080p'], default: '720p' },
+            },
+          },
+          {
+            model: 'wan-2.7', kind: 'video',
+            capabilities: {
+              durations: { values: [5, 2, 3, 4, ...Array.from({ length: 10 }, (_, i) => i + 6)], default: 5 },
+              ratios: { values: ['16:9', '9:16', 'adaptive'], default: '16:9' },
+              resolutions: { values: ['720p', '1080p'], default: '720p' },
+            },
+          },
+        ],
+      });
+    }
     if (method === 'POST' && apiPath === '/videos/tasks') {
       submits.push(JSON.parse(String(init.body)));
       return Response.json({ task_id: `vt_${submits.length}`, status: 'queued' }, { status: 202 });
@@ -362,34 +384,12 @@ test('account catalogue preserves capabilities and submits video duration and na
     fetcher,
     run: async args => {
       if (args[0] === 'model') return JSON.stringify({ source: 'remote', data: [] });
-      if (args[0] === 'media') {
-        return JSON.stringify({
-          models: [
-            {
-              model: 'doubao-seedance-2-5-260628', kind: 'video',
-              capabilities: {
-                durations: { values: [5, 4, ...Array.from({ length: 25 }, (_, i) => i + 6)], default: 5 },
-                ratios: { values: ['16:9', '9:16', 'adaptive'], default: '16:9' },
-                resolutions: { values: ['720p', '480p', '1080p'], default: '720p' },
-              },
-            },
-            {
-              model: 'wan-2.7', kind: 'video',
-              capabilities: {
-                durations: { values: [5, 2, 3, 4, ...Array.from({ length: 10 }, (_, i) => i + 6)], default: 5 },
-                ratios: { values: ['16:9', '9:16', 'adaptive'], default: '16:9' },
-                resolutions: { values: ['720p', '1080p'], default: '720p' },
-              },
-            },
-          ],
-        });
-      }
       throw new Error(`unexpected connector call: ${args.join(' ')}`);
     },
     pollMs: 0,
   });
   await mkdir(account.home, { recursive: true });
-  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({ profiles: { prod: { user: { id: 'test' }, controlKey: 'test-control', controlKeyId: 'test-id', runtimeKey: 'fixture-key' } } }));
+  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({ profiles: { prod: { apiUrl: 'https://amr-api.open-design.ai', user: { id: 'test' }, controlKey: 'test-control', controlKeyId: 'test-id', runtimeKey: 'fixture-key' } } }));
   account.identity = async () => 'fixture-session';
   account.summary = async () => ({ state: 'signed-in' } as AccountSummary);
   try {
@@ -607,20 +607,29 @@ test('OpenDesign Cloud packs image aspect_ratio and resolution into output, pres
 
 test('account media model sync preserves capabilities in nativeOptions for generationOptions and exposes first-frame maxInputImages', () => fixture(async store => {
   const account = new OpenDesignAccount(store.directory, {
-    run: async args => {
-      if (args[0] === 'model') return JSON.stringify({ source: 'remote', data: [] });
-      if (args[0] === 'media') return JSON.stringify({
+    fetcher: (async (input: any) => {
+      assert.equal(String(input), 'https://amr-api.open-design.ai/api/v1/media/models?include_audio=true');
+      return Response.json({
         models: [
           { model: 'wan-2.7', kind: 'video', capabilities: { max_input_images: 1, ratios: { values: ['16:9', '9:16'], default: '16:9' }, durations: { values: [5, 10], default: 5 } } },
           { model: 'multi-video', kind: 'video', capabilities: { max_input_images: 2 } },
           { model: 'text-only-video', kind: 'video', capabilities: {} },
         ],
       });
-      return '{}';
+    }) as typeof fetch,
+    run: async args => {
+      if (args[0] === 'model') return JSON.stringify({ source: 'remote', data: [] });
+      throw new Error(`unexpected connector call: ${args.join(' ')}`);
     },
   });
   account.identity = async () => 'fixture-session';
-  (account as any).profile = async () => ({ runtimeKey: 'runtime-key' });
+  (account as any).profile = async () => ({
+    apiUrl: 'https://amr-api.open-design.ai',
+    controlKey: 'test-control',
+    controlKeyId: 'test-id',
+    runtimeKey: 'runtime-key',
+    user: { id: 'test' },
+  });
   try {
     await account.models(true);
     const videos = await account.mediaModels();
@@ -1160,7 +1169,7 @@ test('Magi-2 video compatibility: capabilities, always-on audio, first-frame fix
     run: async () => { throw new Error('unexpected connector call'); },
   });
   await mkdir(account.home, { recursive: true });
-  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({ profiles: { prod: { user: { id: 'test' }, controlKey: 'test-control', controlKeyId: 'test-id', runtimeKey: 'test-runtime' } } }));
+  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({ profiles: { prod: { apiUrl: 'https://amr-api.open-design.ai', user: { id: 'test' }, controlKey: 'test-control', controlKeyId: 'test-id', runtimeKey: 'test-runtime' } } }));
   account.identity = async () => 'fixture-session';
   account.summary = async () => ({ state: 'signed-in' } as AccountSummary);
   try {
