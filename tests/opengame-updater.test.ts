@@ -556,13 +556,43 @@ test('unpinned host platforms (for example Linux CI) fall back to system/env nat
   });
 });
 
-test('withInstallLock reclaims expired, pre-boot, corrupt, and dead-PID locks while guiding manual cleanup on live contention', async t => {
+test('withInstallLock heartbeats active locks past staleMs while reclaiming inactive, pre-boot, corrupt, and dead-PID locks', async t => {
   const dir = await mkdtemp(path.join(tmpdir(), 'opengame-lock-stale-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const lockFile = path.join(dir, 'install.lock');
+  const oldDate = new Date(Date.now() - 20 * 60_000);
 
-  // 1. Live reused PID in JSON lock whose createdAt exceeds staleMs is reclaimed automatically.
-  await writeFile(lockFile, JSON.stringify({ pid: process.pid, token: 'reused-pid', createdAt: Date.now() - 20 * 60_000 }));
+  // 1. A live lock holder heartbeats mtime while running and MUST NOT be reclaimed even when work exceeds staleMs.
+  let longHolderDone = false;
+  let markLongAcquired!: () => void;
+  const longAcquired = new Promise<void>(resolve => { markLongAcquired = resolve; });
+  const longHolder = withInstallLock(lockFile, async () => {
+    markLongAcquired();
+    await new Promise(resolve => setTimeout(resolve, 700));
+    longHolderDone = true;
+    return 'long-holder-complete';
+  }, { staleMs: 300 });
+  await longAcquired;
+  // Wait beyond staleMs (300ms) so an un-heartbeated lock would have expired.
+  await new Promise(resolve => setTimeout(resolve, 450));
+  assert.equal(longHolderDone, false);
+  await assert.rejects(
+    () => withInstallLock(lockFile, async () => 'stolen', { timeoutMs: 120, staleMs: 300 }),
+    (error: any) => error.code === 'INSTALL_LOCK_BUSY',
+    'Active heartbeated lock must not be reclaimed even after exceeding staleMs',
+  );
+  // A contender willing to wait acquires the lock only after the active holder finishes.
+  const queued = await withInstallLock(lockFile, async () => {
+    assert.equal(longHolderDone, true, 'Contender must wait until the live heartbeated holder finishes');
+    return 'after-long-holder';
+  }, { timeoutMs: 3_000, staleMs: 300 });
+  assert.equal(await longHolder, 'long-holder-complete');
+  assert.equal(queued, 'after-long-holder');
+  assert.equal(existsSync(lockFile), false);
+
+  // 2. Live reused PID in JSON lock whose heartbeat (mtime) expired past staleMs is reclaimed automatically.
+  await writeFile(lockFile, JSON.stringify({ pid: process.pid, token: 'reused-pid', createdAt: oldDate.getTime() }));
+  await utimes(lockFile, oldDate, oldDate);
   const expiredJson = await withInstallLock(lockFile, async () => {
     const active = JSON.parse(await readFile(lockFile, 'utf8'));
     assert.equal(active.pid, process.pid);
@@ -573,20 +603,19 @@ test('withInstallLock reclaims expired, pre-boot, corrupt, and dead-PID locks wh
   assert.equal(expiredJson, 'reclaimed-expired-json');
   assert.equal(existsSync(lockFile), false);
 
-  // 2. Legacy bare-PID lock with live PID whose mtime exceeds staleMs is reclaimed automatically.
-  const oldDate = new Date(Date.now() - 20 * 60_000);
+  // 3. Legacy bare-PID lock with live PID whose mtime exceeds staleMs is reclaimed automatically.
   await writeFile(lockFile, String(process.pid));
   await utimes(lockFile, oldDate, oldDate);
   const expiredLegacy = await withInstallLock(lockFile, async () => 'reclaimed-expired-legacy', { timeoutMs: 200 });
   assert.equal(expiredLegacy, 'reclaimed-expired-legacy');
 
-  // 3. Token-less JSON lock with live PID past max age is reclaimed automatically.
+  // 4. Token-less JSON lock with live PID past max inactivity age is reclaimed automatically.
   await writeFile(lockFile, JSON.stringify({ pid: process.pid }));
   await utimes(lockFile, oldDate, oldDate);
   const expiredTokenless = await withInstallLock(lockFile, async () => 'reclaimed-expired-tokenless', { timeoutMs: 200 });
   assert.equal(expiredTokenless, 'reclaimed-expired-tokenless');
 
-  // 4. Pre-boot lock with live PID is reclaimed even when staleMs is larger than system uptime.
+  // 5. Pre-boot lock with live PID is reclaimed even when staleMs is larger than system uptime.
   const preBootTs = Date.now() - Math.round(uptime() * 1000) - 120_000;
   await writeFile(lockFile, JSON.stringify({ pid: process.pid, token: 'before-reboot', createdAt: preBootTs }));
   const preBoot = await withInstallLock(lockFile, async () => 'reclaimed-pre-boot', {
@@ -595,7 +624,7 @@ test('withInstallLock reclaims expired, pre-boot, corrupt, and dead-PID locks wh
   });
   assert.equal(preBoot, 'reclaimed-pre-boot');
 
-  // 5. Empty and truncated/corrupt lock files are reclaimed after the brief grace window.
+  // 6. Empty and truncated/corrupt lock files are reclaimed after the brief grace window.
   const corruptDate = new Date(Date.now() - 5_000);
   await writeFile(lockFile, '');
   await utimes(lockFile, corruptDate, corruptDate);
@@ -605,7 +634,7 @@ test('withInstallLock reclaims expired, pre-boot, corrupt, and dead-PID locks wh
   await utimes(lockFile, corruptDate, corruptDate);
   assert.equal(await withInstallLock(lockFile, async () => 'reclaimed-truncated', { timeoutMs: 200 }), 'reclaimed-truncated');
 
-  // 6. Fresh live lock is NEVER stolen and timeout error explains both auto-reclaim and manual removal.
+  // 7. Fresh live lock is NEVER stolen and timeout error explains both auto-reclaim and manual removal.
   const liveContent = JSON.stringify({ pid: process.pid, token: 'active-owner', createdAt: Date.now() });
   await writeFile(lockFile, liveContent);
   try {
@@ -614,7 +643,7 @@ test('withInstallLock reclaims expired, pre-boot, corrupt, and dead-PID locks wh
       (error: any) => {
         assert.equal(error.code, 'INSTALL_LOCK_BUSY');
         assert.match(error.message, new RegExp(`pid ${process.pid}`));
-        assert.match(error.message, /after 15m/);
+        assert.match(error.message, /after 15m of inactivity/);
         assert.match(error.message, /remove .*install\.lock manually/);
         return true;
       },

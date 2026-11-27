@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { appendFile, link, mkdir, mkdtemp, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { appendFile, link, mkdir, mkdtemp, open, readFile, readdir, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { uptime } from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -23,11 +23,11 @@ const REBOOT_CLOCK_SKEW_MS = 60_000;
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-function parseNonNegativeMs(explicit, envValue, fallback) {
-  if (typeof explicit === 'number' && Number.isFinite(explicit) && explicit >= 0) return explicit;
+function parseNonNegativeMs(explicit, envValue, fallback, { min = 0 } = {}) {
+  if (typeof explicit === 'number' && Number.isFinite(explicit) && explicit >= min) return explicit;
   if (typeof envValue === 'string' && envValue.trim() !== '') {
     const parsed = Number(envValue);
-    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+    if (Number.isFinite(parsed) && parsed >= min) return parsed;
   }
   return fallback;
 }
@@ -57,27 +57,28 @@ function isLockStale(owner, lockStat, now, maxAgeMs) {
     return now - lockStat.mtimeMs >= Math.min(maxAgeMs, CORRUPT_LOCK_GRACE_MS);
   }
   if (!processAlive(owner.pid)) return true;
-  const lockCreatedAt = owner.createdAt !== null ? Math.min(owner.createdAt, lockStat.mtimeMs) : lockStat.mtimeMs;
-  if (now - lockCreatedAt >= maxAgeMs) return true;
+  const lockOriginAt = owner.createdAt !== null ? Math.min(owner.createdAt, lockStat.mtimeMs) : lockStat.mtimeMs;
   const systemUptimeMs = uptime() * 1000;
   if (Number.isFinite(systemUptimeMs) && systemUptimeMs > 0) {
     const bootTimeMs = now - systemUptimeMs;
-    if (lockCreatedAt < bootTimeMs - REBOOT_CLOCK_SKEW_MS) return true;
+    if (lockOriginAt < bootTimeMs - REBOOT_CLOCK_SKEW_MS) return true;
   }
-  return false;
+  return now - lockStat.mtimeMs >= maxAgeMs;
 }
 
 /**
- * Acquire `install.lock` with stale-lock reclamation and a bounded retry wait.
+ * Acquire `install.lock` with heartbeat refresh, stale-lock reclamation, and a bounded retry wait.
+ * While `work()` executes, the lock file's mtime is heartbeated periodically so legitimate long-running
+ * operations (such as slow downloads or `npm ci`) are never reclaimed while active.
  * Reclaims locks when:
  * - the recorded owning PID has exited,
  * - the lock predates the current OS boot (PID reuse after reboot),
- * - the lock exceeds `staleMs` (default 15 minutes, matching `withCacheLock`), or
+ * - the lock heartbeat (mtime) has been inactive for `staleMs` (default 15 minutes), or
  * - the lock file is empty/truncated/corrupt past a brief grace window.
  */
 export async function withInstallLock(filename, work, { timeoutMs, staleMs } = {}) {
   const waitMs = parseNonNegativeMs(timeoutMs, process.env.OPENGAME_INSTALL_LOCK_TIMEOUT_MS, DEFAULT_INSTALL_LOCK_TIMEOUT_MS);
-  const maxAgeMs = parseNonNegativeMs(staleMs, process.env.OPENGAME_INSTALL_LOCK_STALE_MS, DEFAULT_INSTALL_LOCK_STALE_MS);
+  const maxAgeMs = parseNonNegativeMs(staleMs, process.env.OPENGAME_INSTALL_LOCK_STALE_MS, DEFAULT_INSTALL_LOCK_STALE_MS, { min: 1 });
   await mkdir(path.dirname(filename), { recursive: true });
   const token = randomUUID();
   const candidate = filename + '.' + token;
@@ -87,6 +88,7 @@ export async function withInstallLock(filename, work, { timeoutMs, staleMs } = {
     for (;;) {
       try {
         await link(candidate, filename);
+        await rm(candidate, { force: true }).catch(() => {});
         break;
       } catch (error) {
         if (error.code !== 'EEXIST') throw error;
@@ -115,7 +117,7 @@ export async function withInstallLock(filename, work, { timeoutMs, staleMs } = {
         throw Object.assign(
           new Error(
             `Another OpenGame operation is using ${filename} (${ownerDesc}). `
-            + `Retry after it finishes; stale locks are reclaimed automatically after the owning process exits or after ${staleLabel}, `
+            + `Retry after it finishes; stale locks are reclaimed automatically after the owning process exits or after ${staleLabel} of inactivity, `
             + `or confirm no OpenGame setup/update is running and remove ${filename} manually.`,
           ),
           { code: 'INSTALL_LOCK_BUSY', lockFile: filename, ownerPid: owner?.pid ?? null },
@@ -123,9 +125,36 @@ export async function withInstallLock(filename, work, { timeoutMs, staleMs } = {
       }
       await pause(50);
     }
+    const heartbeatIntervalMs = Math.max(20, Math.min(60_000, Math.floor(maxAgeMs / 3)));
+    let released = false;
+    let heartbeatPromise = null;
+    let heartbeatTimer = null;
+    const refreshHeartbeat = () => {
+      if (released || heartbeatPromise) return;
+      heartbeatPromise = (async () => {
+        try {
+          const currentRaw = await readFile(filename, 'utf8').catch(() => null);
+          if (released || parseLockOwner(currentRaw)?.token !== token) {
+            if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+            return;
+          }
+          const now = new Date();
+          await utimes(filename, now, now);
+        } catch {
+          // Ignore transient heartbeat I/O errors; release verifies token ownership.
+        } finally {
+          heartbeatPromise = null;
+        }
+      })();
+    };
+    heartbeatTimer = setInterval(refreshHeartbeat, heartbeatIntervalMs);
+    heartbeatTimer.unref?.();
     try {
       return await work();
     } finally {
+      released = true;
+      if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+      if (heartbeatPromise) await heartbeatPromise;
       const currentRaw = await readFile(filename, 'utf8').catch(() => null);
       if (parseLockOwner(currentRaw)?.token === token) {
         await rm(filename, { force: true });
