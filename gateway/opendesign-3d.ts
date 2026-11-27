@@ -4,14 +4,15 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { inspectGlb } from '../scripts/game-glb-inspect.mjs';
-import { verificationBinaries } from '../scripts/verify-export.ts';
+import { OPEN_DESIGN_MAX_SOURCE_REFERENCE_BYTES, OPEN_DESIGN_UPLOAD_SOFT_BUDGET_BYTES } from '../shared/asset-limits.ts';
 import type { WorkspaceStore } from '../workspace.ts';
 import { atomicAssetJson, assetHash } from './asset-library.ts';
 import type { CapabilityScriptContext, CapabilityScriptOutput, CapabilityScriptStage, CapabilityScriptTelemetryMeta } from './capability-scripts.ts';
 import { optimizeGlbTexturesForPublish } from './glb-optimize.ts';
-import { ProviderError, publicProviderFetch, retryRead, withErrorMeta, type Fetcher } from './network.ts';
+import { boundedUpstreamCode, ProviderError, publicProviderFetch, retryRead, withErrorMeta, type Fetcher } from './network.ts';
 import type { MediaGenerationMode, MediaGenerationPipelineStep } from '../tracking/tool-fields.ts';
 import { cloud3dModels, cloudSpatialCatalog, cloudWorldModels, mediaSubmitHeaders, productionApi, type Cloud3dModelEntry } from './opendesign.ts';
+import { detectReferenceImageMime, uploadOpenDesignReference } from './reference-upload.ts';
 import { gatewayFor } from './service.ts';
 
 const DEFAULT_TRIPO_MODEL = 'tripo-3.0';
@@ -21,20 +22,13 @@ const POLL_INTERVAL_MS = 2500;
 const REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_TASK_TIMEOUT_MS = 300_000;
 const DISCOVERY_CACHE_TTL_MS = 60_000;
-const MAX_REFERENCE_IMAGE_BYTES = 20 * 1024 * 1024; // 20 MiB local safety cap before reading into memory
+const MAX_REFERENCE_IMAGE_BYTES = OPEN_DESIGN_MAX_SOURCE_REFERENCE_BYTES;
 const MAX_SPATIAL_DOWNLOAD_BYTES = 100 * 1024 * 1024; // 100 MiB hard streaming cap
 
 const QUALITY_PRESETS: Record<string, { faceLimit: number }> = {
   'prop-low': { faceLimit: 5000 },
   'hero-balanced': { faceLimit: 10000 },
   'hero-high': { faceLimit: 18000 },
-};
-
-const MIME_BY_EXT: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
 };
 
 type SpatialProvider = 'account' | 'opendesign' | 'env';
@@ -435,78 +429,14 @@ async function tripoJson<T = any>(
   }
   if (!res.ok) {
     const detail = parsed?.error?.message || parsed?.error || parsed?.message || parsed?.detail || text.slice(0, 300);
-    const upstreamCode = typeof parsed?.error?.code === 'string'
-      ? parsed.error.code
-      : typeof parsed?.code === 'string' ? parsed.code : undefined;
+    const upstreamCode = boundedUpstreamCode(parsed?.error)
+      ?? boundedUpstreamCode(parsed?.error?.code)
+      ?? boundedUpstreamCode(parsed?.error?.error_code)
+      ?? boundedUpstreamCode(parsed?.error_code)
+      ?? boundedUpstreamCode(parsed?.code);
     throw new ProviderError(`3D gateway HTTP ${res.status} on ${endpoint}: ${String(detail)}`, res.status, upstreamCode, 'api');
   }
   return parsed as T;
-}
-
-function detectReferenceImageMime(bytes: Buffer): 'image/png' | 'image/jpeg' | 'image/webp' | undefined {
-  if (bytes.length >= 8
-    && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
-    && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) {
-    return 'image/png';
-  }
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    return 'image/jpeg';
-  }
-  if (bytes.length >= 12
-    && bytes.toString('ascii', 0, 4) === 'RIFF'
-    && bytes.toString('ascii', 8, 12) === 'WEBP') {
-    return 'image/webp';
-  }
-  return undefined;
-}
-
-const EXT_BY_MIME: Record<'image/png' | 'image/jpeg' | 'image/webp', string> = {
-  'image/png': '.png',
-  'image/jpeg': '.jpg',
-  'image/webp': '.webp',
-};
-
-async function prepareUploadReferenceBytes(filePath: string): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
-  const info = await stat(filePath);
-  if (info.size <= 0 || info.size > MAX_REFERENCE_IMAGE_BYTES) {
-    throw new Error(`3D reference image must be between 1 byte and 20 MiB (got ${info.size} bytes)`);
-  }
-  let bytes = await readFile(filePath);
-  const detectedMime = detectReferenceImageMime(bytes);
-  if (!detectedMime) {
-    throw new Error('3D reference asset must be a PNG, JPEG, or WebP image');
-  }
-  let contentType: string = detectedMime;
-  const ext = path.extname(filePath).toLowerCase();
-  const base = path.parse(path.basename(filePath)).name || 'reference';
-  let filename = MIME_BY_EXT[ext] === detectedMime ? path.basename(filePath) : `${base}${EXT_BY_MIME[detectedMime]}`;
-
-  // AMR /api/v1/media/uploads rejects >2MB 2K PNGs with HTTP 413 asset_too_large; transcode large references cleanly to JPEG.
-  if (bytes.length > 1_800_000 && (contentType === 'image/png' || contentType === 'image/webp' || contentType === 'image/jpeg')) {
-    const tmpOut = path.join(os.tmpdir(), `om-3d-ref-${randomUUID()}.jpg`);
-    try {
-      const { execFile } = await import('node:child_process');
-      const { promisify } = await import('node:util');
-      const execFileAsync = promisify(execFile);
-      if (process.platform === 'darwin') {
-        await execFileAsync('sips', ['-s', 'format', 'jpeg', '-s', 'formatOptions', '86', '-Z', '1536', filePath, '--out', tmpOut], { timeout: 15_000 });
-      } else {
-        const { ffmpeg } = verificationBinaries();
-        await execFileAsync(ffmpeg, ['-y', '-i', filePath, '-vf', "scale='min(1536,iw)':'min(1536,ih)':force_original_aspect_ratio=decrease", '-q:v', '4', tmpOut], { timeout: 15_000 });
-      }
-      const compressed = await readFile(tmpOut);
-      if (compressed.length > 0 && compressed.length < bytes.length) {
-        bytes = compressed;
-        contentType = 'image/jpeg';
-        filename = `${path.parse(filename).name}.jpg`;
-      }
-    } catch {
-      // Fall back to original bytes if local transcoder is unavailable
-    } finally {
-      await rm(tmpOut, { force: true }).catch(() => {});
-    }
-  }
-  return { bytes, contentType, filename };
 }
 
 async function uploadReferenceImage(
@@ -515,51 +445,73 @@ async function uploadReferenceImage(
   filePath: string,
   idempotencyKey: string,
 ): Promise<string> {
-  const { bytes, contentType, filename } = await prepareUploadReferenceBytes(filePath);
+  const info = await stat(filePath);
+  if (info.size <= 0 || info.size > MAX_REFERENCE_IMAGE_BYTES) {
+    throw new Error(`3D reference image must be between 1 byte and 30 MiB (got ${info.size} bytes)`);
+  }
+  const bytes = await readFile(filePath);
+  const detectedMime = detectReferenceImageMime(bytes);
+  if (!detectedMime) {
+    throw new Error('3D reference asset must be a PNG, JPEG, or WebP image');
+  }
   config.telemetry?.report('uploading');
 
-  const created = await tripoJson<any>(fetcher, config, '/api/v1/media/uploads', {
-    method: 'POST',
-    headers: { 'Idempotency-Key': `${idempotencyKey}-upload` },
-    body: JSON.stringify({
-      filename,
-      mime_type: contentType,
-      content_type: contentType,
-      size_bytes: bytes.length,
-    }),
-  });
-  const uploadId = created.asset_id ?? created.id ?? created.upload_id;
-  const uploadUrl = created.upload_url ?? created.upload?.url;
-  if (typeof uploadId !== 'string' || !uploadId || typeof uploadUrl !== 'string' || !uploadUrl.startsWith('https://')) {
-    throw new Error(`3D image upload init returned unexpected payload: ${JSON.stringify(created).slice(0, 300)}`);
-  }
+  const { assetId } = await uploadOpenDesignReference({
+    origin: config.baseUrl,
+    bytes,
+    filename: path.basename(filePath),
+    budgetBytes: OPEN_DESIGN_UPLOAD_SOFT_BUDGET_BYTES,
+    transport: {
+      uploadAttempt: async (prepared, keySuffix) => {
+        const created = await tripoJson<any>(fetcher, config, '/api/v1/media/uploads', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': `${idempotencyKey}-upload${keySuffix}` },
+          body: JSON.stringify({
+            filename: prepared.filename,
+            mime_type: prepared.mimeType,
+            content_type: prepared.mimeType,
+            size_bytes: prepared.bytes.length,
+          }),
+        });
+        const uploadId = created.asset_id ?? created.id ?? created.upload_id;
+        const uploadUrl = created.upload_url ?? created.upload?.url;
+        if (typeof uploadId !== 'string' || !uploadId || typeof uploadUrl !== 'string' || !uploadUrl.startsWith('https://')) {
+          throw new Error(`3D image upload init returned unexpected payload: ${JSON.stringify(created).slice(0, 300)}`);
+        }
 
-  const putHeaders: Record<string, string> = { 'Content-Type': contentType, 'Content-Length': String(bytes.length) };
-  if (created.upload?.headers && typeof created.upload.headers === 'object') {
-    for (const [k, v] of Object.entries(created.upload.headers)) {
-      if (typeof v === 'string' && !/^authorization$/i.test(k)) putHeaders[k] = v;
-    }
-  }
-  const putRes = await fetcher(uploadUrl, {
-    method: 'PUT',
-    headers: putHeaders,
-    body: new Uint8Array(bytes),
-    redirect: 'error',
-    signal: AbortSignal.timeout(60_000),
-  });
-  if (!putRes.ok) {
-    throw withErrorMeta(new Error(`3D reference image PUT failed with HTTP ${putRes.status}`), {
-      status: putRes.status,
-      errorSource: 'storage',
-    });
-  }
+        const putHeaders: Record<string, string> = {
+          'Content-Type': prepared.mimeType,
+          'Content-Length': String(prepared.bytes.length),
+        };
+        if (created.upload?.headers && typeof created.upload.headers === 'object') {
+          for (const [k, v] of Object.entries(created.upload.headers)) {
+            if (typeof v === 'string' && !/^authorization$/i.test(k)) putHeaders[k] = v;
+          }
+        }
+        const putRes = await fetcher(uploadUrl, {
+          method: 'PUT',
+          headers: putHeaders,
+          body: new Uint8Array(prepared.bytes),
+          redirect: 'error',
+          signal: AbortSignal.timeout(60_000),
+        });
+        if (!putRes.ok) {
+          throw withErrorMeta(new Error(`3D reference image PUT failed with HTTP ${putRes.status}`), {
+            status: putRes.status,
+            errorSource: 'storage',
+          });
+        }
 
-  await tripoJson(fetcher, config, `/api/v1/media/uploads/${encodeURIComponent(uploadId)}/commit`, {
-    method: 'POST',
-    headers: { 'Idempotency-Key': `${idempotencyKey}-commit` },
-    body: JSON.stringify({}),
+        await tripoJson(fetcher, config, `/api/v1/media/uploads/${encodeURIComponent(uploadId)}/commit`, {
+          method: 'POST',
+          headers: { 'Idempotency-Key': `${idempotencyKey}-commit${keySuffix}` },
+          body: JSON.stringify({}),
+        });
+        return String(uploadId);
+      },
+    },
   });
-  return String(uploadId);
+  return assetId;
 }
 
 type TripoArtifact = {

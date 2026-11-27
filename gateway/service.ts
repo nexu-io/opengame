@@ -20,7 +20,12 @@ import { requireLibraryMediaRuntime } from './asset-probe.ts';
 import { generationOptions, resolveGenerationParameters, validateGenerationOptions } from '../shared/generation-options.ts';
 import { loadRegistry, toOpenMotionGenerationOptions } from '../packages/multimodal-models/src/query.ts';
 import { audioAssetTitle, classifyAudioKind } from '../shared/audio-kind.ts';
-import { MAX_ASSET_BYTES } from '../shared/asset-limits.ts';
+import {
+  LOCAL_ADAPTER_MAX_REFERENCE_BYTES,
+  MAX_ASSET_BYTES,
+  OPEN_DESIGN_MAX_SOURCE_REFERENCE_BYTES,
+} from '../shared/asset-limits.ts';
+import { OPEN_DESIGN_SOURCE_LIMIT_MESSAGE } from './reference-upload.ts';
 import { rankSearchResults } from '../shared/fuzzy-search.ts';
 import { type HostContext } from '../tracking/host.ts';
 import {
@@ -568,9 +573,8 @@ export class ModelGateway {
         try {
           const sources: { asset?: { assetId: string; versionId: string }; projectPath?: string }[] = input.referenceAsset ? [{ projectPath: input.referenceAsset }]
             : (input.library?.references ?? []).map(asset => ({ asset }));
-          // TODO(OPEND-5839): interim hardcoded 2 MiB OpenDesign reference upload cap until expand=schema publishes per-model media limits.
           const openDesignUpload = ['account', 'opendesign'].includes(model.provider);
-          const maxReferenceBytes = openDesignUpload ? 2 * 1024 * 1024 : 20 * 1024 * 1024;
+          const maxReferenceBytes = openDesignUpload ? OPEN_DESIGN_MAX_SOURCE_REFERENCE_BYTES : LOCAL_ADAPTER_MAX_REFERENCE_BYTES;
           for (const [index, item] of sources.entries()) {
             let reference: Awaited<ReturnType<AssetLibrary['resolve']>> | undefined;
             let source: string;
@@ -583,14 +587,13 @@ export class ModelGateway {
               rejection = { reason: 'REFERENCE_UNREADABLE', category: 'reference_invalid' };
               throw error;
             }
-            if (!info.isFile() || info.isSymbolicLink()) failSubmit('REFERENCE_UNREADABLE', 'reference_invalid', 'Reference image must be a local file under 20 MB');
-            if (info.size > maxReferenceBytes) failSubmit('REFERENCE_TOO_LARGE', 'reference_invalid', openDesignUpload ? 'The reference image is larger than the 2 MiB OpenDesign upload limit.' : 'Reference image must be a local file under 20 MB');
+            if (!info.isFile() || info.isSymbolicLink()) failSubmit('REFERENCE_UNREADABLE', 'reference_invalid', openDesignUpload ? 'Reference image must be a local file under 30 MiB' : 'Reference image must be a local file under 20 MB');
+            if (info.size > maxReferenceBytes) failSubmit('REFERENCE_TOO_LARGE', 'reference_invalid', openDesignUpload ? OPEN_DESIGN_SOURCE_LIMIT_MESSAGE : 'Reference image must be a local file under 20 MB');
             const bytes = await readFile(source);
             let media: ReturnType<typeof mediaType>;
             try { media = mediaType(bytes, 'image'); } catch (error) { rejection = { reason: 'REFERENCE_INVALID_FORMAT', category: 'reference_invalid' }; throw error; }
-            if (bytes.length > maxReferenceBytes) failSubmit('REFERENCE_TOO_LARGE', 'reference_invalid', openDesignUpload ? 'The reference image is larger than the 2 MiB OpenDesign upload limit.' : 'Reference image exceeds 20 MB');
+            if (bytes.length > maxReferenceBytes) failSubmit('REFERENCE_TOO_LARGE', 'reference_invalid', openDesignUpload ? OPEN_DESIGN_SOURCE_LIMIT_MESSAGE : 'Reference image exceeds 20 MB');
             if (!['png', 'jpg', 'webp'].includes(media.extension)) failSubmit('REFERENCE_INVALID_FORMAT', 'reference_invalid', 'Use a PNG, JPEG or WebP reference image');
-            if (['opendesign', 'account'].includes(model.provider) && bytes.length > 2 * 1024 * 1024) failSubmit('REFERENCE_TOO_LARGE', 'reference_invalid', 'The reference image is larger than the 2 MiB OpenDesign upload limit.');
             if (reference && hash(bytes) !== reference.version.sha256) failSubmit('REFERENCE_UNREADABLE', 'reference_invalid', 'Reference asset bytes have changed');
             const snapshot = { path: item.projectPath ?? `asset:${item.asset!.assetId}/${item.asset!.versionId}`, sha256: hash(bytes), mimeType: media.mimeType, bytes: bytes.length };
             (job.references ??= []).push(snapshot); job.reference ??= snapshot;

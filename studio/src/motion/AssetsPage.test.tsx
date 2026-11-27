@@ -1056,7 +1056,7 @@ it('shows Reference limit reached when another reference fills the last slot whi
   expect(document.body.textContent).toContain('Reference limit reached.');
 });
 
-it('supports multi-select in AssetPicker capped to remaining reference slots and rejects uncompressible >2 MiB drops early', async () => {
+it('supports multi-select in AssetPicker capped to remaining reference slots, preserves 2K PNG originals on drop, and rejects uncompressible >30 MiB drops early', async () => {
   const { mediaEditorDestination } = await import('./creativeStudios');
   const sunburst = { id: 'opendesign:gpt-image-2.6-sunburst', provider: 'opendesign', modelId: 'gpt-image-2.6-sunburst', label: 'gpt-image-2.6-sunburst', modality: 'image' as const, mode: 'text-to-image', source: 'live' as const, supportsImageReference: true, maxInputImages: 16 };
   const catalog = {
@@ -1093,7 +1093,7 @@ it('supports multi-select in AssetPicker capped to remaining reference slots and
   await click('Use selected (2)');
   expect(remember.mock.lastCall?.[0].references.map((item: { reference: { assetId: string } }) => item.reference.assetId)).toEqual(['r1', 'r2', 'r3', 'A', 'B']);
 
-  // Dropping an uncompressible > 2 MiB image on a fresh Image blend draft surfaces the 2 MiB error early without calling uploadLibraryAsset.
+  // Dropping a 4.5 MiB supported PNG imports the untouched original into the library without browser compression.
   await act(async () => root.unmount()); root = createRoot(container);
   vi.mocked(uploadLibraryAsset).mockClear();
   vi.stubGlobal('createImageBitmap', vi.fn(async () => { throw new Error('cannot decode'); }));
@@ -1105,13 +1105,23 @@ it('supports multi-select in AssetPicker capped to remaining reference slots and
     remember: vi.fn(), chooseModel: vi.fn(),
   };
   await act(async () => root.render(<AssetsPage active studio={freshStudio} />)); await flush();
-  const huge = new File([new Uint8Array(2 * 1024 * 1024 + 512)], 'huge.png', { type: 'image/png' });
+  const twoKPng = new File(['original-2k'], 'gpt-image-2-2k.png', { type: 'image/png' });
+  Object.defineProperty(twoKPng, 'size', { value: Math.round(4.5 * 1024 * 1024), configurable: true });
+  vi.mocked(uploadLibraryAsset).mockResolvedValueOnce(fixture('imported-2k'));
+  await act(async () => { lastComposerOnUploadFiles?.([twoKPng]); }); await flush();
+  expect(uploadLibraryAsset).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(uploadLibraryAsset).mock.calls[0]?.[0]).toBe(twoKPng);
+
+  // Dropping an uncompressible > 30 MiB image surfaces the 30 MiB error early without calling uploadLibraryAsset.
+  vi.mocked(uploadLibraryAsset).mockClear();
+  const huge = new File(['huge'], 'huge.png', { type: 'image/png' });
+  Object.defineProperty(huge, 'size', { value: 30 * 1024 * 1024 + 512, configurable: true });
   await act(async () => { lastComposerOnUploadFiles?.([huge]); }); await flush();
   expect(uploadLibraryAsset).not.toHaveBeenCalled();
   expect(lastComposerUploadingReferences).toBe(false);
-  expect(document.body.textContent).toContain('The reference image is larger than the 2 MiB OpenDesign upload limit.');
+  expect(document.body.textContent).toContain('The reference image is larger than the 30 MiB OpenDesign limit.');
 
-  // Sub-2 MiB undecodable HEIC is rejected early without consuming slots from a following valid PNG.
+  // Undecodable HEIC is rejected early without consuming slots from a following valid PNG.
   const validPng = new File(['ok'], 'valid.png', { type: 'image/png' });
   const heic = new File([new Uint8Array(1024)], 'iphone.heic', { type: 'image/heic' });
   vi.mocked(uploadLibraryAsset).mockResolvedValueOnce(fixture('valid-after-heic'));
@@ -1120,7 +1130,7 @@ it('supports multi-select in AssetPicker capped to remaining reference slots and
   expect(document.body.textContent).toContain('OpenDesign does not accept this reference image format.');
 });
 
-it('keeps AssetPicker multi-select stable across in-flight uploads, ignores already-attached assets for quota, validates picked size, and stops batch on unmount', async () => {
+it('keeps AssetPicker multi-select stable across in-flight uploads, ignores already-attached assets for quota, allows 4.5 MiB 2K picks while rejecting >30 MiB picks, and stops batch on unmount', async () => {
   const { mediaEditorDestination } = await import('./creativeStudios');
   const sunburst = { id: 'opendesign:gpt-image-2.6-sunburst', provider: 'opendesign', modelId: 'gpt-image-2.6-sunburst', label: 'gpt-image-2.6-sunburst', modality: 'image' as const, mode: 'text-to-image', source: 'live' as const, supportsImageReference: true, maxInputImages: 16 };
   const catalog = {
@@ -1128,8 +1138,11 @@ it('keeps AssetPicker multi-select stable across in-flight uploads, ignores alre
     status: { routes: {}, providers: [{ id: 'opendesign', label: 'OpenDesign Cloud', available: true }] },
   };
   records.set('C', fixture('C'));
+  const twoKAsset = fixture('TWOK');
+  twoKAsset.versions[0].bytes = Math.round(4.5 * 1024 * 1024);
+  records.set('TWOK', twoKAsset);
   const bigLibraryAsset = fixture('BIG');
-  bigLibraryAsset.versions[0].bytes = 3 * 1024 * 1024;
+  bigLibraryAsset.versions[0].bytes = 31 * 1024 * 1024;
   records.set('BIG', bigLibraryAsset);
   const remember = vi.fn();
   // Asset A is already attached (plus 2 more -> 3 / 5 attached, 2 remaining).
@@ -1169,7 +1182,21 @@ it('keeps AssetPicker multi-select stable across in-flight uploads, ignores alre
   await click('Use selected (1)');
   expect(remember.mock.lastCall?.[0].references).toHaveLength(5);
 
-  // Oversized 3 MiB library asset is rejected immediately at pick time.
+  // 4.5 MiB 2K library asset is accepted at pick time for OpenDesign models; >30 MiB asset is rejected early.
+  await act(async () => root.unmount()); root = createRoot(container);
+  const rememberTwoK = vi.fn();
+  await act(async () => root.render(<AssetsPage active studio={{
+    destination: mediaEditorDestination('image-blend'),
+    draftKey: 'image-blend:2k-pick',
+    catalog: { catalog, failed: false, retry: vi.fn() },
+    remember: rememberTwoK, chooseModel: vi.fn(),
+  }} />)); await flush();
+  await click('References'); await flush();
+  const twoKDialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+  await act(async () => twoKDialog.querySelector<HTMLButtonElement>('[aria-label="Picture TWOK"]')!.click());
+  await click('Use selected (1)');
+  expect(rememberTwoK.mock.lastCall?.[0].references.map((item: { reference: { assetId: string } }) => item.reference.assetId)).toEqual(['TWOK']);
+
   await act(async () => root.unmount()); root = createRoot(container);
   const rememberBig = vi.fn();
   await act(async () => root.render(<AssetsPage active studio={{
@@ -1182,7 +1209,7 @@ it('keeps AssetPicker multi-select stable across in-flight uploads, ignores alre
   const bigDialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
   await act(async () => bigDialog.querySelector<HTMLButtonElement>('[aria-label="Picture BIG"]')!.click());
   await click('Use selected (1)');
-  expect(document.body.textContent).toContain('The reference image is larger than the 2 MiB OpenDesign upload limit.');
+  expect(document.body.textContent).toContain('The reference image is larger than the 30 MiB OpenDesign limit.');
   expect(rememberBig.mock.lastCall?.[0].references ?? []).toHaveLength(0);
 
   // Unmounting mid-batch stops subsequent uploads in the batch.
@@ -1224,7 +1251,7 @@ it('keeps AssetPicker multi-select stable across in-flight uploads, ignores alre
   expect(rememberFallback.mock.lastCall?.[0].references).toHaveLength(5);
   expect(rememberFallback.mock.lastCall?.[0].references[4].reference.assetId).toBe('valid-5th');
 
-  // Codex-only edit-image does NOT enforce OpenDesign's 2 MiB limit on a valid 3 MiB PNG library asset.
+  // Codex-only edit-image does NOT enforce OpenDesign's 30 MiB limit on a valid library asset.
   await act(async () => root.unmount()); root = createRoot(container);
   const codexOnlyCatalog = {
     models: [
@@ -1253,7 +1280,7 @@ it('keeps AssetPicker multi-select stable across in-flight uploads, ignores alre
   expect(rememberCodex.mock.lastCall?.[0].references.map((item: { reference: { assetId: string } }) => item.reference.assetId)).toEqual(['BIG']);
 });
 
-it('rejects oversized generated assets when attaching from the Generations lightbox', async () => {
+it('attaches 4.5 MiB 2K generated assets from Generations lightbox and detail actions while rejecting >30 MiB generated assets', async () => {
   const { mediaEditorDestination } = await import('./creativeStudios');
   const sunburst = { id: 'opendesign:gpt-image-2.6-sunburst', provider: 'opendesign', modelId: 'gpt-image-2.6-sunburst', label: 'gpt-image-2.6-sunburst', modality: 'image' as const, mode: 'text-to-image', source: 'live' as const, supportsImageReference: true, maxInputImages: 16 };
   const catalog = {
@@ -1261,9 +1288,56 @@ it('rejects oversized generated assets when attaching from the Generations light
     status: { routes: {}, providers: [{ id: 'opendesign', label: 'OpenDesign Cloud', available: true }] },
   };
   records.clear();
+  const generatedTwoK = fixture('GEN2K');
+  generatedTwoK.versions[0].source = 'generation';
+  generatedTwoK.versions[0].bytes = Math.round(4.5 * 1024 * 1024);
+  records.set('GEN2K', generatedTwoK);
+  const rememberGen2k = vi.fn();
+  const useAsFirstFrame = vi.fn();
+  await act(async () => root.render(<AssetsPage active studio={{
+    destination: mediaEditorDestination('image-blend'),
+    draftKey: 'image-blend:gen-history-2k',
+    catalog: { catalog, failed: false, retry: vi.fn() },
+    remember: rememberGen2k, chooseModel: vi.fn(), useAsFirstFrame,
+  }} />)); await flush();
+
+  await act(async () => container.querySelectorAll<HTMLButtonElement>('.om-assets-heading .om-choice-tabs button')[1].click()); await flush();
+  await act(async () => { container.querySelector<HTMLButtonElement>('.om-gen-open')!.click(); }); await flush();
+  const lightbox2k = container.querySelector<HTMLElement>('[role="dialog"].om-gen-lightbox')!;
+  expect(lightbox2k).not.toBeNull();
+  const useRefBtn2k = [...lightbox2k.querySelectorAll<HTMLButtonElement>('button')].find(node => node.textContent?.includes('Use as reference'));
+  expect(useRefBtn2k).toBeDefined();
+  await act(async () => { useRefBtn2k!.click(); }); await flush();
+  expect(document.body.textContent).not.toContain('The reference image is larger than the 30 MiB OpenDesign limit.');
+  expect(rememberGen2k.mock.lastCall?.[0].references.map((item: { reference: { assetId: string } }) => item.reference.assetId)).toEqual(['GEN2K']);
+
+  // Detail-page Use as first frame & Reference actions also work cleanly on 4.5 MiB 2K generated images.
+  await act(async () => root.unmount()); root = createRoot(container);
+  await act(async () => root.render(<AssetsPage active />)); await flush();
+  await click('Picture GEN2K');
+  await click('Use as reference');
+  expect(container.querySelector<HTMLInputElement>('[aria-label="Creation draft"]')?.dataset.referenceCount).toBe('1');
+  expect(document.body.textContent).not.toContain('The reference image is larger than the 30 MiB OpenDesign limit.');
+
+  await act(async () => root.unmount()); root = createRoot(container);
+  const { findMediaStudio } = await import('../../../shared/studio-catalog');
+  const { studioDestination } = await import('./creativeStudios');
+  await act(async () => root.render(<AssetsPage active studio={{
+    destination: studioDestination(findMediaStudio('design')!, 'text-to-image'),
+    draftKey: 'design:detail-2k',
+    catalog: { catalog, failed: false, retry: vi.fn() },
+    remember: vi.fn(), chooseModel: vi.fn(), useAsFirstFrame,
+  }} />)); await flush();
+  await click('Picture GEN2K');
+  await click('Use as first frame');
+  expect(useAsFirstFrame).toHaveBeenCalledWith({ reference: { assetId: 'GEN2K', versionId: 'GEN2K-v1' }, name: 'Picture GEN2K' });
+
+  // Assets exceeding 30 MiB are still rejected when attaching from the Generations lightbox.
+  await act(async () => root.unmount()); root = createRoot(container);
+  records.clear();
   const generatedBig = fixture('GENBIG');
   generatedBig.versions[0].source = 'generation';
-  generatedBig.versions[0].bytes = 3 * 1024 * 1024;
+  generatedBig.versions[0].bytes = 31 * 1024 * 1024;
   records.set('GENBIG', generatedBig);
   const rememberGen = vi.fn();
   await act(async () => root.render(<AssetsPage active studio={{
@@ -1273,7 +1347,7 @@ it('rejects oversized generated assets when attaching from the Generations light
     remember: rememberGen, chooseModel: vi.fn(),
   }} />)); await flush();
 
-  expect(document.body.textContent).not.toContain('The reference image is larger than the 2 MiB OpenDesign upload limit.');
+  expect(document.body.textContent).not.toContain('The reference image is larger than the 30 MiB OpenDesign limit.');
   expect(rememberGen).toHaveBeenCalled();
 
   await act(async () => container.querySelectorAll<HTMLButtonElement>('.om-assets-heading .om-choice-tabs button')[1].click()); await flush();
@@ -1283,7 +1357,7 @@ it('rejects oversized generated assets when attaching from the Generations light
   const useRefBtn = [...lightbox.querySelectorAll<HTMLButtonElement>('button')].find(node => node.textContent?.includes('Use as reference'));
   expect(useRefBtn).toBeDefined();
   await act(async () => { useRefBtn!.click(); }); await flush();
-  expect(document.body.textContent).toContain('The reference image is larger than the 2 MiB OpenDesign upload limit.');
+  expect(document.body.textContent).toContain('The reference image is larger than the 30 MiB OpenDesign limit.');
   expect(rememberGen.mock.lastCall?.[0].references).toEqual([]);
 });
 

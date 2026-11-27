@@ -431,7 +431,7 @@ export function AssetsPage({ active, hasProject = false, studio, routeId, routeV
       return t('OpenDesign does not accept this reference image format.');
     }
     if (enforceOpenDesignLimits && typeof itemVersion.bytes === 'number' && itemVersion.bytes > OPEN_DESIGN_MAX_REFERENCE_BYTES) {
-      return t('The reference image is larger than the 2 MiB OpenDesign upload limit.');
+      return t('The reference image is larger than the 30 MiB OpenDesign limit.');
     }
     return undefined;
   };
@@ -523,7 +523,7 @@ export function AssetsPage({ active, hasProject = false, studio, routeId, routeV
       }
       if (attempted > 0) tracking.reportLibraryImport(entry, attempted, summary.uploaded);
       if (!shouldContinue()) return;
-      if (tooLargeCount > 0) onError(t('The reference image is larger than the 2 MiB OpenDesign upload limit.'));
+      if (tooLargeCount > 0) onError(t('The reference image is larger than the 30 MiB OpenDesign limit.'));
       if (unsupportedCount > 0) onError(t('OpenDesign does not accept this reference image format.'));
       if (skippedNonImage) onError(t('Choose an image file.'));
       if (truncated || hitLimit) toast.showToast(t('Reference limit reached.'), 'info');

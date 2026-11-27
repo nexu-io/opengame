@@ -354,6 +354,11 @@ export function mediaGenerationError(error: unknown, phase?: string): MediaGener
   if (lower.startsWith('save_not_available:')) return 'SAVE_UNAVAILABLE';
   // Timeouts (local deadline, subprocess kill timeout, or remote timeout) take precedence over generic phase buckets.
   if (upstreamCode === 'timeout' || lower.includes('timed out') || lower.includes('timeout') || causeKind === 'timeout') return 'TIMEOUT';
+  const localCode = error && typeof error === 'object' && 'code' in error && typeof (error as { code?: unknown }).code === 'string'
+    ? (error as { code: string }).code
+    : undefined;
+  if (localCode === 'REFERENCE_TOO_LARGE' || localCode === 'REFERENCE_INVALID_FORMAT') return 'INVALID_REQUEST';
+  if (localCode === 'REFERENCE_ENCODER_UNAVAILABLE') return 'UPLOAD_FAILED';
   if (phase === 'uploading' && (source === 'storage' || lower.includes('reference upload storage') || lower.includes('reference image put failed'))) return 'UPLOAD_FAILED';
   if (phase === 'downloading' || source === 'download') {
     if (status === 401 && upstreamCode === 'unauthorized') return 'AUTH_REJECTED';

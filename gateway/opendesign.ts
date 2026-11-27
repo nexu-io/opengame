@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { GenerationJob, Model } from '../shared/gateway.ts';
 import { isSfxModel } from '../shared/audio-kind.ts';
@@ -6,6 +7,11 @@ import { openDesignImageReferenceCap } from '../shared/opendesign-models.ts';
 import { resolveGenerationParameters } from '../shared/generation-options.ts';
 import { apiJson, publicProviderFetch, ProviderError, retryRead, withErrorMeta, type Fetcher } from './network.ts';
 import type { ProviderAdapter, ProviderContext } from './providers.ts';
+import {
+  computeOpenDesignPerImageBudget,
+  normalizeUploadLimitOrigin,
+  uploadOpenDesignReference,
+} from './reference-upload.ts';
 
 export const productionApi = 'https://amr-api.open-design.ai';
 // TODO(OPEND-5839): switch to `/api/v1/media/models?include_all=true&expand=schema` once AMR ships full schema discovery.
@@ -175,22 +181,78 @@ export function cloudImageParameters(parameters: Record<string, unknown>): Recor
   return { ...rest, output: { aspect_ratio, resolution } };
 }
 
-/** Three-step Cloud upload: create, PUT the bytes without credentials, then commit. */
-export async function uploadInputs(fetcher: Fetcher, api: string, headers: Record<string, string>, jobId: string, ctx: Pick<ProviderContext, 'references' | 'progress' | 'signal'>): Promise<string[]> {
-  const ids: string[] = [];
-  for (const [index, input] of (ctx.references ?? []).entries()) {
+/** Three-step Cloud upload: create, PUT the bytes without credentials, then commit.
+ * Automatically adapts oversized references to fit the rollout soft budget (8 MiB/image, 32 MiB/job)
+ * and recovers once from a legacy pre-OPEND-5519 AMR HTTP 413 (`asset_too_large`) at `/uploads` or `/commit`.
+ */
+export async function uploadInputs(
+  fetcher: Fetcher,
+  api: string,
+  headers: Record<string, string>,
+  jobId: string,
+  ctx: Pick<ProviderContext, 'references' | 'progress' | 'signal' | 'preserveAlpha' | 'maxInputImageBytes'>,
+): Promise<string[]> {
+  const references = ctx.references ?? [];
+  if (!references.length) return [];
+  const origin = normalizeUploadLimitOrigin(api);
+  const snapshots: { index: number; bytes: Buffer; filename: string }[] = [];
+  for (const [index, input] of references.entries()) {
     const bytes = await readFile(input.file);
+    // Always verify snapshot integrity against the queued original before any upload adaptation.
     if (bytes.length !== input.bytes) throw new Error('Reference image changed after it was queued');
+    snapshots.push({ index, bytes, filename: path.basename(input.file) });
+  }
+  const budgetBytes = computeOpenDesignPerImageBudget(
+    snapshots.map(item => item.bytes.length),
+    { origin, knownMaxBytes: ctx.maxInputImageBytes },
+  );
+  const ids: string[] = [];
+  for (const item of snapshots) {
     await ctx.progress('uploading');
-    const created = await apiJson(fetcher, api + '/uploads', { method: 'POST', headers: { ...headers, 'Idempotency-Key': `${jobId}-upload-${index}` },
-      body: JSON.stringify({ size_bytes: bytes.length, mime_type: input.mimeType }), signal: ctx.signal });
-    if (typeof created.asset_id !== 'string' || !/^[a-zA-Z0-9_-]{1,180}$/.test(created.asset_id) || typeof created.upload_url !== 'string' || !created.upload_url.startsWith('https://')) throw new Error('OpenDesign Cloud did not return an upload target');
-    const put = await fetcher(created.upload_url, { method: 'PUT', headers: { 'Content-Type': input.mimeType, 'Content-Length': String(bytes.length) }, body: bytes, redirect: 'error', signal: ctx.signal });
-    // Storage, not the API key, rejected this presigned PUT; do not report it as a credential failure.
-    if (!put.ok) throw withErrorMeta(new Error(`OpenDesign Cloud reference upload storage HTTP ${put.status}; the job was not submitted`), { status: put.status, errorSource: 'storage' });
-    const committed = await apiJson(fetcher, api + `/uploads/${created.asset_id}/commit`, { method: 'POST', headers: { ...headers, 'Idempotency-Key': `${jobId}-commit-${index}` }, body: '{}', signal: ctx.signal });
-    if (committed.status !== 'ready') throw new Error('OpenDesign Cloud did not accept the reference image');
-    ids.push(created.asset_id);
+    const { assetId } = await uploadOpenDesignReference({
+      origin,
+      bytes: item.bytes,
+      filename: item.filename,
+      budgetBytes,
+      knownMaxBytes: ctx.maxInputImageBytes,
+      preserveAlpha: ctx.preserveAlpha,
+      transport: {
+        uploadAttempt: async (prepared, keySuffix) => {
+          const created = await apiJson(fetcher, api + '/uploads', {
+            method: 'POST',
+            headers: { ...headers, 'Idempotency-Key': `${jobId}-upload-${item.index}${keySuffix}` },
+            body: JSON.stringify({ size_bytes: prepared.bytes.length, mime_type: prepared.mimeType }),
+            signal: ctx.signal,
+          });
+          if (typeof created.asset_id !== 'string' || !/^[a-zA-Z0-9_-]{1,180}$/.test(created.asset_id) || typeof created.upload_url !== 'string' || !created.upload_url.startsWith('https://')) {
+            throw new Error('OpenDesign Cloud did not return an upload target');
+          }
+          const put = await fetcher(created.upload_url, {
+            method: 'PUT',
+            headers: { 'Content-Type': prepared.mimeType, 'Content-Length': String(prepared.bytes.length) },
+            body: prepared.bytes as unknown as BodyInit,
+            redirect: 'error',
+            signal: ctx.signal,
+          });
+          // Storage, not the API key, rejected this presigned PUT; do not report it as a credential failure.
+          if (!put.ok) {
+            throw withErrorMeta(
+              new Error(`OpenDesign Cloud reference upload storage HTTP ${put.status}; the job was not submitted`),
+              { status: put.status, errorSource: 'storage' },
+            );
+          }
+          const committed = await apiJson(fetcher, api + `/uploads/${created.asset_id}/commit`, {
+            method: 'POST',
+            headers: { ...headers, 'Idempotency-Key': `${jobId}-commit-${item.index}${keySuffix}` },
+            body: '{}',
+            signal: ctx.signal,
+          });
+          if (committed.status !== 'ready') throw new Error('OpenDesign Cloud did not accept the reference image');
+          return created.asset_id;
+        },
+      },
+    });
+    ids.push(assetId);
   }
   return ids;
 }
@@ -212,7 +274,18 @@ export const opendesign: ProviderAdapter = {
       if (soundEffects && job.prompt.trim().length > 450) throw new Error('Sound effects prompt must be at most 450 characters');
       // Validate image parameter geometry before uploading reference bytes.
       if (job.modality === 'image') cloudImageParameters(parameters);
-      const inputs = audio ? [] : await uploadInputs(fetcher, api, headers, job.id, ctx);
+      const preserveAlpha = Boolean(ctx.preserveAlpha || parameters.background === 'transparent' || job.capabilityId === 'remove-background');
+      const knownMaxBytes = ctx.maxInputImageBytes ?? (
+        Number.isInteger((job.model.nativeOptions as Record<string, unknown> | undefined)?.max_input_image_bytes)
+        && ((job.model.nativeOptions as Record<string, unknown>).max_input_image_bytes as number) > 0
+          ? (job.model.nativeOptions as Record<string, unknown>).max_input_image_bytes as number
+          : undefined
+      );
+      const inputs = audio ? [] : await uploadInputs(fetcher, api, headers, job.id, {
+        ...ctx,
+        preserveAlpha,
+        maxInputImageBytes: knownMaxBytes,
+      });
       await ctx.progress('submitting');
       const { endpoint, payload } = buildOpenDesignMediaRequest(job, parameters, inputs);
       const submitted = await apiJson(fetcher, api + endpoint, { method: 'POST', headers: { ...headers, ...mediaSubmitHeaders(ctx.baseUrl, job.id) }, body: JSON.stringify(payload), signal: ctx.signal });

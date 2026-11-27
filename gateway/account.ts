@@ -1,6 +1,6 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { chmod, copyFile, mkdir, rename, rm, stat } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, open, rename, rm, stat } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -33,6 +33,11 @@ import {
   uploadInputs,
 } from './opendesign.ts';
 import type { ProviderContext } from './providers.ts';
+import {
+  detectReferenceImageMime,
+  OPEN_DESIGN_UPLOAD_LIMIT_REJECTED_MESSAGE,
+  ReferencePreparationError,
+} from './reference-upload.ts';
 import { resumableDownload, type DownloadProgress } from './resumable-download.ts';
 import { accountDirectory } from './account-directory.ts';
 import { withProcessLock } from '../shared/process-lock.ts';
@@ -173,7 +178,7 @@ const requestMessages: Record<string, string> = {
   provider_error: 'The model provider could not complete this request. Try again later or choose another model.',
   request_state_unknown: 'OpenDesign could not confirm whether this request ran, so it was not resubmitted. Check your OpenDesign history before retrying.',
   media_execution_unknown: 'OpenDesign could not confirm whether this request ran, so it was not resubmitted. Check your OpenDesign history before retrying.',
-  asset_too_large: 'The reference image is larger than the 2 MiB OpenDesign upload limit.',
+  asset_too_large: OPEN_DESIGN_UPLOAD_LIMIT_REJECTED_MESSAGE,
   unsupported_media_type: 'OpenDesign does not accept this reference image format.',
 };
 const jobMessages = {
@@ -1085,14 +1090,24 @@ export class OpenDesignAccount {
   ): Promise<NonNullable<ProviderContext['references']>> {
     if (references.length) return references;
     if (!reference) return [];
-    const ext = path.extname(reference).toLowerCase();
-    const mimeType = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.webp' ? 'image/webp' : 'image/png';
     const info = await stat(reference);
+    let detectedMime: string | undefined;
+    const handle = await open(reference, 'r');
+    try {
+      const header = Buffer.alloc(16);
+      const { bytesRead } = await handle.read(header, 0, header.length, 0);
+      detectedMime = detectReferenceImageMime(header.subarray(0, bytesRead));
+    } finally {
+      await handle.close();
+    }
+    const ext = path.extname(reference).toLowerCase();
+    const mimeType = detectedMime ?? (ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.webp' ? 'image/webp' : 'image/png');
     return [{ file: reference, mimeType, bytes: info.size }];
   }
   private async uploadMediaInputs(
     access: { baseUrl: string; key: string; keyId: string },
     job: GenerationJob,
+    parameters: Record<string, unknown>,
     references: NonNullable<ProviderContext['references']>,
     signal: AbortSignal,
     progress: (phase: string) => Promise<void>,
@@ -1100,11 +1115,18 @@ export class OpenDesignAccount {
     if (!references.length) return [];
     const fetcher = this.options.fetcher ?? fetch, api = access.baseUrl + '/api/v1/media';
     const headers = { Authorization: `Bearer ${access.key}`, 'Content-Type': 'application/json' };
-    return uploadInputs(fetcher, api, headers, job.id, { references, progress, signal }).catch(error => {
+    const preserveAlpha = Boolean(parameters.background === 'transparent' || job.capabilityId === 'remove-background');
+    const nativeOptions = job.model.nativeOptions as Record<string, unknown> | undefined;
+    const maxInputImageBytes = Number.isInteger(nativeOptions?.max_input_image_bytes) && (nativeOptions!.max_input_image_bytes as number) > 0
+      ? nativeOptions!.max_input_image_bytes as number
+      : undefined;
+    return uploadInputs(fetcher, api, headers, job.id, { references, progress, signal, preserveAlpha, maxInputImageBytes }).catch(error => {
+      if (error instanceof ReferencePreparationError) throw error;
       // Only AMR API rejections (ProviderError) map to account messages; presigned storage PUT failures stay storage errors.
       if (error instanceof ProviderError) {
         if (error.status === 401 || error.status === 403) throw withErrorMeta(new Error(requestMessages.unauthorized), { status: error.status, upstreamCode: error.upstreamCode, errorSource: 'api' });
         if (error.status === 413) throw withErrorMeta(new Error(requestMessages.asset_too_large), { status: error.status, upstreamCode: error.upstreamCode ?? 'asset_too_large', errorSource: 'api' });
+        if (error.status === 415) throw withErrorMeta(new Error(requestMessages.unsupported_media_type), { status: error.status, upstreamCode: error.upstreamCode ?? 'unsupported_media_type', errorSource: 'api' });
         throw withErrorMeta(new Error(jobMessages.service), { status: error.status, upstreamCode: error.upstreamCode, errorSource: 'api' });
       }
       throw error;
@@ -1189,7 +1211,7 @@ export class OpenDesignAccount {
         : kind === 'video'
           ? (await this.normalizeReferences(reference, references)).slice(0, 1)
           : await this.normalizeReferences(reference, references);
-      const uploadedIds = await this.uploadMediaInputs(access, job, inputReferences, signal, progress);
+      const uploadedIds = await this.uploadMediaInputs(access, job, params, inputReferences, signal, progress);
       const { endpoint, payload } = buildOpenDesignMediaRequest(job, params, uploadedIds);
       submitted = await this.postMedia(access, endpoint, payload, job, signal, progress);
     }

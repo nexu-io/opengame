@@ -1,10 +1,15 @@
-export const OPEN_DESIGN_MAX_REFERENCE_BYTES = 2 * 1024 * 1024;
-export const OPEN_DESIGN_TARGET_REFERENCE_BYTES = 1_940_000;
+import {
+  OPEN_DESIGN_MAX_SOURCE_REFERENCE_BYTES,
+  OPEN_DESIGN_TARGET_SOURCE_REFERENCE_BYTES,
+} from '../../../shared/asset-limits';
+
+export const OPEN_DESIGN_MAX_REFERENCE_BYTES = OPEN_DESIGN_MAX_SOURCE_REFERENCE_BYTES;
+export const OPEN_DESIGN_TARGET_REFERENCE_BYTES = OPEN_DESIGN_TARGET_SOURCE_REFERENCE_BYTES;
 
 const SUPPORTED_REFERENCE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const SUPPORTED_EXTENSION_PATTERN = /\.(png|jpe?g|webp)$/i;
 const ALPHA_EXTENSION_PATTERN = /\.(png|webp|gif|avif)$/i;
-const MAX_EDGES = [2048, 1600, 1280, 1024];
+const MAX_EDGES = [4096, 2048, 1600, 1280, 1024];
 const QUALITIES = [0.86, 0.76, 0.66, 0.54];
 
 export type ReferenceImageErrorCode = 'too-large' | 'unsupported';
@@ -121,7 +126,7 @@ function canvasToBlob(canvas: HTMLCanvasElement, mimeType: string, quality?: num
 }
 
 function tooLargeError(): ReferenceImageError {
-  return new ReferenceImageError('too-large', 'The reference image is larger than the 2 MiB OpenDesign upload limit.');
+  return new ReferenceImageError('too-large', 'The reference image is larger than the 30 MiB OpenDesign limit.');
 }
 
 function unsupportedFormatError(): ReferenceImageError {
@@ -162,7 +167,7 @@ export async function prepareReferenceImage(
     const edges = Array.from(new Set(MAX_EDGES.map(edge => Math.min(edge, originalMaxEdge))));
     const keepAlpha = Boolean(options?.preserveAlpha || hasPotentialAlpha(file));
     const mimeCandidates = keepAlpha
-      ? (options?.preserveAlpha ? ['image/webp', 'image/png'] : ['image/webp', 'image/png', 'image/jpeg'])
+      ? ['image/webp', 'image/png']
       : ['image/webp', 'image/jpeg'];
 
     let smallest: Blob | undefined;

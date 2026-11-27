@@ -1765,7 +1765,7 @@ test('AccountRequestError classifies local CLI flag errors as invalid requests r
   assert.equal(connection.message, 'OpenDesign account request failed. Check your connection and sign in again if needed.');
 });
 
-test('account video first-frame uploads via HTTP as role=first_frame and OpenDesign providers reject reference images over 2 MiB before queueing', t => fixture(async store => {
+test('account video first-frame uploads via HTTP as role=first_frame, accepts >2 MiB PNGs, and rejects >30 MiB references before queueing', t => fixture(async store => {
   await chmod(binary, 0o755);
   const gateway = gatewayFor(store); gateway.options.detect = async () => [];
   const media = mediaTransport(store.directory);
@@ -1791,25 +1791,41 @@ test('account video first-frame uploads via HTTP as role=first_frame and OpenDes
   assert.deepEqual(call.body, { model: 'fixture-i2v', prompt: 'slow camera push', images: [{ asset_id: 'upload-1', role: 'first_frame' }] });
   assert.deepEqual(media.uploads[0].bytes, png);
 
-  // Oversized reference (> 2 MiB) is rejected before queueing for OpenDesign account and Cloud providers.
+  // Reference > 2 MiB (e.g., 2K PNG) is accepted and uploaded smoothly via OpenDesign account.
   const { crc32 } = await import('node:zlib');
-  const textType = Buffer.from('tEXt'), textPayload = Buffer.alloc(2 * 1024 * 1024 + 16, 0x61);
-  const length = Buffer.alloc(4); length.writeUInt32BE(textPayload.length, 0);
-  const checksum = Buffer.alloc(4); checksum.writeUInt32BE(crc32(Buffer.concat([textType, textPayload])), 0);
-  const oversizedPng = Buffer.concat([png.subarray(0, png.length - 12), length, textType, textPayload, checksum, png.subarray(png.length - 12)]);
-  const oversizedPath = path.join(store.directory, 'oversized.png');
+  const buildSizedPng = (extraBytes: number) => {
+    const textType = Buffer.from('tEXt'), textPayload = Buffer.alloc(extraBytes, 0x61);
+    const length = Buffer.alloc(4); length.writeUInt32BE(textPayload.length, 0);
+    const checksum = Buffer.alloc(4); checksum.writeUInt32BE(crc32(Buffer.concat([textType, textPayload])), 0);
+    return Buffer.concat([png.subarray(0, png.length - 12), length, textType, textPayload, checksum, png.subarray(png.length - 12)]);
+  };
+  const mediumPng = buildSizedPng(2 * 1024 * 1024 + 16);
+  const mediumPath = path.join(store.directory, 'medium-2k.png');
+  await writeFile(mediumPath, mediumPng);
+  const medium = await new AssetLibrary(store).importFile(mediumPath, { requestId: 'medium-ref', name: 'Medium 2K' });
+  const mediumRef = { assetId: medium.id, versionId: medium.currentVersionId };
+  const queuedMedium = await api.call('openmotion_assets_use', {
+    action: 'generate', requestId: 'account-medium-edit', model: 'account:fixture-image', modality: 'image', prompt: 'edit 2k', references: [mediumRef],
+  });
+  const completedMedium = await finish(store, queuedMedium.job.id);
+  assert.equal(completedMedium.state, 'completed', completedMedium.error);
+  assert.equal(media.submissions.length, 2);
+
+  // Source reference > 30 MiB is rejected before queueing for OpenDesign account providers.
+  const oversizedPng = buildSizedPng(30 * 1024 * 1024 + 64);
+  const oversizedPath = path.join(store.directory, 'oversized-30mib.png');
   await writeFile(oversizedPath, oversizedPng);
   const oversized = await new AssetLibrary(store).importFile(oversizedPath, { requestId: 'oversized-ref', name: 'Oversized' });
   const oversizedRef = { assetId: oversized.id, versionId: oversized.currentVersionId };
   await assert.rejects(
     api.call('openmotion_assets_use', { action: 'generate', requestId: 'account-too-large', model: 'account:fixture-image', modality: 'image', prompt: 'edit', references: [oversizedRef] }),
-    /2 MiB OpenDesign upload limit/,
+    /30 MiB OpenDesign limit/,
   );
   await assert.rejects(
     api.call('openmotion_assets_use', { action: 'generate', requestId: 'account-i2v-too-large', model: 'account:fixture-i2v', modality: 'video', prompt: 'animate', references: [oversizedRef] }),
-    /2 MiB OpenDesign upload limit/,
+    /30 MiB OpenDesign limit/,
   );
-  assert.equal(media.submissions.length, 1);
+  assert.equal(media.submissions.length, 2);
 }));
 
 test('the account directory is per user, except for temporary workspaces and an explicit MOTION_ACCOUNT_DIR', () => {

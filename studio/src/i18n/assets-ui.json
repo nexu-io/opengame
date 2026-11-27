@@ -301,7 +301,6 @@
     "OpenDesign media rate or concurrency limit reached. Wait for running tasks to finish, then try again.": "已达到 OpenDesign 媒体生成的频率或并发上限。请等进行中的任务结束后再试。",
     "The model provider could not complete this request. Try again later or choose another model.": "模型服务商未能完成这次请求。请稍后重试或换一个模型。",
     "OpenDesign could not confirm whether this request ran, so it was not resubmitted. Check your OpenDesign history before retrying.": "OpenDesign 无法确认这次请求是否已执行，因此没有重新提交。重试前请先查看 OpenDesign 中的历史记录。",
-    "The reference image is larger than the 2 MiB OpenDesign upload limit.": "参考图超过了 OpenDesign 2 MiB 的上传上限。",
     "OpenDesign does not accept this reference image format.": "OpenDesign 不支持这个参考图格式。",
     "OpenDesign could not complete this request. Try again later, and contact us if this keeps happening.": "OpenDesign 未能完成这次请求。请稍后重试，如果一直出现请联系我们。",
     "OpenDesign account request failed. Check your connection and sign in again if needed.": "OpenDesign 账号请求失败。请检查网络，必要时重新登录。",
@@ -342,7 +341,12 @@
     "Black Friday’s lowest prices of the year! 7 days of unlimited use": "黑五全年最低价！7天无限用",
     "{provider} needs setup before generating.": "{provider} 需要先完成配置才能生成。",
     "Configure {provider}": "配置 {provider}",
-    "Annual Pro & Max · Up to 50% off": "年度 Pro / Max 专享 · 黑五低至 5 折"
+    "Annual Pro & Max · Up to 50% off": "年度 Pro / Max 专享 · 黑五低至 5 折",
+    "The reference image is larger than the 30 MiB OpenDesign limit.": "参考图超过了 OpenDesign 30 MiB 的大小上限。",
+    "OpenDesign rejected this reference image because it exceeds the upload size limit.": "OpenDesign 拒绝了这张参考图，因为它的体积超过了上传上限。",
+    "Could not prepare the reference image for upload because no compatible local image encoder is available.": "本地缺少兼容的图片编码器，无法为上传准备该参考图。",
+    "The reference image with transparency could not be reduced within the OpenDesign upload limit without losing transparency.": "无法在不丢失透明通道的情况下将这张带透明底的参考图压缩到 OpenDesign 上传上限以内。",
+    "The reference image could not be reduced within the OpenDesign upload limit.": "无法将这张参考图压缩到 OpenDesign 上传上限以内。"
   },
   "ja": {
     "Follows first frame": "最初のフレームに合わせる",
@@ -370,9 +374,13 @@
     "Black Friday’s lowest prices of the year! 7 days of unlimited use": "ブラックフライデーは年間最安値！7日間使い放題",
     "{provider} needs setup before generating.": "生成する前に {provider} の設定が必要です。",
     "Configure {provider}": "{provider} を設定",
-    "The reference image is larger than the 2 MiB OpenDesign upload limit.": "参照画像が OpenDesign の 2 MiB アップロード上限を超えています。",
     "OpenDesign does not accept this reference image format.": "OpenDesign はこの参照画像形式に対応していません。",
-    "Annual Pro & Max · Up to 50% off": "年間 Pro / Max 限定 · 最大50%オフ"
+    "Annual Pro & Max · Up to 50% off": "年間 Pro / Max 限定 · 最大50%オフ",
+    "The reference image is larger than the 30 MiB OpenDesign limit.": "参照画像が OpenDesign の 30 MiB 上限を超えています。",
+    "OpenDesign rejected this reference image because it exceeds the upload size limit.": "アップロードサイズの上限を超えているため、OpenDesign はこの参照画像を拒否しました。",
+    "Could not prepare the reference image for upload because no compatible local image encoder is available.": "互換性のあるローカル画像エンコーダーが利用できないため、アップロード用に参照画像を準備できませんでした。",
+    "The reference image with transparency could not be reduced within the OpenDesign upload limit without losing transparency.": "透過情報を保持したまま、この透過付き参照画像を OpenDesign のアップロード上限以内に縮小できませんでした。",
+    "The reference image could not be reduced within the OpenDesign upload limit.": "この参照画像を OpenDesign のアップロード上限以内に縮小できませんでした。"
   },
   "ko": {
     "Follows first frame": "첫 프레임에 맞춤",
@@ -400,9 +408,13 @@
     "Black Friday’s lowest prices of the year! 7 days of unlimited use": "블랙프라이데이 연중 최저가! 7일간 무제한 이용",
     "{provider} needs setup before generating.": "생성하기 전에 {provider} 설정이 필요합니다.",
     "Configure {provider}": "{provider} 설정",
-    "The reference image is larger than the 2 MiB OpenDesign upload limit.": "참조 이미지가 OpenDesign의 2 MiB 업로드 한도를 초과합니다.",
     "OpenDesign does not accept this reference image format.": "OpenDesign에서 지원하지 않는 참조 이미지 형식입니다.",
-    "Annual Pro & Max · Up to 50% off": "연간 Pro / Max 전용 · 최대 50% 할인"
+    "Annual Pro & Max · Up to 50% off": "연간 Pro / Max 전용 · 최대 50% 할인",
+    "The reference image is larger than the 30 MiB OpenDesign limit.": "참조 이미지가 OpenDesign의 30 MiB 한도를 초과합니다.",
+    "OpenDesign rejected this reference image because it exceeds the upload size limit.": "업로드 크기 한도를 초과하여 OpenDesign이 이 참조 이미지를 거부했습니다.",
+    "Could not prepare the reference image for upload because no compatible local image encoder is available.": "호환되는 로컬 이미지 인코더가 없어 업로드용 참조 이미지를 준비할 수 없습니다.",
+    "The reference image with transparency could not be reduced within the OpenDesign upload limit without losing transparency.": "투명도를 유지하면서 이 투명 배경 참조 이미지를 OpenDesign 업로드 한도 이내로 줄일 수 없습니다.",
+    "The reference image could not be reduced within the OpenDesign upload limit.": "이 참조 이미지를 OpenDesign 업로드 한도 이내로 줄일 수 없습니다."
   },
   "de": {
     "Follows first frame": "Wie das erste Bild",
@@ -430,9 +442,13 @@
     "Black Friday’s lowest prices of the year! 7 days of unlimited use": "Black Friday zum Jahrestiefpreis! 7 Tage unbegrenzt nutzen",
     "{provider} needs setup before generating.": "{provider} muss vor dem Generieren eingerichtet werden.",
     "Configure {provider}": "{provider} einrichten",
-    "The reference image is larger than the 2 MiB OpenDesign upload limit.": "Das Referenzbild überschreitet das OpenDesign-Upload-Limit von 2 MiB.",
     "OpenDesign does not accept this reference image format.": "OpenDesign unterstützt dieses Referenzbildformat nicht.",
-    "Annual Pro & Max · Up to 50% off": "Jahres-Pro & Max · Bis zu 50 % Rabatt"
+    "Annual Pro & Max · Up to 50% off": "Jahres-Pro & Max · Bis zu 50 % Rabatt",
+    "The reference image is larger than the 30 MiB OpenDesign limit.": "Das Referenzbild überschreitet das OpenDesign-Limit von 30 MiB.",
+    "OpenDesign rejected this reference image because it exceeds the upload size limit.": "OpenDesign hat dieses Referenzbild abgelehnt, da es das Upload-Größenlimit überschreitet.",
+    "Could not prepare the reference image for upload because no compatible local image encoder is available.": "Das Referenzbild konnte nicht für den Upload vorbereitet werden, da kein kompatibler lokaler Bild-Encoder verfügbar ist.",
+    "The reference image with transparency could not be reduced within the OpenDesign upload limit without losing transparency.": "Das Referenzbild mit Transparenz konnte ohne Verlust der Transparenz nicht unter das OpenDesign-Upload-Limit verkleinert werden.",
+    "The reference image could not be reduced within the OpenDesign upload limit.": "Das Referenzbild konnte nicht unter das OpenDesign-Upload-Limit verkleinert werden."
   },
   "fr": {
     "Follows first frame": "Selon la première image",
@@ -460,9 +476,13 @@
     "Black Friday’s lowest prices of the year! 7 days of unlimited use": "Black Friday au prix le plus bas de l’année ! 7 jours en illimité",
     "{provider} needs setup before generating.": "{provider} doit être configuré avant de générer.",
     "Configure {provider}": "Configurer {provider}",
-    "The reference image is larger than the 2 MiB OpenDesign upload limit.": "L’image de référence dépasse la limite de 2 Mio d’OpenDesign.",
     "OpenDesign does not accept this reference image format.": "OpenDesign ne prend pas en charge ce format d’image de référence.",
-    "Annual Pro & Max · Up to 50% off": "Pro & Max annuel · Jusqu’à -50 %"
+    "Annual Pro & Max · Up to 50% off": "Pro & Max annuel · Jusqu’à -50 %",
+    "The reference image is larger than the 30 MiB OpenDesign limit.": "L’image de référence dépasse la limite de 30 Mio d’OpenDesign.",
+    "OpenDesign rejected this reference image because it exceeds the upload size limit.": "OpenDesign a refusé cette image de référence car elle dépasse la limite de taille de téléversement.",
+    "Could not prepare the reference image for upload because no compatible local image encoder is available.": "Impossible de préparer l’image de référence pour le téléversement car aucun encodeur d’image local compatible n’est disponible.",
+    "The reference image with transparency could not be reduced within the OpenDesign upload limit without losing transparency.": "L’image de référence transparente n’a pas pu être réduite sous la limite de téléversement d’OpenDesign sans perdre sa transparence.",
+    "The reference image could not be reduced within the OpenDesign upload limit.": "L’image de référence n’a pas pu être réduite sous la limite de téléversement d’OpenDesign."
   },
   "ru": {
     "Follows first frame": "По первому кадру",
@@ -490,9 +510,13 @@
     "Black Friday’s lowest prices of the year! 7 days of unlimited use": "Чёрная пятница по самым низким ценам года! 7 дней без ограничений",
     "{provider} needs setup before generating.": "Перед генерацией необходимо настроить {provider}.",
     "Configure {provider}": "Настроить {provider}",
-    "The reference image is larger than the 2 MiB OpenDesign upload limit.": "Размер референсного изображения превышает лимит OpenDesign в 2 МиБ.",
     "OpenDesign does not accept this reference image format.": "OpenDesign не поддерживает этот формат референсного изображения.",
-    "Annual Pro & Max · Up to 50% off": "Годовой Pro и Max · Скидка до 50%"
+    "Annual Pro & Max · Up to 50% off": "Годовой Pro и Max · Скидка до 50%",
+    "The reference image is larger than the 30 MiB OpenDesign limit.": "Размер референсного изображения превышает лимит OpenDesign в 30 МиБ.",
+    "OpenDesign rejected this reference image because it exceeds the upload size limit.": "OpenDesign отклонил это референсное изображение, так как оно превышает лимит размера загрузки.",
+    "Could not prepare the reference image for upload because no compatible local image encoder is available.": "Не удалось подготовить референсное изображение к загрузке, так как отсутствует совместимый локальный кодировщик изображений.",
+    "The reference image with transparency could not be reduced within the OpenDesign upload limit without losing transparency.": "Не удалось уменьшить референсное изображение с прозрачностью до лимита загрузки OpenDesign без потери прозрачности.",
+    "The reference image could not be reduced within the OpenDesign upload limit.": "Не удалось уменьшить референсное изображение до лимита загрузки OpenDesign."
   },
   "es": {
     "Follows first frame": "Según el primer fotograma",
@@ -520,9 +544,13 @@
     "Black Friday’s lowest prices of the year! 7 days of unlimited use": "¡Black Friday al precio más bajo del año! 7 días de uso ilimitado",
     "{provider} needs setup before generating.": "{provider} requiere configuración antes de generar.",
     "Configure {provider}": "Configurar {provider}",
-    "The reference image is larger than the 2 MiB OpenDesign upload limit.": "La imagen de referencia supera el límite de carga de 2 MiB de OpenDesign.",
     "OpenDesign does not accept this reference image format.": "OpenDesign no admite este formato de imagen de referencia.",
-    "Annual Pro & Max · Up to 50% off": "Pro y Max anual · Hasta 50% dto."
+    "Annual Pro & Max · Up to 50% off": "Pro y Max anual · Hasta 50% dto.",
+    "The reference image is larger than the 30 MiB OpenDesign limit.": "La imagen de referencia supera el límite de 30 MiB de OpenDesign.",
+    "OpenDesign rejected this reference image because it exceeds the upload size limit.": "OpenDesign rechazó esta imagen de referencia porque supera el límite de tamaño de carga.",
+    "Could not prepare the reference image for upload because no compatible local image encoder is available.": "No se pudo preparar la imagen de referencia para la carga porque no hay ningún codificador de imágenes local compatible disponible.",
+    "The reference image with transparency could not be reduced within the OpenDesign upload limit without losing transparency.": "No se pudo reducir la imagen de referencia con transparencia por debajo del límite de carga de OpenDesign sin perder la transparencia.",
+    "The reference image could not be reduced within the OpenDesign upload limit.": "No se pudo reducir la imagen de referencia por debajo del límite de carga de OpenDesign."
   },
   "pt-BR": {
     "Follows first frame": "Conforme o primeiro quadro",
@@ -550,9 +578,13 @@
     "Black Friday’s lowest prices of the year! 7 days of unlimited use": "Black Friday com os menores preços do ano! 7 dias de uso ilimitado",
     "{provider} needs setup before generating.": "{provider} precisa ser configurado antes de gerar.",
     "Configure {provider}": "Configurar {provider}",
-    "The reference image is larger than the 2 MiB OpenDesign upload limit.": "A imagem de referência excede o limite de envio de 2 MiB do OpenDesign.",
     "OpenDesign does not accept this reference image format.": "O OpenDesign não aceita este formato de imagem de referência.",
-    "Annual Pro & Max · Up to 50% off": "Pro e Max anual · Até 50% off"
+    "Annual Pro & Max · Up to 50% off": "Pro e Max anual · Até 50% off",
+    "The reference image is larger than the 30 MiB OpenDesign limit.": "A imagem de referência excede o limite de 30 MiB do OpenDesign.",
+    "OpenDesign rejected this reference image because it exceeds the upload size limit.": "O OpenDesign rejeitou esta imagem de referência porque ela excede o limite de tamanho de envio.",
+    "Could not prepare the reference image for upload because no compatible local image encoder is available.": "Não foi possível preparar a imagem de referência para envio porque nenhum codificador de imagem local compatível está disponível.",
+    "The reference image with transparency could not be reduced within the OpenDesign upload limit without losing transparency.": "Não foi possível reduzir a imagem de referência com transparência para dentro do limite de envio do OpenDesign sem perder a transparência.",
+    "The reference image could not be reduced within the OpenDesign upload limit.": "Não foi possível reduzir a imagem de referência para dentro do limite de envio do OpenDesign."
   },
   "it": {
     "Follows first frame": "Come il primo fotogramma",
@@ -580,9 +612,13 @@
     "Black Friday’s lowest prices of the year! 7 days of unlimited use": "Black Friday ai prezzi più bassi dell’anno! 7 giorni di utilizzo illimitato",
     "{provider} needs setup before generating.": "{provider} deve essere configurato prima di generare.",
     "Configure {provider}": "Configura {provider}",
-    "The reference image is larger than the 2 MiB OpenDesign upload limit.": "L’immagine di riferimento supera il limite di caricamento di 2 MiB di OpenDesign.",
     "OpenDesign does not accept this reference image format.": "OpenDesign non accetta questo formato di immagine di riferimento.",
-    "Annual Pro & Max · Up to 50% off": "Pro e Max annuale · Fino al 50% off"
+    "Annual Pro & Max · Up to 50% off": "Pro e Max annuale · Fino al 50% off",
+    "The reference image is larger than the 30 MiB OpenDesign limit.": "L’immagine di riferimento supera il limite di 30 MiB di OpenDesign.",
+    "OpenDesign rejected this reference image because it exceeds the upload size limit.": "OpenDesign ha rifiutato questa immagine di riferimento perché supera il limite di dimensione di caricamento.",
+    "Could not prepare the reference image for upload because no compatible local image encoder is available.": "Impossibile preparare l’immagine di riferimento per il caricamento perché non è disponibile alcun codificatore di immagini locale compatibile.",
+    "The reference image with transparency could not be reduced within the OpenDesign upload limit without losing transparency.": "Non è stato possibile ridurre l’immagine di riferimento con trasparenza entro il limite di caricamento di OpenDesign senza perdere la trasparenza.",
+    "The reference image could not be reduced within the OpenDesign upload limit.": "Non è stato possibile ridurre l’immagine di riferimento entro il limite di caricamento di OpenDesign."
   },
   "tr": {
     "Follows first frame": "İlk kareye göre",
@@ -610,8 +646,12 @@
     "Black Friday’s lowest prices of the year! 7 days of unlimited use": "Black Friday’de yılın en düşük fiyatları! 7 gün sınırsız kullanım",
     "{provider} needs setup before generating.": "Üretmeden önce {provider} kurulumu gerekiyor.",
     "Configure {provider}": "{provider} yapılandır",
-    "The reference image is larger than the 2 MiB OpenDesign upload limit.": "Referans görsel OpenDesign’ın 2 MiB yükleme sınırını aşıyor.",
     "OpenDesign does not accept this reference image format.": "OpenDesign bu referans görsel biçimini kabul etmiyor.",
-    "Annual Pro & Max · Up to 50% off": "Yıllık Pro ve Max · %50’ye varan indirim"
+    "Annual Pro & Max · Up to 50% off": "Yıllık Pro ve Max · %50’ye varan indirim",
+    "The reference image is larger than the 30 MiB OpenDesign limit.": "Referans görsel OpenDesign’ın 30 MiB sınırını aşıyor.",
+    "OpenDesign rejected this reference image because it exceeds the upload size limit.": "OpenDesign, yükleme boyutu sınırını aştığı için bu referans görseli reddetti.",
+    "Could not prepare the reference image for upload because no compatible local image encoder is available.": "Uyumlu bir yerel görüntü kodlayıcı bulunmadığından referans görsel yükleme için hazırlanamadı.",
+    "The reference image with transparency could not be reduced within the OpenDesign upload limit without losing transparency.": "Şeffaflık içeren referans görsel, şeffaflığını kaybetmeden OpenDesign yükleme sınırının altına küçültülemedi.",
+    "The reference image could not be reduced within the OpenDesign upload limit.": "Referans görsel OpenDesign yükleme sınırının altına küçültülemedi."
   }
 }
