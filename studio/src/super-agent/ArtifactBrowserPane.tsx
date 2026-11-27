@@ -53,6 +53,7 @@ import {
   storedInstruction,
 } from '../motion/game/gameCatalog';
 import { isMultiplayerGameArtifact } from '../motion/game/gameSuperAgent';
+import { buildTryGamePool } from '../motion/game/gameTryFeed';
 import { diagnosticsActive, recordBrowserDiagnostic } from '../motion/diagnostics';
 import { lazyWithChunkReload, preloadableLazyWithChunkReload } from '../utils/chunkReload';
 import { releaseMediaElement } from '../utils/releaseMediaElement';
@@ -78,6 +79,7 @@ import {
   type MotionProjectArtifactHandle,
 } from './MotionProjectArtifactView';
 import { SimpleMarkdown } from './SimpleMarkdown';
+import { TryGameFeedOverlay } from './TryGameFeedOverlay';
 
 type WebDevicePresetId = 'responsive' | 'desktop' | 'tablet' | 'mobile';
 
@@ -998,6 +1000,7 @@ function useIframePreviewBridge({
 
 function GameProjectArtifactView({
   artifact,
+  catalogMatch,
   bundledMatch,
   communityMatch,
   isTrial,
@@ -1019,6 +1022,7 @@ function GameProjectArtifactView({
   onBackgroundLoadingChange,
 }: {
   artifact: SuperAgentArtifact;
+  catalogMatch?: GameCard;
   bundledMatch?: GameCard;
   communityMatch?: GameCard;
   isTrial: boolean;
@@ -1049,13 +1053,13 @@ function GameProjectArtifactView({
   const presentedKey = artifact.presentedAt ?? '';
   const revisionKey = `${artifact.revision ?? ''}:${presentedKey}:${reloadKey}`;
 
-  const [gameMeta, setGameMeta] = useState<GameCard | null>(null);
+  const [gameMeta, setGameMeta] = useState<GameCard | null>(() => catalogMatch ?? null);
   const [bundledBlobUrl, setBundledBlobUrl] = useState<string | null>(null);
   const [handoffText, setHandoffText] = useState<string | null>(() => (projectId ? storedInstruction(projectId) : null));
   const [copiedHandoff, setCopiedHandoff] = useState(false);
 
   useEffect(() => {
-    setGameMeta(null);
+    setGameMeta(catalogMatch ?? null);
     setBundledBlobUrl(null);
     setCopiedHandoff(false);
     setHandoffText(projectId ? storedInstruction(projectId) : null);
@@ -1065,6 +1069,18 @@ function GameProjectArtifactView({
         source: communityMatch ? 'community' : null,
         multiplayer: communityMatch?.multiplayer === true,
         orientation: communityMatch?.orientation,
+      });
+      return;
+    }
+    if (catalogMatch && catalogMatch.source !== 'mine' && !catalogMatch.playUrl.startsWith('bundled:')) {
+      const trailerUrl = catalogMatch.trailer?.status === 'ready' && catalogMatch.trailer.videoUrl
+        ? catalogMatch.trailer.videoUrl.replace(/^\/api\//, '/motion-api/')
+        : null;
+      onGameMeta?.({
+        trailerUrl,
+        source: catalogMatch.source,
+        multiplayer: catalogMatch.multiplayer === true,
+        orientation: catalogMatch.orientation,
       });
       return;
     }
@@ -1108,7 +1124,7 @@ function GameProjectArtifactView({
       cancelled = true;
       if (revoked) URL.revokeObjectURL(revoked);
     };
-  }, [artifact.id, projectId, revisionKey, bundledMatch, communityMatch]);
+  }, [artifact.id, projectId, revisionKey, catalogMatch, bundledMatch, communityMatch]);
 
   const isDraftOrFailed = Boolean(
     projectId
@@ -1865,6 +1881,7 @@ export function ArtifactBrowserPane({
   openTabIds,
   activeTabId,
   expanded,
+  mobileFullscreenGameTrial = false,
   workspaceItems,
   onSelectTab,
   onCloseTab,
@@ -1877,6 +1894,8 @@ export function ArtifactBrowserPane({
   onClosePane,
   onAttachArtifact,
   onUseGameInAgent,
+  tryGamePool,
+  onNavigateTrialGame,
   onChooseDouyin,
   pendingDeployArtifactId,
   onConsumeDeployRequest,
@@ -1899,6 +1918,7 @@ export function ArtifactBrowserPane({
   openTabIds: string[];
   activeTabId: string;
   expanded: boolean;
+  mobileFullscreenGameTrial?: boolean;
   workspaceItems: SuperAgentResourceAttachment[];
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
@@ -1911,6 +1931,8 @@ export function ArtifactBrowserPane({
   onClosePane: () => void;
   onAttachArtifact: (artifact: SuperAgentArtifact) => void;
   onUseGameInAgent?: (artifact: SuperAgentArtifact) => void;
+  tryGamePool?: readonly GameCard[];
+  onNavigateTrialGame?: (game: GameCard, replaceTabId: string) => void;
   onChooseDouyin?: (artifactId: string, options: GamePublishChooseOptions) => void;
   pendingDeployArtifactId?: string | null;
   onConsumeDeployRequest?: () => void;
@@ -1980,9 +2002,20 @@ export function ArtifactBrowserPane({
     ? null
     : openTabs.find(item => item.id === activeTabId) ?? openTabs.at(-1) ?? null;
   const activeGameProjectId = activeArtifact?.kind === 'game-project' ? activeArtifact.projectId : undefined;
+  const activeGameLookupId = activeArtifact?.kind === 'game-project'
+    ? (activeArtifact.projectId || (activeArtifact.id.startsWith('game:') ? activeArtifact.id.slice('game:'.length) : undefined))
+    : undefined;
+  const effectiveTryGamePool = useMemo(
+    () => (tryGamePool && tryGamePool.length > 0 ? tryGamePool : buildTryGamePool(bundledGames, communityGames)),
+    [tryGamePool],
+  );
+  const catalogMatch = useMemo(
+    () => (activeGameLookupId ? effectiveTryGamePool.find(game => game.id === activeGameLookupId) : undefined),
+    [activeGameLookupId, effectiveTryGamePool],
+  );
   const bundledMatch = activeGameProjectId ? bundledGames.find(game => game.id === activeGameProjectId) : undefined;
   const gameMeta = gameMetaEntry && gameMetaEntry.artifactId === activeArtifact?.id ? gameMetaEntry : null;
-  const isGameTrial = isTrialGameArtifact(activeArtifact, gameMeta?.source);
+  const isGameTrial = isTrialGameArtifact(activeArtifact, catalogMatch?.source ?? gameMeta?.source);
   // Game publish wizard: only local workspace game projects can be packaged/published to platforms.
   const publishGameId = resolvePublishableGameId(activeArtifact, gameMeta?.source);
   const publishSession = useGamePublishSession(publishGameId ? activeArtifact?.id : null);
@@ -2455,7 +2488,13 @@ export function ArtifactBrowserPane({
       : undefined);
 
   return (
-    <aside ref={viewerRef} className="om-sa-viewer" aria-label={t('Artifact Viewer')}>
+    <aside
+      ref={viewerRef}
+      className="om-sa-viewer"
+      data-mobile-game-trial-fullscreen={mobileFullscreenGameTrial ? 'true' : undefined}
+      aria-label={t('Artifact Viewer')}
+    >
+      {!mobileFullscreenGameTrial && (
       <div className="om-sa-viewer-tabs-bar">
         <div className="om-sa-viewer-tabs-group">
           <div ref={tabStripRef} className="om-sa-viewer-tabs" role="tablist" aria-label={t('Viewer tabs')}>
@@ -2551,9 +2590,22 @@ export function ArtifactBrowserPane({
           </Tooltip>
         </div>
       </div>
+      )}
 
       <div className="om-sa-viewer-toolbar">
         <div className="om-sa-nav-btns">
+          {mobileFullscreenGameTrial && (
+            <Tooltip label={t('Close viewer')}>
+              <IconButton
+                variant="ghost"
+                className="motion-icon-button"
+                data-try-game-mobile-close=""
+                aria-label={t('Close viewer')}
+                onClick={onClosePane}
+                icon={<RemixIcon name="arrow-left-line" size={17} />}
+              />
+            </Tooltip>
+          )}
           {(activeArtifact?.kind === 'web' || showNewTab) && (
             <>
               <Tooltip label={t('Back')}>
@@ -2591,33 +2643,40 @@ export function ArtifactBrowserPane({
         </div>
 
         <div className="om-sa-address-wrap">
-          <form
-            className="om-sa-address-form"
-            onSubmit={event => {
-              event.preventDefault();
-              const trimmed = addressDraft.trim();
-              const activeDisplay = activeArtifact ? artifactAddressDisplay(activeArtifact) : '';
-              if (!trimmed || (activeArtifact?.kind !== 'web' && trimmed === activeDisplay) || /^(?:design|motion|game|export|asset|brand):\/\//i.test(trimmed)) return;
-              const normalized = normalizeBrowserAddress(trimmed);
-              setAddressEditing(false);
-              addressInputRef.current?.blur();
-              navigateWeb(normalized ?? searchWebUrl(trimmed));
-            }}
-          >
-            <RemixIcon name={activeArtifact ? artifactTabIcon(activeArtifact.kind) : 'search-line'} size={14} />
-            <input
-              ref={addressInputRef}
-              value={addressDraft}
-              placeholder={t('Search web, artifacts, or enter a URL')}
-              aria-label={t('Artifact address bar')}
-              onFocus={event => {
-                setAddressEditing(true);
-                event.currentTarget.select();
+          {mobileFullscreenGameTrial ? (
+            <div className="om-try-feed-mobile-title" data-try-game-mobile-title="">
+              <RemixIcon name="gamepad-line" size={14} />
+              <span>{activeArtifact?.title || ''}</span>
+            </div>
+          ) : (
+            <form
+              className="om-sa-address-form"
+              onSubmit={event => {
+                event.preventDefault();
+                const trimmed = addressDraft.trim();
+                const activeDisplay = activeArtifact ? artifactAddressDisplay(activeArtifact) : '';
+                if (!trimmed || (activeArtifact?.kind !== 'web' && trimmed === activeDisplay) || /^(?:design|motion|game|export|asset|brand):\/\//i.test(trimmed)) return;
+                const normalized = normalizeBrowserAddress(trimmed);
+                setAddressEditing(false);
+                addressInputRef.current?.blur();
+                navigateWeb(normalized ?? searchWebUrl(trimmed));
               }}
-              onBlur={() => setAddressEditing(false)}
-              onChange={event => setAddressDraft(event.target.value)}
-            />
-          </form>
+            >
+              <RemixIcon name={activeArtifact ? artifactTabIcon(activeArtifact.kind) : 'search-line'} size={14} />
+              <input
+                ref={addressInputRef}
+                value={addressDraft}
+                placeholder={t('Search web, artifacts, or enter a URL')}
+                aria-label={t('Artifact address bar')}
+                onFocus={event => {
+                  setAddressEditing(true);
+                  event.currentTarget.select();
+                }}
+                onBlur={() => setAddressEditing(false)}
+                onChange={event => setAddressDraft(event.target.value)}
+              />
+            </form>
+          )}
 
           {addressEditing
             && addressDraft.trim()
@@ -2770,7 +2829,7 @@ export function ArtifactBrowserPane({
                   <span className="om-sa-toolbar-divider" aria-hidden="true" />
                 )}
 
-                {showViewportMenu && (
+                {showViewportMenu && !mobileFullscreenGameTrial && (
                   <div className="om-sa-tool-group">
                     {supportsAnnotate && (
                     <Tooltip label={t('Annotate elements, regions, and drawings')}>
@@ -3650,30 +3709,47 @@ export function ArtifactBrowserPane({
             onOpenWebUrl={onOpenWebUrl}
             onOpenFilePath={onOpenFilePath}
           />
-        ) : activeArtifact.kind === 'game-project' && (activeArtifact.projectId || activeArtifact.url) ? (
-          <GameProjectArtifactView
-            artifact={activeArtifact}
-            bundledMatch={bundledMatch}
-            communityMatch={communityMatch}
-            isTrial={isGameTrial}
-            chatId={chatId}
-            chatRunning={chatRunning}
-            mode={isGameTrial ? 'preview' : viewMode}
-            viewport={viewport}
-            reloadKey={reloadKey}
-            requestedCodeFile={requestedCodeFile?.artifactId === activeArtifact.id ? requestedCodeFile : null}
-            annotateActive={supportsAnnotate && annotateActive}
-            annotTool={annotTool}
-            onToolChange={setAnnotTool}
-            onConsoleEntry={pushPreviewConsoleEntry}
-            captureRef={previewCaptureRef}
-            onSubmitAnnotation={handleSubmitBrowserAnnotation}
-            onCloseAnnotate={() => setAnnotateActive(false)}
-            onNotify={onNotify}
-            onGameMeta={meta => setGameMetaEntry({ artifactId: activeArtifact.id, ...meta })}
-            onBackgroundLoadingChange={setGameFrameBackgroundLoading}
-          />
-        ) : activeArtifact.kind === 'web' && activeArtifact.url && chatId ? (
+        ) : activeArtifact.kind === 'game-project' && (activeArtifact.projectId || activeArtifact.url) ? (() => {
+          const gameView = (
+            <GameProjectArtifactView
+              artifact={activeArtifact}
+              catalogMatch={catalogMatch}
+              bundledMatch={bundledMatch}
+              communityMatch={communityMatch}
+              isTrial={isGameTrial}
+              chatId={chatId}
+              chatRunning={chatRunning}
+              mode={isGameTrial ? 'preview' : viewMode}
+              viewport={viewport}
+              reloadKey={reloadKey}
+              requestedCodeFile={requestedCodeFile?.artifactId === activeArtifact.id ? requestedCodeFile : null}
+              annotateActive={supportsAnnotate && annotateActive}
+              annotTool={annotTool}
+              onToolChange={setAnnotTool}
+              onConsoleEntry={pushPreviewConsoleEntry}
+              captureRef={previewCaptureRef}
+              onSubmitAnnotation={handleSubmitBrowserAnnotation}
+              onCloseAnnotate={() => setAnnotateActive(false)}
+              onNotify={onNotify}
+              onGameMeta={meta => setGameMetaEntry({ artifactId: activeArtifact.id, ...meta })}
+              onBackgroundLoadingChange={setGameFrameBackgroundLoading}
+            />
+          );
+          const activeTrialGame = isGameTrial ? (catalogMatch ?? communityMatch ?? bundledMatch ?? null) : null;
+          if (activeTrialGame && onNavigateTrialGame) {
+            return (
+              <TryGameFeedOverlay
+                activeGame={activeTrialGame}
+                pool={effectiveTryGamePool}
+                onNavigateGame={nextGame => onNavigateTrialGame(nextGame, activeArtifact.id)}
+                onNotify={onNotify}
+              >
+                {gameView}
+              </TryGameFeedOverlay>
+            );
+          }
+          return gameView;
+        })() : activeArtifact.kind === 'web' && activeArtifact.url && chatId ? (
           <div className="om-sa-web-stage">
             <div className="om-sa-web-stage-main" data-framed={Boolean(fixedViewport) || undefined}>
               <div

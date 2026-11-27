@@ -3,8 +3,11 @@ import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NEW_VIEWER_TAB_ID, type SuperAgentArtifact } from '../../../shared/super-agent';
+import type { GameCard } from '../../../shared/game-contract';
 import { I18nProvider } from '../i18n/I18n';
 import * as diagnostics from '../motion/diagnostics';
+import { TOP_EARNING_TAG } from '../motion/game/gameCatalog';
+import { toGameArtifact } from '../motion/game/gameSuperAgent';
 import {
   ArtifactBrowserPane,
   EXTERNAL_IFRAME_REVEAL_TIMEOUT_MS,
@@ -264,5 +267,264 @@ describe('ArtifactBrowserPane external game iframe reveal', () => {
     expect(container.querySelector('[data-game-failed]')).toBeNull();
     act(() => { signal('loading'); iframe.dispatchEvent(new Event('load')); signal('ready'); });
     expect(container.querySelector('[data-game-loading]')).toBeNull();
+  });
+});
+
+describe('ArtifactBrowserPane integrated Try Game Feed', () => {
+  const POOL: GameCard[] = [
+    {
+      id: 'archero-bow-legend',
+      title: 'Archero Bow Legend',
+      description: 'Dodge arrows and clear waves',
+      genre: 'shooter',
+      style: '3d',
+      setting: 'fantasy',
+      orientation: 'portrait',
+      multiplayer: false,
+      maxPlayers: 1,
+      status: 'published',
+      cover: 'cover.png',
+      playUrl: '/api/games/archero-bow-legend/play/index.html',
+      plays: 0,
+      likes: 0,
+      dislikes: 0,
+      reaction: 0,
+      favorite: false,
+      source: 'template',
+      remixOf: null,
+      controls: 'Drag to move, release to shoot',
+      tags: [TOP_EARNING_TAG],
+      createdAt: '2026-11-20T00:00:00.000Z',
+      updatedAt: '2026-11-20T00:00:00.000Z',
+    },
+    {
+      id: 'apex-drift-3d',
+      title: 'Apex Drift 3D',
+      description: 'High-speed arcade drifting',
+      genre: 'racing',
+      style: '3d',
+      setting: 'modern',
+      orientation: 'landscape',
+      multiplayer: false,
+      maxPlayers: 1,
+      status: 'published',
+      cover: 'cover.png',
+      playUrl: '/api/games/apex-drift-3d/play/index.html',
+      plays: 0,
+      likes: 0,
+      dislikes: 0,
+      reaction: 0,
+      favorite: false,
+      source: 'template',
+      remixOf: null,
+      controls: 'Steer left and right',
+      createdAt: '2026-11-20T00:00:00.000Z',
+      updatedAt: '2026-11-20T00:00:00.000Z',
+    },
+    {
+      id: 'community-little-prince',
+      title: 'The Little Prince',
+      description: 'Explore watercolour 3D planets',
+      genre: 'story',
+      style: '3d',
+      setting: 'space',
+      orientation: 'landscape',
+      multiplayer: false,
+      maxPlayers: 1,
+      status: 'published',
+      cover: 'cover.jpg',
+      playUrl: 'https://littleprince.dev/',
+      plays: 0,
+      likes: 0,
+      dislikes: 0,
+      reaction: 0,
+      favorite: false,
+      source: 'community',
+      external: {
+        url: 'https://littleprince.dev/',
+        author: '@Saccc_c',
+        postUrl: 'https://x.com/Saccc_c/status/1',
+        model: 'Opus',
+        embeddable: true,
+      },
+      remixOf: null,
+      controls: '',
+      createdAt: '2026-11-20T00:00:00.000Z',
+      updatedAt: '2026-11-20T00:00:00.000Z',
+    },
+  ];
+
+  function toArtifact(game: GameCard): SuperAgentArtifact {
+    const patch = toGameArtifact(game, game.title);
+    return {
+      id: patch.id!,
+      kind: 'game-project',
+      title: patch.title!,
+      subtitle: patch.subtitle,
+      ...(patch.projectId ? { projectId: patch.projectId } : {}),
+      scenario: patch.scenario,
+      revision: patch.revision,
+      url: patch.url,
+      createdAt: 1000,
+      updatedAt: 1000,
+      presentedAt: 1000,
+    };
+  }
+
+  it('switches games in-place via desktop right rail Next/Prev buttons, Alt+Arrow shortcuts, Like +1, and mobile browse-mode tap', async () => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    const noop = () => {};
+
+    function FeedHarness() {
+      const [artifacts, setArtifacts] = useState<SuperAgentArtifact[]>([toArtifact(POOL[0])]);
+      const [openTabIds, setOpenTabIds] = useState<string[]>([`game:${POOL[0].id}`]);
+      const [activeTabId, setActiveTabId] = useState<string>(`game:${POOL[0].id}`);
+
+      const handleNavigateTrialGame = (nextGame: GameCard, replaceTabId: string) => {
+        const nextArtifact = toArtifact(nextGame);
+        setArtifacts(prev => [...prev.filter(a => a.id !== replaceTabId && a.id !== nextArtifact.id), nextArtifact]);
+        setOpenTabIds(prev => prev.map(id => (id === replaceTabId ? nextArtifact.id : id)));
+        setActiveTabId(nextArtifact.id);
+      };
+
+      return (
+        <ArtifactBrowserPane
+          chatId={null}
+          artifacts={artifacts}
+          openTabIds={openTabIds}
+          activeTabId={activeTabId}
+          expanded={false}
+          workspaceItems={[]}
+          tryGamePool={POOL}
+          onNavigateTrialGame={handleNavigateTrialGame}
+          onSelectTab={setActiveTabId}
+          onCloseTab={noop}
+          onNewTab={() => setActiveTabId(NEW_VIEWER_TAB_ID)}
+          onOpenWebUrl={noop}
+          onOpenArtifact={setActiveTabId}
+          onOpenResource={noop}
+          onToggleExpand={noop}
+          onClosePane={noop}
+          onAttachArtifact={noop}
+          onOpenInDesignStudio={noop}
+          onOpenInMotionStudio={noop}
+          onOpenInAssets={noop}
+          onOpenInBrandKit={noop}
+        />
+      );
+    }
+
+    await act(async () => {
+      root.render(
+        <I18nProvider initialLocale="en">
+          <FeedHarness />
+        </I18nProvider>,
+      );
+      await Promise.resolve();
+    });
+
+    // Right rail mounts with Next, Prev, and simulated Like counter.
+    expect(container.querySelector('[data-try-game-feed]')).not.toBeNull();
+    const nextBtn = container.querySelector<HTMLButtonElement>('[data-try-game-next]');
+    const prevBtn = container.querySelector<HTMLButtonElement>('[data-try-game-prev]');
+    const likeBtn = container.querySelector<HTMLButtonElement>('[data-try-game-like]');
+    expect(nextBtn).not.toBeNull();
+    expect(prevBtn).not.toBeNull();
+    expect(likeBtn).not.toBeNull();
+    expect(container.querySelectorAll('[role="tab"]').length).toBe(1);
+
+    // Clicking Like updates pressed state and triggers burst feedback.
+    act(() => { likeBtn!.click(); });
+    expect(likeBtn!.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('[data-try-game-like-burst]')).not.toBeNull();
+
+    // Clicking Next replaces the active tab in-place (still 1 tab) with a different game from the pool.
+    const initialTitle = container.querySelector('[role="tab"] span')?.textContent;
+    act(() => { nextBtn!.click(); });
+    const nextTitle = container.querySelector('[role="tab"] span')?.textContent;
+    expect(container.querySelectorAll('[role="tab"]').length).toBe(1);
+    expect(nextTitle).not.toBe(initialTitle);
+
+    // Clicking Prev returns deterministically to the initial game.
+    act(() => { prevBtn!.click(); });
+    expect(container.querySelector('[role="tab"] span')?.textContent).toBe(initialTitle);
+
+    // Alt+ArrowDown advances cleanly via keyboard shortcut.
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true }));
+    });
+    expect(container.querySelector('[role="tab"] span')?.textContent).toBe(nextTitle);
+
+    // Mobile Next button enters Card Browse mode, and tapping the swipe shield returns to Play mode.
+    const mobileNext = container.querySelector<HTMLButtonElement>('[data-try-game-mobile-next]')!;
+    act(() => { mobileNext.click(); });
+    expect(container.querySelector('[data-try-game-feed]')?.getAttribute('data-mobile-mode')).toBe('browse');
+    const shield = container.querySelector<HTMLButtonElement>('[data-try-game-swipe-shield]')!;
+    expect(shield).not.toBeNull();
+    act(() => { shield.click(); });
+    expect(container.querySelector('[data-try-game-feed]')?.getAttribute('data-mobile-mode')).toBe('play');
+  });
+
+  it('uses a single-bar full-viewport header without tab chrome in mobileFullscreenGameTrial mode', async () => {
+    const noop = () => {};
+    const onClosePane = vi.fn();
+    const gameArtifact: SuperAgentArtifact = {
+      id: 'game:coin-dash',
+      kind: 'game-project',
+      title: 'Coin Dash',
+      scenario: 'portrait',
+      url: '/api/games/coin-dash/play/index.html',
+      createdAt: 1,
+      updatedAt: 1,
+      presentedAt: 1,
+    };
+
+    await act(async () => {
+      root.render(
+        <I18nProvider initialLocale="en">
+          <ArtifactBrowserPane
+            chatId={null}
+            artifacts={[gameArtifact]}
+            openTabIds={[gameArtifact.id]}
+            activeTabId={gameArtifact.id}
+            expanded={false}
+            mobileFullscreenGameTrial
+            workspaceItems={[]}
+            tryGamePool={[{
+              id: 'coin-dash',
+              title: 'Coin Dash',
+              description: 'Portrait runner',
+              genre: 'arcade',
+              source: 'template',
+              orientation: 'portrait',
+              updatedAt: '2026-11-27T00:00:00.000Z',
+            }]}
+            onNavigateTrialGame={noop}
+            onSelectTab={noop}
+            onCloseTab={noop}
+            onNewTab={noop}
+            onOpenWebUrl={noop}
+            onOpenArtifact={noop}
+            onOpenResource={noop}
+            onToggleExpand={noop}
+            onClosePane={onClosePane}
+            onAttachArtifact={noop}
+            onOpenInDesignStudio={noop}
+            onOpenInMotionStudio={noop}
+            onOpenInAssets={noop}
+            onOpenInBrandKit={noop}
+          />
+        </I18nProvider>,
+      );
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.om-sa-viewer-tabs-bar')).toBeNull();
+    expect(container.querySelector('[data-try-game-mobile-title]')?.textContent).toContain('Coin Dash');
+    const closeBtn = container.querySelector<HTMLButtonElement>('[data-try-game-mobile-close]');
+    expect(closeBtn).not.toBeNull();
+    act(() => { closeBtn!.click(); });
+    expect(onClosePane).toHaveBeenCalledTimes(1);
   });
 });
