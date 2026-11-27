@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SuperAgentArtifact } from '../../../shared/super-agent';
 import { I18nProvider } from '../i18n/I18n';
-import { bundledGames } from '../motion/game/gameCatalog';
+import { bundledGames, communityGames } from '../motion/game/gameCatalog';
 import { ArtifactDeliverableCard, SupportingAssetRow } from './ArtifactDeliverableCard';
 import { gamePublishActions, gamePublishSessionFor, resetGamePublishStore } from './gamePublish/gamePublishStore';
 
@@ -470,21 +470,35 @@ describe('ArtifactDeliverableCard', () => {
     act(() => root.unmount());
     container.remove();
 
-    // Bundled template games are trial-only and must not expose Publish
-    const bundled = bundledGames[0];
-    if (bundled) {
-      const templateRender = renderCard({
-        id: `game:${bundled.id}`,
-        kind: 'game-project',
-        title: bundled.title,
-        projectId: bundled.id,
-        url: `/motion-api/games/${bundled.id}/play/index.html`,
-        createdAt: 1,
-        updatedAt: 2,
-      }, { layout: 'hero' });
-      expect(templateRender.container.querySelector('.om-sa-deliverable-publish-btn')).toBeNull();
-      act(() => templateRender.root.unmount());
-      templateRender.container.remove();
-    }
+    // Bundled template and community games are trial-only and must not expose Publish
+    expect(bundledGames.length).toBeGreaterThan(0);
+    const bundled = bundledGames[0]!;
+    const templateRender = renderCard({
+      id: `game:${bundled.id}`,
+      kind: 'game-project',
+      title: bundled.title,
+      projectId: bundled.id,
+      url: `/motion-api/games/${bundled.id}/play/index.html`,
+      createdAt: 1,
+      updatedAt: 2,
+    }, { layout: 'hero' });
+    expect(templateRender.container.querySelector('.om-sa-deliverable-publish-btn')).toBeNull();
+    act(() => templateRender.root.unmount());
+    templateRender.container.remove();
+
+    expect(communityGames.length).toBeGreaterThan(0);
+    const community = communityGames[0]!;
+    const communityRender = renderCard({
+      id: `game:${community.id}`,
+      kind: 'game-project',
+      title: community.title,
+      projectId: community.id,
+      url: community.playUrl,
+      createdAt: 1,
+      updatedAt: 2,
+    }, { layout: 'hero' });
+    expect(communityRender.container.querySelector('.om-sa-deliverable-publish-btn')).toBeNull();
+    act(() => communityRender.root.unmount());
+    communityRender.container.remove();
   });
 });

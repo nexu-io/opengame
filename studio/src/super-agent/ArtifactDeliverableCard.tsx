@@ -11,8 +11,8 @@ import { WebPublishPopover } from '../components/WebPublishPopover';
 import { designClient } from '../design/designClient';
 import { useI18n } from '../i18n/I18n';
 import { RemixIcon } from '../icons/RemixIcons';
-import { bundledGames } from '../motion/game/gameCatalog';
 import { modelDisplayLabel } from '../motion/generationLabels';
+import { buildGamePublishOpenInput, resolvePublishableGameId } from './gamePublish/gamePublishEntry';
 import { gamePublishActions, useGamePublishSession } from './gamePublish/gamePublishStore';
 
 export type DeliverableTone = 'agent' | 'coding' | 'image' | 'video' | 'audio';
@@ -369,14 +369,7 @@ export function ArtifactDeliverableCard({
         : (orientationTag ? `${t(meta.typeLabel)} · ${orientationTag}` : t(meta.typeLabel));
   const cloudTarget = resolveArtifactCloudTarget(artifact);
   // Game publish wizard: only local workspace game projects can be packaged/published to platforms.
-  const isBundledGame = Boolean(
-    artifact.kind === 'game-project'
-    && artifact.projectId
-    && bundledGames.some(game => game.id === artifact.projectId),
-  );
-  const publishGameId = artifact.kind === 'game-project' && artifact.projectId && !isBundledGame
-    ? artifact.projectId
-    : undefined;
+  const publishGameId = resolvePublishableGameId(artifact);
   const publishSession = useGamePublishSession(publishGameId ? artifact.id : null);
   const publishPanelOpen = Boolean(publishGameId && isActiveInViewer && publishSession?.open);
 
@@ -407,27 +400,9 @@ export function ArtifactDeliverableCard({
       gamePublishActions.close(artifact.id);
       return;
     }
-    const orientation = artifact.scenario === 'portrait'
-      ? 'portrait'
-      : artifact.scenario === 'landscape'
-        ? 'landscape'
-        : undefined;
-    gamePublishActions.open({
-      artifactId: artifact.id,
-      chatId,
-      gameId: publishGameId,
-      gameTitle: artifact.title,
-      ...(orientation ? { orientation } : {}),
-      // Same share target as the viewer toolbar Publish button; missing when the game cannot be shared.
-      link: cloudTarget
-        ? {
-            targetId: cloudTarget.targetId,
-            filePath: cloudTarget.filePath,
-            embedUrl: cloudTarget.embedUrl,
-            title: artifact.title,
-          }
-        : undefined,
-    });
+    const input = buildGamePublishOpenInput(artifact, { chatId });
+    if (!input) return;
+    gamePublishActions.open(input);
     onOpenArtifactId(artifact.id);
   };
 

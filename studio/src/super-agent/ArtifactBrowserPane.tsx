@@ -65,6 +65,7 @@ import {
 } from './BrowserAnnotationOverlay';
 import { fileAttachmentIcon, resourceIcon } from './ResourcePickerDialog';
 import { GamePublishPanel } from './gamePublish/GamePublishPanel';
+import { buildGamePublishOpenInput, isTrialGameArtifact, resolvePublishableGameId } from './gamePublish/gamePublishEntry';
 import { gamePublishActions, useGamePublishSession, type GamePublishChooseOptions } from './gamePublish/gamePublishStore';
 import {
   captureSuperAgentPreviewSnapshot,
@@ -1981,11 +1982,9 @@ export function ArtifactBrowserPane({
   const activeGameProjectId = activeArtifact?.kind === 'game-project' ? activeArtifact.projectId : undefined;
   const bundledMatch = activeGameProjectId ? bundledGames.find(game => game.id === activeGameProjectId) : undefined;
   const gameMeta = gameMetaEntry && gameMetaEntry.artifactId === activeArtifact?.id ? gameMetaEntry : null;
-  const isGameTrial = activeArtifact?.kind === 'game-project' && (
-    !activeGameProjectId || Boolean(bundledMatch) || gameMeta?.source === 'template' || gameMeta?.source === 'community'
-  );
+  const isGameTrial = isTrialGameArtifact(activeArtifact, gameMeta?.source);
   // Game publish wizard: only local workspace game projects can be packaged/published to platforms.
-  const publishGameId = isGameTrial ? undefined : activeGameProjectId;
+  const publishGameId = resolvePublishableGameId(activeArtifact, gameMeta?.source);
   const publishSession = useGamePublishSession(publishGameId ? activeArtifact?.id : null);
   const publishPanelOpen = Boolean(publishGameId && publishSession?.open);
 
@@ -3042,14 +3041,15 @@ export function ArtifactBrowserPane({
                     className="om-sa-share-trigger om-sa-publish-trigger"
                     data-active={publishPanelOpen || undefined}
                     aria-pressed={publishPanelOpen}
-                    onClick={() => gamePublishActions.toggle({
-                      artifactId: activeArtifact.id,
-                      chatId,
-                      gameId: publishGameId,
-                      gameTitle: activeArtifact.title,
-                      // Same share target as the toolbar Share button; missing when the game cannot be shared.
-                      link: canCloudShare ? { targetId: gamePublishId, filePath: activeArtifact.entry, embedUrl: gameEmbedUrl, title: activeArtifact.title } : undefined,
-                    })}
+                    onClick={() => {
+                      const input = buildGamePublishOpenInput(activeArtifact, {
+                        chatId,
+                        catalogSource: gameMeta?.source,
+                        orientation: gameMeta?.orientation,
+                        includeLink: canCloudShare,
+                      });
+                      if (input) gamePublishActions.toggle(input);
+                    }}
                   >
                     <RemixIcon name="upload-2-line" size={14} />
                     <span>{t('Publish')}</span>
