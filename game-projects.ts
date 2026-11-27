@@ -16,6 +16,7 @@ import { assetHttp } from './gateway/asset-http.ts';
 import { buildMediaSettingsHandoff } from './gateway/media-use.ts';
 import { buildPublishBundle } from './gateway/web-publish-bundle.ts';
 import { WorkspaceStore } from './workspace.ts';
+import { withProcessLock } from './shared/process-lock.ts';
 import { ensureRuntime, execute, pluginRoot, HYPERFRAMES_VERSION } from './hyperframes.ts';
 import { verificationBinaries } from './scripts/verify-export.ts';
 import type { Duplex } from 'node:stream';
@@ -787,6 +788,9 @@ type StoredTrailer = GameTrailer & {runId:string;ownerPid?:number};
 function trailerOwnerAlive(pid:number|undefined){if(pid===undefined||!Number.isInteger(pid)||pid<=0)return false;try{process.kill(pid,0);return true;}catch(error){return (error as NodeJS.ErrnoException).code==='EPERM';}}
 const trailerRunning = (status:GameTrailerStatus)=>['recording','composing','rendering'].includes(status);
 const publicTrailer = ({runId:_runId,ownerPid:_ownerPid,...job}:StoredTrailer):GameTrailer=>job;
+function trailerInterrupted(root:string,job:StoredTrailer) {
+  return trailerRunning(job.status)&&activeGameTrailers.get(root)?.runId!==job.runId&&!trailerOwnerAlive(job.ownerPid);
+}
 export function trailerTransition(previous:GameTrailerStatus,next:GameTrailerStatus) {
   return next==='failed'&&trailerRunning(previous)||({recording:'composing',composing:'rendering',rendering:'ready'} as Record<string,string>)[previous]===next;
 }
@@ -1424,21 +1428,30 @@ server.listen(port, '127.0.0.1', () => {
     let job:StoredTrailer;
     try{job=await jsonFile<StoredTrailer>(await safeFile(root,'trailer/job.json'));}
     catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return null;throw error;}
-    if(trailerRunning(job.status)&&activeGameTrailers.get(root)?.runId!==job.runId&&!trailerOwnerAlive(job.ownerPid)){
-      job={...job,status:'failed',error:'Trailer interrupted by a service restart. Start again; existing clips were preserved.',updatedAt:new Date().toISOString()};
-      await saveJson(await safeFile(root,'trailer/job.json',true),job);
-    }
-    return publicTrailer(job);
+    if(!trailerInterrupted(root,job))return publicTrailer(job);
+    const file=await safeFile(root,'trailer/job.json',true);
+    // Ordinary status reads stay read-only. Recovery must recheck the owner and
+    // generation under the same lock as starts and worker progress writes.
+    return withProcessLock(path.join(root,'trailer','.job.lock'),async()=>{
+      const current=await jsonFile<StoredTrailer|null>(file,null);
+      if(!current)return null;
+      if(!trailerInterrupted(root,current))return publicTrailer(current);
+      const failed:StoredTrailer={...current,status:'failed',error:'Trailer interrupted by a service restart. Start again; existing clips were preserved.',updatedAt:new Date().toISOString()};
+      await saveJson(file,failed);
+      return publicTrailer(failed);
+    });
   }
   async trailer(id:string):Promise<GameTrailer> {
     const job=await this.readTrailer(id);if(!job)throw new GameError('No trailer job exists for this game',404);return job;
   }
   private async updateTrailer(id:string,runId:string,patch:Partial<GameTrailer>) {
     const root=await this.trailerStorage(id),file=await safeFile(root,'trailer/job.json');
-    const job=await jsonFile<StoredTrailer>(file);
-    if(job.runId!==runId||activeGameTrailers.get(root)?.runId!==runId)return;
-    if(patch.status&&patch.status!==job.status&&!trailerTransition(job.status,patch.status))throw new GameError(`Invalid trailer transition: ${job.status} → ${patch.status}`);
-    await saveJson(file,{...job,...patch,updatedAt:new Date().toISOString()});
+    return withProcessLock(path.join(root,'trailer','.job.lock'),async()=>{
+      const job=await jsonFile<StoredTrailer>(file);
+      if(job.runId!==runId||activeGameTrailers.get(root)?.runId!==runId)return;
+      if(patch.status&&patch.status!==job.status&&!trailerTransition(job.status,patch.status))throw new GameError(`Invalid trailer transition: ${job.status} → ${patch.status}`);
+      await saveJson(file,{...job,...patch,updatedAt:new Date().toISOString()});
+    });
   }
   async startTrailer(id:string):Promise<GameTrailer> {return this.mutate(()=>new WorkspaceStore(path.dirname(this.root)).lock(async()=>{
     const game=await this.get(id);
@@ -1446,22 +1459,26 @@ server.listen(port, '127.0.0.1', () => {
     if(game.external)throw new GameError('External games cannot be recorded locally. Import a playable local game first.',409);
     const validation=await this.validate(id);if(!validation.passed)throw new GameError('Game validation failed before trailer recording: '+JSON.stringify(validation.diagnostics),409);
     const root=await this.trailerStorage(id,true);
-    if(game.trailer&&trailerRunning(game.trailer.status))return this.trailer(id);
-    const runId=randomUUID(),job:StoredTrailer={runId,ownerPid:process.pid,status:'recording',progress:0,clips:[],updatedAt:new Date().toISOString()};
-    await saveJson(await safeFile(root,'trailer/job.json',true),job);
-    const promise=Promise.resolve().then(async()=>{
-      try{
-        const clips=await this.recordTrailer(id,root,runId,async current=>this.updateTrailer(id,runId,{progress:.1+current.length*.08,clips:current.map(file=>`/api/games/${id}/play/${file}`)}));
-        await this.updateTrailer(id,runId,{status:'composing',progress:.4});
-        const projectId=await this.composeTrailer(game,root,clips,async projectId=>this.updateTrailer(id,runId,{projectId}));
-        await this.updateTrailer(id,runId,{status:'rendering',progress:.7,projectId});
-        const rendered=await this.renderTrailer(projectId);
-        const output=await safeFile(root,'trailer/trailer.mp4',true);await copyFile(rendered,output);
-        await this.updateTrailer(id,runId,{status:'ready',progress:1,videoUrl:`/api/games/${id}/play/trailer/trailer.mp4`});
-      }catch(error){const stage=(await this.readTrailer(id))?.status??'Trailer';await this.updateTrailer(id,runId,{status:'failed',error:(stage+' failed: '+(error instanceof Error?error.message:String(error))).slice(0,2000)});}
-    }).finally(()=>{if(activeGameTrailers.get(root)?.runId===runId)activeGameTrailers.delete(root);});
-    activeGameTrailers.set(root,{runId,promise});void promise.catch(()=>{});
-    return publicTrailer(job);
+    const file=await safeFile(root,'trailer/job.json',true);
+    return withProcessLock(path.join(root,'trailer','.job.lock'),async()=>{
+      const current=await jsonFile<StoredTrailer|null>(file,null);
+      if(current&&trailerRunning(current.status)&&!trailerInterrupted(root,current))return publicTrailer(current);
+      const runId=randomUUID(),job:StoredTrailer={runId,ownerPid:process.pid,status:'recording',progress:0,clips:[],updatedAt:new Date().toISOString()};
+      await saveJson(file,job);
+      const promise=Promise.resolve().then(async()=>{
+        try{
+          const clips=await this.recordTrailer(id,root,runId,async current=>this.updateTrailer(id,runId,{progress:.1+current.length*.08,clips:current.map(file=>`/api/games/${id}/play/${file}`)}));
+          await this.updateTrailer(id,runId,{status:'composing',progress:.4});
+          const projectId=await this.composeTrailer(game,root,clips,async projectId=>this.updateTrailer(id,runId,{projectId}));
+          await this.updateTrailer(id,runId,{status:'rendering',progress:.7,projectId});
+          const rendered=await this.renderTrailer(projectId);
+          const output=await safeFile(root,'trailer/trailer.mp4',true);await copyFile(rendered,output);
+          await this.updateTrailer(id,runId,{status:'ready',progress:1,videoUrl:`/api/games/${id}/play/trailer/trailer.mp4`});
+        }catch(error){const stage=(await this.readTrailer(id))?.status??'Trailer';await this.updateTrailer(id,runId,{status:'failed',error:(stage+' failed: '+(error instanceof Error?error.message:String(error))).slice(0,2000)});}
+      }).finally(()=>{if(activeGameTrailers.get(root)?.runId===runId)activeGameTrailers.delete(root);});
+      activeGameTrailers.set(root,{runId,promise});void promise.catch(()=>{});
+      return publicTrailer(job);
+    });
   }));}
   protected async recordTrailer(id:string,root:string,runId:string,onClip:(clips:string[])=>Promise<void>):Promise<string[]> {
     const {ffmpeg}=verificationBinaries();
