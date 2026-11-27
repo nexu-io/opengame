@@ -92,7 +92,7 @@ export function GamePublishPanel({ artifactId, coverUrl, onChooseDouyin, onNotif
   if (platform?.id === 'wechat' && session.view !== 'list') {
     // WeChat is guided by the Agent in the conversation; the panel only shows where things stand.
     head = header(t(platform.name), { label: t('Platforms'), onClick: () => gamePublishActions.showList(artifactId) });
-    body = <WechatProgress session={session} />;
+    body = <WechatProgress session={session} onNotify={onNotify} />;
     foot = (
       <>
         <Button variant="plain" type="button" className="om-gp-secondary" onClick={close}>{t('Hide for now')}</Button>
@@ -120,8 +120,7 @@ export function GamePublishPanel({ artifactId, coverUrl, onChooseDouyin, onNotif
     body = (
       <>
         {!session.chatId && <PlatformInlineControls session={session} onNotify={onNotify} />}
-        <PlatformProgress session={session} />
-        {!session.chatId && session.linkUrl && <CompactLink url={session.linkUrl} onNotify={onNotify} />}
+        <PlatformProgress session={session} onNotify={onNotify} />
         {session.view === 'result' && <GamePublishResultAction action={platform.resultAction} href={platform.resultHref} />}
       </>
     );

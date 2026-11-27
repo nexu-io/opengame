@@ -22,7 +22,10 @@ const STATE_ICON: Partial<Record<ShownState, string>> = {
  * WeChat publishing, right-hand panel: only where things stand. Every instruction comes from the Agent in the
  * conversation; this reads the same progress record its openmotion_game_wechat calls write.
  */
-export function WechatProgress({ session }: { session: GamePublishSession }) {
+export function WechatProgress({ session, onNotify }: {
+  session: GamePublishSession;
+  onNotify?: (message: string, tone?: 'info' | 'error') => void;
+}) {
   const { t } = useI18n();
   const wechat = session.wechat;
   const status = wechat?.status;
@@ -74,7 +77,7 @@ export function WechatProgress({ session }: { session: GamePublishSession }) {
         <strong>{line}</strong>
         <span className="om-gp-muted"> · {t('The Agent guides you in the conversation')}</span>
       </p>
-      <OpenDesignProgress session={session} />
+      <OpenDesignProgress session={session} onNotify={onNotify} />
       <ol className="om-gp-overview-list">{main.map((step, index) => item(step, index + 1))}</ol>
 
       <h3 className="om-gp-group">{mainDone ? t('Going live') : t('Going live (optional)')}</h3>
@@ -84,7 +87,10 @@ export function WechatProgress({ session }: { session: GamePublishSession }) {
 }
 
 /** The OpenDesign link (selected by default on the platform list), above the platform's steps. */
-export function OpenDesignProgress({ session }: { session: GamePublishSession }) {
+export function OpenDesignProgress({ session, onNotify }: {
+  session: GamePublishSession;
+  onNotify?: (message: string, tone?: 'info' | 'error') => void;
+}) {
   const { t } = useI18n();
   if (!session.linkToo && !session.linkUrl && !session.linkPublishing && !session.linkError) return null;
   const state: ShownState = session.linkUrl ? 'done' : session.linkError ? 'blocked' : session.linkPublishing ? 'current' : 'todo';
@@ -94,7 +100,9 @@ export function OpenDesignProgress({ session }: { session: GamePublishSession })
       <li className="om-gp-overview-item" data-state={state}>
         {icon ? <RemixIcon name={icon} size={14} className={session.linkPublishing ? 'om-gp-spin' : undefined} /> : <span className="om-gp-overview-dot" aria-hidden="true" />}
         <span className="om-gp-overview-name">OpenDesign · {t('Play link')}</span>
-        <span className="om-gp-overview-state">{session.linkUrl ? t('Done') : session.linkError ? t('Needs a fix') : session.linkPublishing ? t('Publishing…') : t('Not started')}</span>
+        {session.linkUrl
+          ? <CompactLink url={session.linkUrl} onNotify={onNotify} />
+          : <span className="om-gp-overview-state">{session.linkError ? t('Needs a fix') : session.linkPublishing ? t('Publishing…') : t('Not started')}</span>}
       </li>
     </ol>
   );
@@ -132,6 +140,15 @@ export function LinkQr({ url, size = 132 }: { url: string; size?: number }) {
       <figcaption className="om-gp-muted">{t('Scan with WeChat to open the game in WeChat')}</figcaption>
     </figure>
   );
+}
+
+export function hasWechatInlineControls(session: GamePublishSession | undefined): boolean {
+  const status = session?.wechat?.status;
+  if (!status) return false;
+  const showKey = status.current === 'key' && Boolean(status.appid);
+  const canReplaceKey = Boolean(status.appid && status.hasKey && status.keyRejected);
+  const showQr = Boolean(status.preview) && (status.current === 'preview' || status.current === 'upload');
+  return showKey || showQr || canReplaceKey;
 }
 
 /**

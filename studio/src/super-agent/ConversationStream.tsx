@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import { Button } from 'open-design-ui/button';
 import { IconButton } from 'open-design-ui/icon-button';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { AgentRuntimeInfo } from '../../../shared/agent-runtimes';
 import { designRoutes, findDesignScenario, isDesignScenario } from '../../../shared/design-project';
 import { designClient } from '../design/designClient';
@@ -108,8 +108,8 @@ import {
   type ModeComposerOptions,
 } from './ModeComposerControls';
 import { CreationHome } from './CreationHome';
-import { GamePublishThread } from './gamePublish/GamePublishThread';
-import { gamePublishActions, useGamePublishThread } from './gamePublish/gamePublishStore';
+import { GamePublishThread, GamePublishTurnEntries, partitionPublishEntries } from './gamePublish/GamePublishThread';
+import { countConversationTurns, gamePublishActions, useGamePublishThread, usePublishForChat } from './gamePublish/gamePublishStore';
 
 export function resolveCreationModeEntry(
   mode: SuperAgentCreationModeId | null,
@@ -387,6 +387,11 @@ export function ConversationStream({
   const { t, locale } = useI18n();
   // Publish activity counts as conversation: show it instead of the welcome page.
   const publishEntries = useGamePublishThread(chat?.id);
+  const activePublish = usePublishForChat(chat?.id);
+  const handleOpenPublishPanel = useCallback((artifactId: string) => {
+    onOpenArtifactId(artifactId);
+    gamePublishActions.reopen(artifactId);
+  }, [onOpenArtifactId]);
   const [text, setText] = useState('');
   const [segments, setSegments] = useState<SuperAgentPromptSegment[]>([]);
   const [inlineMentions, setInlineMentions] = useState<SuperAgentResourceAttachment[]>([]);
@@ -429,6 +434,24 @@ export function ConversationStream({
     contextTags?: SuperAgentContextTag[];
     startedAt: number;
   } | null>(null);
+  const turnCount = useMemo(() => {
+    const baseMessages = chat?.messages ?? [];
+    const hasOptimisticNewTurn = Boolean(
+      pendingSubmission && (
+        baseMessages.length === 0
+        || baseMessages[baseMessages.length - 1]?.role !== 'user'
+        || baseMessages[baseMessages.length - 1]?.text.trim() !== pendingSubmission.text.trim()
+      ),
+    );
+    return countConversationTurns(baseMessages) + (hasOptimisticNewTurn ? 1 : 0);
+  }, [chat?.messages, pendingSubmission]);
+  useLayoutEffect(() => {
+    gamePublishActions.syncChatTurnCount(chat?.id, turnCount);
+  }, [chat?.id, turnCount]);
+  const { byTurn: publishEntriesByTurn, tail: tailPublishEntries } = useMemo(
+    () => partitionPublishEntries(publishEntries, turnCount),
+    [publishEntries, turnCount],
+  );
   const [previewingChipKey, setPreviewingChipKey] = useState<string | null>(null);
   const mediaModelsRef = useRef<Model[]>([]);
   const mediaRoutesRef = useRef<GatewayStatus['routes']>({});
@@ -1879,15 +1902,25 @@ export function ConversationStream({
             onOpenInBrandKit={onOpenInBrandKit}
             onApprove={onApprove}
             onContinue={() => void onSend(t('Continue from where you stopped and finish the task.'))}
+            renderTurnFooter={turnIndex => {
+              const anchored = publishEntriesByTurn.get(turnIndex);
+              if (!anchored?.length) return null;
+              return (
+                <GamePublishTurnEntries
+                  entries={anchored}
+                  activeInline={Boolean(activePublish)}
+                  onOpenPanel={handleOpenPublishPanel}
+                  onNotify={onNotify}
+                />
+              );
+            }}
           />
           )}
           <GamePublishThread
             chatId={chat?.id}
             messages={displayChat?.messages}
-            onOpenPanel={artifactId => {
-              onOpenArtifactId(artifactId);
-              gamePublishActions.reopen(artifactId);
-            }}
+            entries={tailPublishEntries}
+            onOpenPanel={handleOpenPublishPanel}
             onNotify={onNotify}
           />
           </>

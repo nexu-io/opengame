@@ -1923,6 +1923,7 @@ export function ExecutionTimeline({
   onOpenInBrandKit,
   onApprove,
   onContinue,
+  renderTurnFooter,
 }: {
   chat: SuperAgentChat;
   busy: boolean;
@@ -1950,6 +1951,7 @@ export function ExecutionTimeline({
   onOpenInBrandKit?: (kitId?: string) => void;
   onApprove: (approvalId: string, accepted: boolean, alwaysAllow?: boolean) => void;
   onContinue?: () => void;
+  renderTurnFooter?: (turnIndex: number, isLastTurn: boolean) => ReactNode;
 }) {
   const { t, locale } = useI18n();
   const [localTurnFeedback, setLocalTurnFeedback] = useState<Record<string, SuperAgentTurnFeedback | null>>({});
@@ -2477,6 +2479,7 @@ export function ExecutionTimeline({
                 </>
               );
             })()}
+            {renderTurnFooter?.(idx, isLastTurn)}
           </div>
         );
       })}

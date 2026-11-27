@@ -9,6 +9,7 @@
  * uses local inline step controls, as do the other platforms.
  */
 import { useSyncExternalStore } from 'react';
+import type { SuperAgentMessage } from '../../../../shared/super-agent';
 import { buildPlatformZip, buildPlayable, gameSlug, loadGameHtml, type GamePackageResult, type GamePackageTarget } from './gamePackage';
 import { describeLinkError, publishGameLink, type GamePublishLinkTarget } from './gamePublishAdapter';
 import type { GamePublishDevToolId } from './devTools';
@@ -58,6 +59,8 @@ export interface GamePublishSession {
   stepIndex: number;
   /** When the Agent was asked to explain the current Douyin step. */
   guideRequestedAt?: number;
+  /** Conversation turn index that owns this platform publish launch (used to anchor the OpenDesign link bar). */
+  platformTurnIndex?: number;
   picked?: string;
   inputs: Record<string, string>;
   /** Why the current step cannot continue yet (English source key). */
@@ -80,14 +83,27 @@ export interface GamePublishSession {
 export type GamePublishWorkKind = 'link' | 'package' | 'wechat-key';
 
 export type GamePublishThreadEntry =
-  | { id: string; artifactId: string; kind: 'user'; key: string; name?: string }
-  | { id: string; artifactId: string; kind: 'agent'; work: GamePublishWorkKind; title: string; name?: string; lines: Array<{ text: string; vars?: Record<string, string | number>; done: boolean }>; failed?: boolean; packageResult?: GamePackageResult }
-  | { id: string; artifactId: string; kind: 'result'; title: string; detail: string; vars?: Record<string, string>; action?: string; href?: string; link?: boolean }
-  | { id: string; artifactId: string; kind: 'link-failed'; message: string; authRequired: boolean }
+  | { id: string; artifactId: string; anchorTurnIndex?: number; kind: 'user'; key: string; name?: string }
+  | { id: string; artifactId: string; anchorTurnIndex?: number; kind: 'agent'; work: GamePublishWorkKind; title: string; name?: string; lines: Array<{ text: string; vars?: Record<string, string | number>; done: boolean }>; failed?: boolean; packageResult?: GamePackageResult }
+  | { id: string; artifactId: string; anchorTurnIndex?: number; kind: 'link'; state: 'publishing' | 'ready'; url?: string }
+  | { id: string; artifactId: string; anchorTurnIndex?: number; kind: 'result'; title: string; detail: string; vars?: Record<string, string>; action?: string; href?: string; link?: boolean }
+  | { id: string; artifactId: string; anchorTurnIndex?: number; kind: 'link-failed'; message: string; authRequired: boolean }
   ;
+
+/** Matches ExecutionTimeline's turn grouping so publish entries can anchor to exact turns without clock skew. */
+export function countConversationTurns(messages: readonly SuperAgentMessage[] | undefined): number {
+  if (!messages?.length) return 0;
+  let count = 0;
+  for (const msg of messages) {
+    if (msg.role === 'user') count += 1;
+    else if (count === 0) count = 1;
+  }
+  return count;
+}
 
 const sessions = new Map<string, GamePublishSession>();
 const threads = new Map<string, GamePublishThreadEntry[]>();
+const chatTurnCounts = new Map<string, number>();
 const listeners = new Set<() => void>();
 /** Bumped whenever the user picks a platform, so work started for an earlier choice cannot touch the current one. */
 const platformRuns = new Map<string, number>();
@@ -95,6 +111,14 @@ let entrySeq = 0;
 
 function emit() { for (const listener of listeners) listener(); }
 function subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
+
+function currentAnchorTurnIndex(session: GamePublishSession, offset: 'current' | 'next' = 'current'): number | undefined {
+  if (!session.chatId) return undefined;
+  const count = chatTurnCounts.get(session.chatId);
+  if (count === undefined) return undefined;
+  if (offset === 'next') return count;
+  return count > 0 ? count - 1 : undefined;
+}
 
 function update(artifactId: string, patch: Partial<GamePublishSession>) {
   const current = sessions.get(artifactId);
@@ -136,14 +160,19 @@ function isLinkFailureEntry(entry: GamePublishThreadEntry) {
   return entry.kind === 'link-failed' || (entry.kind === 'agent' && entry.work === 'link' && Boolean(entry.failed));
 }
 
+function isLinkEntry(entry: GamePublishThreadEntry) {
+  return entry.kind === 'link' || isLinkFailureEntry(entry);
+}
+
 function isPackageWorkEntry(entry: GamePublishThreadEntry) {
   return entry.kind === 'agent' && entry.work === 'package';
 }
 
 /** A conversation block for real work; lines are added as each part actually finishes. */
-function startWork(artifactId: string, work: GamePublishWorkKind, title: string, name?: string) {
+function startWork(artifactId: string, work: GamePublishWorkKind, title: string, name?: string, anchorTurnIndex?: number) {
   const session = sessions.get(artifactId)!;
-  const id = pushEntry(session, { kind: 'agent', work, title, name, lines: [] });
+  const resolvedAnchor = anchorTurnIndex ?? currentAnchorTurnIndex(session, 'current');
+  const id = pushEntry(session, { kind: 'agent', work, title, name, lines: [], ...(resolvedAnchor !== undefined ? { anchorTurnIndex: resolvedAnchor } : {}) });
   const edit = (change: (entry: Extract<GamePublishThreadEntry, { kind: 'agent' }>) => Extract<GamePublishThreadEntry, { kind: 'agent' }>) => {
     patchEntries(session, entry => (entry.id === id && entry.kind === 'agent' ? change(entry) : entry));
   };
@@ -285,6 +314,10 @@ export const gamePublishActions = {
     if (sessions.get(input.artifactId)?.open) gamePublishActions.close(input.artifactId);
     else gamePublishActions.open(input);
   },
+  syncChatTurnCount(chatId: string | null | undefined, turnCount: number) {
+    if (!chatId) return;
+    chatTurnCounts.set(chatId, turnCount);
+  },
   showList(artifactId: string) { update(artifactId, { view: 'list' }); },
   /** The OpenDesign choice at the top of the platform list (selected by default). */
   setLinkToo(artifactId: string, on: boolean) { update(artifactId, { linkToo: on, linkDeferred: false }); },
@@ -296,7 +329,7 @@ export const gamePublishActions = {
       update(artifactId, { linkDeferred: false });
       const latest = sessions.get(artifactId)!;
       if (latest.linkToo && !latest.linkUrl && !latest.linkPublishing && !latest.linkError) {
-        void gamePublishActions.publishLink(artifactId);
+        void gamePublishActions.publishLink(artifactId, { anchorTurnIndex: latest.platformTurnIndex });
       }
       return;
     }
@@ -313,34 +346,53 @@ export const gamePublishActions = {
     update(artifactId, { linkToo: false, linkDeferred: false, linkError: undefined });
   },
   /** Publishes the game on OpenDesign Cloud, the same way the toolbar Share button does. */
-  async publishLink(artifactId: string): Promise<void> {
+  async publishLink(artifactId: string, options?: { anchorTurnIndex?: number }): Promise<void> {
     const session = sessions.get(artifactId);
     if (!session || session.linkPublishing) return;
-    removeEntries(session, isLinkFailureEntry);
+    const anchorTurnIndex = options?.anchorTurnIndex ?? currentAnchorTurnIndex(session, 'current');
+    removeEntries(session, isLinkEntry);
     if (!session.link) {
       const linkError = { message: 'This game cannot get a share link yet', authRequired: false };
       update(artifactId, { linkError, linkDeferred: false });
-      pushEntry(sessions.get(artifactId)!, { kind: 'link-failed', message: linkError.message, authRequired: false });
+      pushEntry(sessions.get(artifactId)!, {
+        kind: 'link-failed',
+        message: linkError.message,
+        authRequired: false,
+        ...(anchorTurnIndex !== undefined ? { anchorTurnIndex } : {}),
+      });
       return;
     }
     update(artifactId, { linkPublishing: true, linkDeferred: false, linkError: undefined });
-    const work = startWork(artifactId, 'link', 'Publishing on OpenDesign');
+    const entryId = pushEntry(sessions.get(artifactId)!, {
+      kind: 'link',
+      state: 'publishing',
+      ...(anchorTurnIndex !== undefined ? { anchorTurnIndex } : {}),
+    });
     try {
       const { url } = await publishGameLink(session.link);
-      work.line('The game link is published');
       update(artifactId, { linkUrl: url, linkPublishing: false });
-      pushEntry(sessions.get(artifactId)!, { kind: 'result', title: 'Live on OpenDesign', detail: url, link: true });
+      const latest = sessions.get(artifactId);
+      if (latest) {
+        patchEntries(latest, entry => (
+          entry.id === entryId && entry.kind === 'link'
+            ? { ...entry, state: 'ready', url }
+            : entry
+        ));
+      }
     } catch (error) {
       const linkError = describeLinkError(error);
-      if (linkError.authRequired) {
-        // Keep the thread clean: the link-failed card renders the localized sign-in action without raw English error logs.
-        const latest = sessions.get(artifactId);
-        if (latest) removeEntries(latest, entry => entry.kind === 'agent' && entry.work === 'link' && !entry.lines.length);
-      } else {
-        work.fail('Publishing failed: {message}', { message: linkError.message });
-      }
+      const latest = sessions.get(artifactId);
+      if (latest) removeEntries(latest, entry => entry.id === entryId);
       update(artifactId, { linkPublishing: false, linkError });
-      pushEntry(sessions.get(artifactId)!, { kind: 'link-failed', message: linkError.message, authRequired: linkError.authRequired });
+      const afterError = sessions.get(artifactId);
+      if (afterError) {
+        pushEntry(afterError, {
+          kind: 'link-failed',
+          message: linkError.message,
+          authRequired: linkError.authRequired,
+          ...(anchorTurnIndex !== undefined ? { anchorTurnIndex } : {}),
+        });
+      }
     }
   },
   choose(artifactId: string, platformId: GamePublishPlatformId, options?: GamePublishChooseOptions) {
@@ -350,12 +402,15 @@ export const gamePublishActions = {
     platformRuns.set(artifactId, (platformRuns.get(artifactId) ?? 0) + 1);
     const guestOnNonLinkPlatform = options?.signedIn === false && platformId !== 'telegram';
     const guestOnTelegram = options?.signedIn === false && platformId === 'telegram';
+    const dispatchesHandoff = platformId === 'wechat' || (platformId === 'douyin-minigame' && Boolean(session.chatId));
+    const platformTurnIndex = currentAnchorTurnIndex(session, dispatchesHandoff ? 'next' : 'current');
     // Clear stale link errors and previous package build logs so re-picking a platform never stacks duplicate cards.
     removeEntries(session, entry => isLinkFailureEntry(entry) || isPackageWorkEntry(entry));
     update(artifactId, {
       platformId,
       stepIndex: 0,
       guideRequestedAt: undefined,
+      platformTurnIndex,
       picked: undefined,
       inputs: {},
       view: 'step',
@@ -371,7 +426,7 @@ export const gamePublishActions = {
     // OpenDesign is selected by default when signed in; guests on non-Telegram platforms proceed without a blocking auth error,
     // guests on Telegram sign in directly inside Step 1 (LinkStep), and unknown account states defer until resolved.
     if (latest.linkToo && !latest.linkUrl && !latest.linkPublishing && options?.signedIn !== false && !options?.deferLink) {
-      void gamePublishActions.publishLink(artifactId);
+      void gamePublishActions.publishLink(artifactId, { anchorTurnIndex: platformTurnIndex });
     }
     if (platform.id === 'wechat') {
       gamePublishActions.startWechat(artifactId);
@@ -530,6 +585,10 @@ export const gamePublishActions = {
       return;
     }
     const latest = sessions.get(artifactId)!;
+    const resultAnchorTurnIndex = currentAnchorTurnIndex(
+      latest,
+      platform.id === 'douyin-minigame' && Boolean(latest.chatId) ? 'next' : 'current',
+    );
     update(artifactId, {
       stepIndex: platform.steps.length,
       view: 'result',
@@ -542,6 +601,7 @@ export const gamePublishActions = {
       detail: platform.resultDetail,
       action: platform.resultAction,
       href: platform.resultHref,
+      ...(resultAnchorTurnIndex !== undefined ? { anchorTurnIndex: resultAnchorTurnIndex } : {}),
     });
   },
 };
@@ -571,7 +631,7 @@ export function gamePublishSessionFor(artifactId: string): GamePublishSession | 
 export function gamePublishThreadFor(chatId: string): GamePublishThreadEntry[] { return threads.get(chatId) ?? EMPTY; }
 
 /** Test helper. */
-export function resetGamePublishStore() { for (const key of [...wechatPolls.keys()]) stopWechatPoll(key); sessions.clear(); threads.clear(); platformRuns.clear(); entrySeq = 0; emit(); }
+export function resetGamePublishStore() { for (const key of [...wechatPolls.keys()]) stopWechatPoll(key); sessions.clear(); threads.clear(); chatTurnCounts.clear(); platformRuns.clear(); entrySeq = 0; emit(); }
 
 /** Copies the published link and reports the real outcome. */
 export async function copyGamePublishLink(url: string | undefined, notify: ((message: string, tone?: 'info' | 'error') => void) | undefined, t: (key: string) => string) {

@@ -447,4 +447,50 @@ describe('gamePublishStore', () => {
     expect(publish).not.toHaveBeenCalled();
     expect(gamePublishSessionFor(input.artifactId)).toMatchObject({ linkDeferred: false, linkToo: true });
   });
+
+  it('updates the OpenDesign link entry in place and anchors publish entries to their originating turns', async () => {
+    let resolvePublish!: (value: { url: string; updated: boolean; publication: object; deployment: object }) => void;
+    publish.mockImplementationOnce(() => new Promise(resolve => { resolvePublish = resolve; }));
+
+    // Chat already has Turn 0 (initial game creation).
+    gamePublishActions.syncChatTurnCount(input.chatId, 1);
+    gamePublishActions.open(input);
+    gamePublishActions.choose(input.artifactId, 'wechat');
+
+    // While publishing, one single 'link' entry is anchored to Turn 1 (the handoff turn).
+    expect(gamePublishThreadFor(input.chatId)).toEqual([
+      expect.objectContaining({ kind: 'link', state: 'publishing', anchorTurnIndex: 1 }),
+    ]);
+
+    // Turn 1 arrives, then OpenDesign publish completes: patches the same entry in place (no duplicate cards).
+    gamePublishActions.syncChatTurnCount(input.chatId, 2);
+    resolvePublish({ url: 'https://play.opendesign.app/g/abc', updated: false, publication: {}, deployment: {} });
+    await settle();
+    expect(gamePublishThreadFor(input.chatId)).toEqual([
+      expect.objectContaining({ kind: 'link', state: 'ready', url: 'https://play.opendesign.app/g/abc', anchorTurnIndex: 1 }),
+    ]);
+
+    // Later at Turn 3 (4 turns total: 0..3), saving the WeChat upload key anchors to Turn 3.
+    gamePublishActions.syncChatTurnCount(input.chatId, 4);
+    wx.saveKey.mockResolvedValue({ appid: 'wx0123456789abcdef', hasKey: true, savedAt: 'now' });
+    wx.state.mockResolvedValue(wechatStatus('ip'));
+    await gamePublishActions.saveWechatKey(input.artifactId, ['-----BEGIN', 'RSA PRIVATE KEY-----x-----END', 'RSA PRIVATE KEY-----'].join(' '));
+    expect(gamePublishThreadFor(input.chatId)).toEqual([
+      expect.objectContaining({ kind: 'link', state: 'ready', anchorTurnIndex: 1 }),
+      expect.objectContaining({ kind: 'agent', work: 'wechat-key', anchorTurnIndex: 3 }),
+    ]);
+  });
+
+  it('preserves the launch turn anchor when a deferred OpenDesign link resolves after the handoff turn starts', async () => {
+    gamePublishActions.syncChatTurnCount(input.chatId, 1);
+    gamePublishActions.open(input);
+    gamePublishActions.choose(input.artifactId, 'wechat', { deferLink: true });
+    // Handoff turn arrives before account summary finishes resolving.
+    gamePublishActions.syncChatTurnCount(input.chatId, 2);
+    gamePublishActions.resolveDeferredLink(input.artifactId, true);
+    await settle();
+    expect(gamePublishThreadFor(input.chatId)).toEqual([
+      expect.objectContaining({ kind: 'link', state: 'ready', anchorTurnIndex: 1 }),
+    ]);
+  });
 });
