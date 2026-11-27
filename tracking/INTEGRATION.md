@@ -196,8 +196,9 @@ Events go to the existing OpenDesign project (420348), with `product` resolved f
 `currentProductId()` (`openmotion` in OpenMotion, `opengame` in OpenGame).
 Filter queries by `properties.product` (or `IN ('openmotion', 'opengame')` for combined
 reports) and exclude them from unrelated shared reports.
-An OM-only receiver transformation preserves coarse GeoIP and removes raw IP and
-precise location after the existing GeoIP transformation; non-OM events are unchanged.
+An OpenMotion/OpenGame receiver transformation (`startsWith(product, 'open')`, matching
+`openmotion` and `opengame`) preserves coarse GeoIP and removes raw IP and
+precise location after the existing GeoIP transformation; unrelated OpenDesign events are unchanged.
 Do not add client IP lookups or collect IP in callers.
 Device timezone is separate from GeoIP timezone; VPN/proxy egress may differ.
 See [configuration, privacy and limits](README.md) and [coarse GeoIP](posthog-geoip.hog).

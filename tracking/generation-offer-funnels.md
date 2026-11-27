@@ -17,7 +17,7 @@ confirmed account identity. One person using two installations can appear twice.
 ## Run the entry report
 
 Export the following **two read-only SQL queries as CSV with headers**. At verification
-time, OpenMotion Studio events with `product=openmotion` were received by the
+time, OpenMotion and OpenGame Studio events (`product IN ('openmotion', 'opengame')`) were received by the
 [OpenDesign project](https://us.posthog.com/project/420348), and subscription receipts
 by the [AMR project](https://us.posthog.com/project/440658). Use a private working
 directory. Keep the same reporting period across both exports and split large time
@@ -35,7 +35,7 @@ SELECT event, toUnixTimestamp64Milli(timestamp) AS ts, distinct_id AS installati
        properties.offer_kind AS card, properties.offer_visit_id AS visit,
        properties.entry_id AS entry
 FROM events
-WHERE properties.product = 'openmotion' AND properties.env = 'production'
+WHERE properties.product IN ('openmotion', 'opengame') AND properties.env = 'production'
   AND empty(toString(coalesce(properties.test_run_id, '')))
   AND timestamp >= now() - INTERVAL 7 DAY
   AND ((event IN ('surface_view','ui_click') AND properties.offer_kind IN ('sign_in','upgrade')
