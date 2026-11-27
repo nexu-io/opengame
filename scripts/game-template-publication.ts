@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { access, mkdtemp, lstat, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, lstat, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { isMain } from '../shared/entry.ts';
+import { isListedGameTemplate } from '../shared/game-contract.ts';
 import { gameBundlePrefix, gameBundleUrl, maxGameBundleBytes, type GameBundle, type GameDownloadIndex } from '../shared/hosted-game-templates.ts';
 import { readProjectZip } from '../shared/project-zip.ts';
-import { boundedMediaBody, mediaDigest } from '../shared/repository-media.ts';
+import { boundedMediaBody, downloadVerifiedBytes, mediaDigest } from '../shared/repository-media.ts';
+import { writeAtomic, writeJSON } from './runtime-assets.mjs';
 import { zip } from './zip.mjs';
 
 export const offlineGame = 'tidebreaker';
@@ -150,7 +152,7 @@ export async function buildGameTemplateBundles(
       }
     }
     await collect('');
-    const archive = zip(fileEntries);
+    const archive = zip(fileEntries, { deflate: true });
     assert(archive.length <= maxGameBundleBytes);
     const files = readProjectZip(archive);
     const card = JSON.parse(files.get('game.json')?.toString() ?? 'null');
@@ -166,6 +168,62 @@ export async function buildGameTemplateBundles(
     });
   }
   return games;
+}
+
+function verifiedHostedGame(id: string, lock: GameBundle, archive: Buffer) {
+  assert(archive.length === lock.bytes && mediaDigest(archive) === lock.sha256, `Game bundle integrity check failed: ${id}`);
+  const files = readProjectZip(archive);
+  assert(JSON.parse(files.get('game.json')?.toString() ?? 'null')?.id === id && files.has('index.html'), `Invalid game bundle: ${id}`);
+  return files;
+}
+
+const gameIndexDigest = (games: Record<string, GameBundle>) => mediaDigest(Buffer.from(JSON.stringify(games)));
+
+/** Prepare smaller immutable bundles and a candidate index before changing the live index. */
+export async function stageOptimizedGameBundles(
+  indexPath: string,
+  output: string,
+  readArchive: (id: string, lock: GameBundle) => Promise<Buffer> = (_id, lock) =>
+    downloadVerifiedBytes(gameBundleUrl(lock.sha256), { ...lock, credentials: 'omit' }),
+) {
+  const original = await readGameDownloadIndex(indexPath);
+  const games = { ...original };
+  const objects = path.join(output, 'objects');
+  await mkdir(objects, { recursive: true });
+  let updated = 0, savedBytes = 0;
+  await mapConcurrent(Object.entries(original).filter(([id]) => isListedGameTemplate(id)), 4, async ([id, lock]) => {
+    const files = verifiedHostedGame(id, lock, await readArchive(id, lock));
+    const packed = zip(Array.from(files, ([name, data]) => ({ name, data })), { deflate: true });
+    if (packed.length >= lock.bytes) return;
+    const optimized = { sha256: mediaDigest(packed), bytes: packed.length };
+    await writeAtomic(path.join(objects, optimized.sha256 + '.zip'), packed);
+    games[id] = optimized;
+    updated++;
+    savedBytes += lock.bytes - packed.length;
+  });
+  await writeJSON(path.join(output, 'game-downloads.json'), { schemaVersion: 1, games });
+  await writeJSON(path.join(output, 'optimization.json'), {
+    source: gameIndexDigest(original),
+    candidate: gameIndexDigest(games),
+  });
+  return { updated, savedBytes };
+}
+
+async function publishStagedGameBundles(indexPath: string, directory: string) {
+  const current = await readGameDownloadIndex(indexPath);
+  const staged = await readGameDownloadIndex(path.join(directory, 'game-downloads.json'));
+  const plan = JSON.parse(await readFile(path.join(directory, 'optimization.json'), 'utf8'));
+  assert.equal(plan.source, gameIndexDigest(current), 'Staged optimization was built for a different game index');
+  assert.equal(plan.candidate, gameIndexDigest(staged), 'Staged index changed after compression');
+  assert.deepEqual(Object.keys(staged).sort(), Object.keys(current).sort(), 'Staged game index does not match the current catalogue');
+  const changes = Object.entries(staged).filter(([id, lock]) => lock.sha256 !== current[id].sha256);
+  await mapConcurrent(changes, 4, async ([id, lock]) => {
+    assert(isListedGameTemplate(id) && lock.bytes < current[id].bytes, `Invalid staged optimization: ${id}`);
+    const archive = await readFile(path.join(directory, 'objects', lock.sha256 + '.zip'));
+    verifiedHostedGame(id, lock, archive);
+    await publish(lock, archive);
+  });
+  return changes.length;
 }
 
 /** Upload immutable objects only. Each npm package carries its own small download index. */
@@ -204,6 +262,7 @@ async function verifyPublicGameHead(lock: GameBundle) {
 }
 
 if (isMain(import.meta.url)) {
+  const indexPath = 'templates/game-downloads.json';
   if (process.argv[2] === '--verify-release') {
     const release = JSON.parse(await readFile(process.argv[3], 'utf8'));
     // Releases predating lazy download have no remote game dependencies.
@@ -219,8 +278,16 @@ if (isMain(import.meta.url)) {
     const summary = await checkGameDownloadIndex('templates/games');
     await mapConcurrent(Object.values(summary.hosted), 8, full ? verifyPublicGame : verifyPublicGameHead);
     console.log(`Verified ${summary.hostedIds.length} R2-hosted game bundles (${full ? 'full SHA-256' : 'HEAD + length'})`);
+  } else if (process.argv[2] === '--stage-optimized') {
+    assert(process.argv[3], 'Pass an output directory to --stage-optimized');
+    const result = await stageOptimizedGameBundles(indexPath, process.argv[3]);
+    console.log(`Staged ${result.updated} smaller bundles, saving ${result.savedBytes} bytes`);
+  } else if (process.argv[2] === '--publish-staged') {
+    assert(process.argv[3], 'Pass a staging directory to --publish-staged');
+    const count = await publishStagedGameBundles(indexPath, process.argv[3]);
+    console.log(`Verified ${count} staged bundles on the CDN. The staged index is ready to adopt.`);
   } else {
-    assert(process.argv[2] === '--publish', 'Pass --publish, --check-index, --verify-index, or --verify-release <manifest>');
+    assert(process.argv[2] === '--publish', 'Pass --publish, --check-index, --verify-index, --verify-release <manifest>, --stage-optimized <directory>, or --publish-staged <directory>');
     const locks = await buildGameTemplateBundles('templates/games', publish, { verifyHosted: verifyPublicGame });
     console.log(`Verified ${Object.keys(locks).length} immutable game bundles`);
   }

@@ -11,6 +11,10 @@ export const gameGenres = ['shooter', 'platformer', 'story', 'casual', 'racing',
 export const gameStyles = ['pixel', 'minimal', 'ascii', 'voxel', 'anime', '3d'] as const;
 export const gameSettings = ['medieval', 'cyberpunk', 'retro', 'modern', 'space', 'fantasy'] as const;
 
+// Keep withdrawn templates out of the catalogue and its direct play routes.
+const withdrawnGameTemplates = new Set(['school-tycoon-3d', 'arrow-pop-clear', 'shaman-block-pop']);
+export const isListedGameTemplate = (id: string): boolean => !withdrawnGameTemplates.has(id);
+
 export type GameGenre = typeof gameGenres[number];
 export type GameStyle = typeof gameStyles[number];
 export type GameSetting = typeof gameSettings[number];

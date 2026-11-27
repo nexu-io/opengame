@@ -24,6 +24,14 @@ describe('trailerProjectHref', () => {
 });
 
 describe('gameCatalog multi-file detection and internal tags', () => {
+  it('omits withdrawn templates from the offline catalogue', () => {
+    const ids = bundledGames.map(game => game.id);
+    expect(ids).toContain('tidebreaker');
+    for (const id of ['school-tycoon-3d', 'arrow-pop-clear', 'shaman-block-pop']) {
+      expect(ids).not.toContain(id);
+    }
+  });
+
   it('keeps isolated game preview links local when copied', () => {
     expect(isLocalOnly('http://opengame-preview-0123456789abcdef01234567.localhost:54123/api/games/tidebreaker/play/index.html')).toBe(true);
   });
