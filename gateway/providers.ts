@@ -13,10 +13,6 @@ export type ProviderContext = { key: string; fetcher: Fetcher; signal: AbortSign
   baseUrl?: string;
   /** Snapshotted input images, in the caller's order. */
   references?: { file: string; mimeType: string; bytes: number }[];
-  /** Hint that uploaded reference adaptation must preserve transparency (e.g. background removal). */
-  preserveAlpha?: boolean;
-  /** Optional known server upload cap in bytes (for future OPEND-5839 schema discovery). */
-  maxInputImageBytes?: number;
   /** Keeps provider result metadata (for example speech timestamps) with the job. */
   result?: (data: Record<string, unknown>, remoteTerminal?: boolean) => Promise<void>;
   progress: (phase: string, remoteId?: string) => Promise<void>; pollMs?: number };

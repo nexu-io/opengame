@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execute } from '../hyperframes.ts';
 import { verificationBinaries } from '../scripts/verify-export.ts';
+import type { GenerationJob } from '../shared/gateway.ts';
 import {
   OPEN_DESIGN_JOB_UPLOAD_BUDGET_BYTES,
   OPEN_DESIGN_LEGACY_UPLOAD_LIMIT_BYTES,
@@ -524,6 +525,30 @@ export async function prepareCloudReference(input: PrepareCloudReferenceInput): 
   } finally {
     await rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
+}
+
+export type OpenDesignUploadConstraints = {
+  preserveAlpha: boolean;
+  maxInputImageBytes?: number;
+};
+
+/** Derive shared OpenDesign upload adaptation constraints for both Cloud API key and signed-in Account routes. */
+export function resolveOpenDesignUploadConstraints(
+  job: Pick<GenerationJob, 'capabilityId' | 'model'>,
+  parameters: Record<string, unknown>,
+): OpenDesignUploadConstraints {
+  const preserveAlpha = Boolean(parameters.background === 'transparent' || job.capabilityId === 'remove-background');
+  const nativeOptions = job.model.nativeOptions && typeof job.model.nativeOptions === 'object' && !Array.isArray(job.model.nativeOptions)
+    ? job.model.nativeOptions as Record<string, unknown>
+    : undefined;
+  const maxInputImageBytes = Number.isInteger(nativeOptions?.max_input_image_bytes)
+    && (nativeOptions!.max_input_image_bytes as number) > 0
+    ? nativeOptions!.max_input_image_bytes as number
+    : undefined;
+  return {
+    preserveAlpha,
+    ...(maxInputImageBytes !== undefined ? { maxInputImageBytes } : {}),
+  };
 }
 
 /**

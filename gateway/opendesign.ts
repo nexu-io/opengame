@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { GenerationJob, Model } from '../shared/gateway.ts';
@@ -10,7 +10,9 @@ import type { ProviderAdapter, ProviderContext } from './providers.ts';
 import {
   computeOpenDesignPerImageBudget,
   normalizeUploadLimitOrigin,
+  resolveOpenDesignUploadConstraints,
   uploadOpenDesignReference,
+  type OpenDesignUploadConstraints,
 } from './reference-upload.ts';
 
 export const productionApi = 'https://amr-api.open-design.ai';
@@ -190,37 +192,39 @@ export async function uploadInputs(
   api: string,
   headers: Record<string, string>,
   jobId: string,
-  ctx: Pick<ProviderContext, 'references' | 'progress' | 'signal' | 'preserveAlpha' | 'maxInputImageBytes'>,
+  ctx: Pick<ProviderContext, 'references' | 'progress' | 'signal'>,
+  constraints: Partial<OpenDesignUploadConstraints> = {},
 ): Promise<string[]> {
   const references = ctx.references ?? [];
   if (!references.length) return [];
   const origin = normalizeUploadLimitOrigin(api);
-  const snapshots: { index: number; bytes: Buffer; filename: string }[] = [];
-  for (const [index, input] of references.entries()) {
-    const bytes = await readFile(input.file);
-    // Always verify snapshot integrity against the queued original before any upload adaptation.
-    if (bytes.length !== input.bytes) throw new Error('Reference image changed after it was queued');
-    snapshots.push({ index, bytes, filename: path.basename(input.file) });
+  // Pre-verify snapshot sizes via stat() before uploading without retaining every Buffer in memory at once.
+  for (const input of references) {
+    const info = await stat(input.file);
+    if (info.size !== input.bytes) throw new Error('Reference image changed after it was queued');
   }
   const budgetBytes = computeOpenDesignPerImageBudget(
-    snapshots.map(item => item.bytes.length),
-    { origin, knownMaxBytes: ctx.maxInputImageBytes },
+    references.map(item => item.bytes),
+    { origin, knownMaxBytes: constraints.maxInputImageBytes },
   );
   const ids: string[] = [];
-  for (const item of snapshots) {
+  for (const [index, input] of references.entries()) {
+    const bytes = await readFile(input.file);
+    // Re-check exact byte length right after reading before any upload adaptation.
+    if (bytes.length !== input.bytes) throw new Error('Reference image changed after it was queued');
     await ctx.progress('uploading');
     const { assetId } = await uploadOpenDesignReference({
       origin,
-      bytes: item.bytes,
-      filename: item.filename,
+      bytes,
+      filename: path.basename(input.file),
       budgetBytes,
-      knownMaxBytes: ctx.maxInputImageBytes,
-      preserveAlpha: ctx.preserveAlpha,
+      knownMaxBytes: constraints.maxInputImageBytes,
+      preserveAlpha: constraints.preserveAlpha,
       transport: {
         uploadAttempt: async (prepared, keySuffix) => {
           const created = await apiJson(fetcher, api + '/uploads', {
             method: 'POST',
-            headers: { ...headers, 'Idempotency-Key': `${jobId}-upload-${item.index}${keySuffix}` },
+            headers: { ...headers, 'Idempotency-Key': `${jobId}-upload-${index}${keySuffix}` },
             body: JSON.stringify({ size_bytes: prepared.bytes.length, mime_type: prepared.mimeType }),
             signal: ctx.signal,
           });
@@ -243,7 +247,7 @@ export async function uploadInputs(
           }
           const committed = await apiJson(fetcher, api + `/uploads/${created.asset_id}/commit`, {
             method: 'POST',
-            headers: { ...headers, 'Idempotency-Key': `${jobId}-commit-${item.index}${keySuffix}` },
+            headers: { ...headers, 'Idempotency-Key': `${jobId}-commit-${index}${keySuffix}` },
             body: '{}',
             signal: ctx.signal,
           });
@@ -274,18 +278,14 @@ export const opendesign: ProviderAdapter = {
       if (soundEffects && job.prompt.trim().length > 450) throw new Error('Sound effects prompt must be at most 450 characters');
       // Validate image parameter geometry before uploading reference bytes.
       if (job.modality === 'image') cloudImageParameters(parameters);
-      const preserveAlpha = Boolean(ctx.preserveAlpha || parameters.background === 'transparent' || job.capabilityId === 'remove-background');
-      const knownMaxBytes = ctx.maxInputImageBytes ?? (
-        Number.isInteger((job.model.nativeOptions as Record<string, unknown> | undefined)?.max_input_image_bytes)
-        && ((job.model.nativeOptions as Record<string, unknown>).max_input_image_bytes as number) > 0
-          ? (job.model.nativeOptions as Record<string, unknown>).max_input_image_bytes as number
-          : undefined
+      const inputs = audio ? [] : await uploadInputs(
+        fetcher,
+        api,
+        headers,
+        job.id,
+        ctx,
+        resolveOpenDesignUploadConstraints(job, parameters),
       );
-      const inputs = audio ? [] : await uploadInputs(fetcher, api, headers, job.id, {
-        ...ctx,
-        preserveAlpha,
-        maxInputImageBytes: knownMaxBytes,
-      });
       await ctx.progress('submitting');
       const { endpoint, payload } = buildOpenDesignMediaRequest(job, parameters, inputs);
       const submitted = await apiJson(fetcher, api + endpoint, { method: 'POST', headers: { ...headers, ...mediaSubmitHeaders(ctx.baseUrl, job.id) }, body: JSON.stringify(payload), signal: ctx.signal });

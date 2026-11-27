@@ -37,6 +37,7 @@ import {
   detectReferenceImageMime,
   OPEN_DESIGN_UPLOAD_LIMIT_REJECTED_MESSAGE,
   ReferencePreparationError,
+  resolveOpenDesignUploadConstraints,
 } from './reference-upload.ts';
 import { resumableDownload, type DownloadProgress } from './resumable-download.ts';
 import { accountDirectory } from './account-directory.ts';
@@ -1115,12 +1116,14 @@ export class OpenDesignAccount {
     if (!references.length) return [];
     const fetcher = this.options.fetcher ?? fetch, api = access.baseUrl + '/api/v1/media';
     const headers = { Authorization: `Bearer ${access.key}`, 'Content-Type': 'application/json' };
-    const preserveAlpha = Boolean(parameters.background === 'transparent' || job.capabilityId === 'remove-background');
-    const nativeOptions = job.model.nativeOptions as Record<string, unknown> | undefined;
-    const maxInputImageBytes = Number.isInteger(nativeOptions?.max_input_image_bytes) && (nativeOptions!.max_input_image_bytes as number) > 0
-      ? nativeOptions!.max_input_image_bytes as number
-      : undefined;
-    return uploadInputs(fetcher, api, headers, job.id, { references, progress, signal, preserveAlpha, maxInputImageBytes }).catch(error => {
+    return uploadInputs(
+      fetcher,
+      api,
+      headers,
+      job.id,
+      { references, progress, signal },
+      resolveOpenDesignUploadConstraints(job, parameters),
+    ).catch(error => {
       if (error instanceof ReferencePreparationError) throw error;
       // Only AMR API rejections (ProviderError) map to account messages; presigned storage PUT failures stay storage errors.
       if (error instanceof ProviderError) {

@@ -20,6 +20,7 @@ import {
   prepareCloudReference,
   probeReferenceEncoders,
   ReferencePreparationError,
+  resolveOpenDesignUploadConstraints,
   setReferenceEncoderCapabilitiesForTests,
   uploadOpenDesignReference,
 } from '../gateway/reference-upload.ts';
@@ -322,7 +323,7 @@ test('uploadInputs handles post-OPEND-5519 raw passthrough, pre-OPEND-5519 /uplo
     assert.equal(getLearnedOpenDesignUploadLimit('https://storage-413.example'), undefined);
   }
 
-  // 5. Snapshot integrity check fires BEFORE compression or network calls.
+  // 5. Snapshot integrity check via stat() fires BEFORE uploading any reference in the batch.
   await assert.rejects(
     uploadInputs(
       (async () => { throw new Error('network must not be called'); }) as Fetcher,
@@ -330,12 +331,38 @@ test('uploadInputs handles post-OPEND-5519 raw passthrough, pre-OPEND-5519 /uplo
       { Authorization: 'Bearer k', 'Content-Type': 'application/json' },
       'job-corrupt',
       {
-        references: [{ file: big.file, mimeType: 'image/png', bytes: big.bytes.length - 10 }],
+        references: [
+          refs[0],
+          { file: big2.file, mimeType: 'image/png', bytes: big2.bytes.length - 10 },
+        ],
         progress,
         signal,
       },
     ),
     /Reference image changed after it was queued/,
+  );
+
+  // 6. Shared upload constraint helper aligns preserveAlpha and max_input_image_bytes across Cloud & Account.
+  assert.deepEqual(
+    resolveOpenDesignUploadConstraints(
+      { capabilityId: 'remove-background', model: { nativeOptions: { max_input_image_bytes: 5_000_000 } } as any },
+      {},
+    ),
+    { preserveAlpha: true, maxInputImageBytes: 5_000_000 },
+  );
+  assert.deepEqual(
+    resolveOpenDesignUploadConstraints(
+      { model: { nativeOptions: {} } as any },
+      { background: 'transparent' },
+    ),
+    { preserveAlpha: true },
+  );
+  assert.deepEqual(
+    resolveOpenDesignUploadConstraints(
+      { model: {} as any },
+      {},
+    ),
+    { preserveAlpha: false },
   );
 }));
 
