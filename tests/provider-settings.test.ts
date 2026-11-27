@@ -602,8 +602,8 @@ test('completed sign-in delivers its source through the shared sender and respec
   const batch = batches[0].batch;
   assert.equal(batch.length, 1); assert.equal(batch[0].event, 'account_sign_in_result');
   const fields = batch[0].properties;
-  assert.equal(fields.outcome, 'success'); assert.equal(fields.product, 'openmotion');
   const product = currentProductId();
+  assert.equal(fields.outcome, 'success'); assert.equal(fields.product, product);
   assert.equal(fields.source_product, product); assert.equal(fields.source_detail, `${product}_editor_login`);
   assert.equal(fields.amr_user_id, 'fixture-user-id');
   assert.equal(fields.installation_id, installationId); assert.equal(fields.distinct_id, installationId); assert.equal(fields.utm_source, 'creator');

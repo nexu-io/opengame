@@ -14,6 +14,7 @@ import {
   syncActiveCodexThreads,
 } from '../shared/codex-session-tracking.ts';
 import { saveTrackingPreference } from '../shared/tracking.ts';
+import { currentProductId } from '../shared/product-identity.ts';
 import { uuid } from '../tracking/core.ts';
 import { WorkspaceStore } from '../workspace.ts';
 
@@ -402,7 +403,7 @@ test('captures only OpenMotion-activated Codex threads, backfills pre-call turns
 
   const [ev0, ev1] = capturedBodies[0]!.batch;
   assert.equal(ev0!.event, '$ai_generation');
-  assert.equal(ev0!.properties.product, 'openmotion');
+  assert.equal(ev0!.properties.product, currentProductId());
   assert.equal(ev0!.properties.host_agent, 'codex');
   assert.equal(ev0!.properties.$process_person_profile, false);
   assert.equal(ev0!.properties.turn_index, 0);

@@ -16,8 +16,10 @@ stable releases, test/prerelease packages and local builds, into the existing
 OpenDesign project (420348). Application version and environment remain event
 properties; they do not disable collection. DEV packages retain their separate
 installation/data directories and template routing.
-OM events carry `product=openmotion`; OM reports must filter by that property,
-and shared-project reports must distinguish OM from other products. The project's
+OpenMotion and OpenGame events stamp `product` from `currentProductId()` (`openmotion`
+or `opengame`); single-product reports filter by `properties.product = 'openmotion'`
+or `'opengame'`, and combined reports filter `properties.product IN ('openmotion', 'opengame')`.
+Shared-project reports must distinguish OpenMotion/OpenGame from other products. The project's
 public, write-only token and ingestion host are distributed in
 `shared/tracking-config.json`; it contains no read/admin credentials and is never
 included in the browser bundle. Users do not need to supply a key or opt-in flag.
@@ -41,7 +43,7 @@ For another collector, supply both `OPENMOTION_POSTHOG_HOST` and
 collectors default to zero-IP mode; `OPENMOTION_GEOIP=1` requires that collector to
 discard IP after enrichment. Never supply a personal `phx_` API key.
 
-Keep the OM-only receiver transformation active while geo-enabled clients report
+Keep the OpenMotion/OpenGame receiver transformation active while geo-enabled clients report
 to this shared project. Before removing it, stop OM collection or switch those
 clients to zero-IP mode. Do not revoke the shared OpenDesign token as an OM rollback.
 
@@ -204,7 +206,7 @@ device-level analyses; those need explicit aggregation by `device_id`. For examp
 SELECT uniqExact(properties.device_id) AS active_devices
 FROM events
 WHERE timestamp >= now() - INTERVAL 2 DAY
-  AND properties.product = 'openmotion'
+  AND properties.product IN ('openmotion', 'opengame')
   AND properties.device_id_source = 'platform'
 ```
 
@@ -447,7 +449,7 @@ backend/data directory. Deterministic coverage lives in
   game's lifecycle, so it never turns the tool call into `outcome=failure`. Titles, briefs, files and URLs stay out.
   Both stdio asset names still use `tool_name=motion_assets`; WebMCP uses the
   original public name. Older events may omit these dimensions.
-  To measure `read`, filter `product=openmotion`, exclude `env=test`, select the
+  To measure `read`, filter `properties.product IN ('openmotion', 'opengame')` (or a single product), exclude `env=test`, select the
   appropriate `*_tool_finished` event and `action=read`: count distinct `call_id`
   for observed calls, divide successful calls (`outcome=success`) by all observed
   calls for success rate, and aggregate `duration_ms` (e.g. median/p95) for latency.
@@ -784,7 +786,7 @@ and manual fallback is not success. No event claims that an external Agent recei
 the copied instruction, created a film, or exported it. Exact copy-to-Agent-to-work
 provenance is not added by this change; do not infer adoption or output rates from
 copying. No titles, material names, instructions, color values, URLs or raw errors
-are admitted. Existing consent, browser admission and product=openmotion filtering
+are admitted. Existing consent, browser admission and `product` (`openmotion` / `opengame`) filtering
 remain in force. UI tests use fake senders; live readback requires env=test and an
 isolated test-run UUID.
 

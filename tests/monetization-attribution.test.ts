@@ -169,24 +169,38 @@ test('directAttributedBillingUrl formats direct billing destinations with full o
   assert.throws(() => directAttributedBillingUrl({ target: 'd', entryId: 'not-a-uuid' }));
 });
 
-test('posthogCommonProperties keeps product=openmotion, adds resolved source_product, and preserves event channel', async () => {
+test('posthogCommonProperties stamps resolved product and source_product, and preserves event channel', async () => {
   const installationId = randomUUID();
-  const common = posthogCommonProperties({
-    endpoint: { env: 'test' },
+  const baseInput = {
+    endpoint: { env: 'test' as const },
     identity: { installation_id: installationId, created_at: new Date().toISOString() },
     device: deviceContext(),
     appVersion: '1.0.0',
     source: 'direct',
     eventId: randomUUID(),
     occurredAt: new Date().toISOString(),
-    entrypoint: 'mcp',
+    entrypoint: 'mcp' as const,
     deviceTimezone: 'UTC',
     utcOffsetMinutes: 0,
-  });
-  assert.equal(common.product, 'openmotion');
+  };
+  const common = posthogCommonProperties(baseInput);
+  assert.equal(common.product, PRODUCT_ID);
   assert.equal(common.source_product, PRODUCT_ID);
-  assert.ok(common.source_product === 'openmotion' || common.source_product === 'opengame');
+  assert.ok(common.product === 'openmotion' || common.product === 'opengame');
   assert.equal(common.channel, 'standalone');
+
+  const priorProductEnv = process.env.OPENMOTION_PRODUCT;
+  try {
+    for (const override of ['openmotion', 'opengame'] as const) {
+      process.env.OPENMOTION_PRODUCT = override;
+      const overridden = posthogCommonProperties(baseInput);
+      assert.equal(overridden.product, override);
+      assert.equal(overridden.source_product, override);
+    }
+  } finally {
+    if (priorProductEnv === undefined) delete process.env.OPENMOTION_PRODUCT;
+    else process.env.OPENMOTION_PRODUCT = priorProductEnv;
+  }
 
   const batches: any[] = [];
   const tracking = createTracker({
@@ -225,14 +239,14 @@ test('posthogCommonProperties keeps product=openmotion, adds resolved source_pro
     assert.equal(batches.length, 1);
     const [upgradeEvent, setupEvent] = batches[0].batch;
     assert.equal(upgradeEvent.event, 'upgrade_link_result');
-    assert.equal(upgradeEvent.properties.product, 'openmotion');
+    assert.equal(upgradeEvent.properties.product, PRODUCT_ID);
     assert.equal(upgradeEvent.properties.source_product, PRODUCT_ID);
     assert.equal(upgradeEvent.properties.channel, 'mcp_http');
     assert.equal(upgradeEvent.properties.studio_id, 'motion');
     assert.equal(upgradeEvent.properties.modality, 'video');
 
     assert.equal(setupEvent.event, 'provider_setup_opened');
-    assert.equal(setupEvent.properties.product, 'openmotion');
+    assert.equal(setupEvent.properties.product, PRODUCT_ID);
     assert.equal(setupEvent.properties.source_product, PRODUCT_ID);
     assert.equal(setupEvent.properties.channel, 'standalone');
     assert.equal(setupEvent.properties.studio_id, 'game');
