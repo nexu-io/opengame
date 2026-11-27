@@ -48,6 +48,9 @@ export function cleanGamePath(value: unknown): string {
   if (typeof value !== 'string' || value.length > 240 || /[\\\x00-\x1f]/.test(value) || value.split('/').some(p => !p || p.startsWith('.') || p.includes(':'))) throw new GameError('Unsafe game file path');
   return value;
 }
+function gameUrlFilePath(pathname: string): string {
+  return pathname.split('/').filter(Boolean).map(decodeURIComponent).join('/');
+}
 async function jsonFile<T>(file: string, fallback?: T): Promise<T> {
   try { return JSON.parse(await readFile(file, 'utf8')); }
   catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT' && fallback !== undefined) return fallback; throw e; }
@@ -81,9 +84,10 @@ async function gameEntryDependencies(html: string, dir: string, game: GameCard, 
   const playPath = `/games/${game.id}/play/`;
   const entry = new URL(`http://game.local/api${playPath}index.html`);
   const authoredBase = document.querySelector('base[href]')?.getAttribute('href');
-  const base = (authoredBase && URL.parse(authoredBase, entry)) || entry;
+  const candidateBase = authoredBase && URL.parse(authoredBase, entry);
+  const base = candidateBase && !['data:', 'javascript:'].includes(candidateBase.protocol) ? candidateBase : entry;
   const errors = new Set<string>();
-  const entryScripts: string[] = [];
+  const entryScripts: string[] = []; // Encoded URL pathnames, not filesystem paths.
   const inlineScripts: string[] = [];
 
   for (const element of document.querySelectorAll('script:not([src])')) {
@@ -118,21 +122,21 @@ async function gameEntryDependencies(html: string, dir: string, game: GameCard, 
       continue;
     }
     try {
-      const relative = url.pathname.slice(prefix.length).split('/').map(decodeURIComponent).join('/');
+      const relative = gameUrlFilePath(url.pathname.slice(prefix.length));
       const file = await safeFile(dir, relative);
       if (!(await lstat(file)).isFile()) {
         errors.add(`Referenced ${kind} is not a file: ${reference}`);
       } else if (!mime[path.extname(file).toLowerCase()]?.startsWith(script ? 'text/javascript' : 'text/css')) {
         errors.add(`Referenced ${kind} has an unsupported file type: ${reference}`);
       } else if (script) {
-        entryScripts.push(relative);
+        entryScripts.push(url.pathname);
       }
     } catch (error) {
       const reason = (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'not found' : 'not readable as a game file';
       errors.add(`Referenced ${kind} ${reason}: ${reference}`);
     }
   }
-  return { errors: [...errors], entryScripts, inlineScripts };
+  return { errors: [...errors], entryScripts, inlineScripts, inlineBaseUrl: base.href };
 }
 
 function extractStaticModuleSpecifiers(source: string): { specifiers: string[]; syntaxError?: string } {
@@ -182,6 +186,8 @@ async function inspectLocalModuleGraph(
   entryScripts: string[],
   inlineScripts: string[],
   allowedHosts: string[],
+  gameId: string,
+  inlineBaseUrl?: string,
 ): Promise<{ diagnostics: { path: string; message: string }[]; importsLogic: boolean; visitedModules: string[]; moduleSources: Map<string, string>; importsThree: boolean }> {
   const diagnostics: { path: string; message: string }[] = [];
   const visited = new Set<string>();
@@ -189,33 +195,42 @@ async function inspectLocalModuleGraph(
   const queue: string[] = [];
   let importsLogic = false;
   let importsThree = false;
+  const playRoots = ['/api/games/', '/motion-api/games/'].map(prefix => `${prefix}${encodeURIComponent(gameId)}/play/`);
+  const moduleFilePath = (urlPath: string) => {
+    const root = playRoots.find(prefix => urlPath.startsWith(prefix));
+    if (!root) throw new GameError('Module URL leaves this game');
+    return gameUrlFilePath(urlPath.slice(root.length));
+  };
 
-  const enqueueSpecifier = async (fromPath: string, specifier: string) => {
+  const enqueueSpecifier = async (fromUrl: string, specifier: string, fromPath = moduleFilePath(fromUrl)) => {
     const clean = specifier.replace(/[?#].*$/, '');
-    if (/^(?:https?:)?\/\//i.test(clean)) {
-      try {
-        const host = new URL(clean.startsWith('//') ? 'https:' + clean : clean).hostname;
-        if (!allowedHosts.includes(host)) diagnostics.push({ path: fromPath, message: `External network host is not allowed: ${host}` });
-      } catch {
-        diagnostics.push({ path: fromPath, message: `Invalid external module URL: ${specifier}` });
-      }
-      return;
-    }
-    if (!clean.startsWith('./') && !clean.startsWith('../')) return;
-    const baseDir = fromPath === 'index.html' ? '' : path.posix.dirname(fromPath);
-    const resolved = path.posix.normalize(baseDir && baseDir !== '.' ? `${baseDir}/${clean}` : clean);
-    if (resolved === 'logic.js') importsLogic = true;
-    if (/^vendor\/(?:three\.module(?:\.min)?|GLTFLoader|SkeletonUtils|HumanoidRigController)\.js$/i.test(resolved)) importsThree = true;
+    const external = /^(?:https?:)?\/\//i.test(clean);
+    if (!external && !clean.startsWith('/') && !clean.startsWith('./') && !clean.startsWith('../')) return;
+    let resolved: string | undefined;
     try {
+      // Encoded separators and empty URL segments affect relative import bases.
+      // Keep the URL identity through traversal; decode only for file access.
+      const url = new URL(specifier, new URL(fromUrl, 'http://game.local'));
+      if (external || url.origin !== 'http://game.local') {
+        if (!allowedHosts.includes(url.hostname)) diagnostics.push({ path: fromPath, message: `External network host is not allowed: ${url.hostname}` });
+        return;
+      }
+      resolved = moduleFilePath(url.pathname);
+      if (resolved === 'logic.js') importsLogic = true;
+      if (/^vendor\/(?:three\.module(?:\.min)?|GLTFLoader|SkeletonUtils|HumanoidRigController)\.js$/i.test(resolved)) importsThree = true;
       const target = await safeFile(dir, resolved);
       if (!(await lstat(target)).isFile()) {
         diagnostics.push({ path: fromPath, message: `Imported module is not a file: ${specifier}` });
         return;
       }
-      if (/\.(?:m?js|cjs)$/i.test(resolved) && !resolved.startsWith('vendor/') && !visited.has(resolved)) {
-        queue.push(resolved);
+      if (/\.(?:m?js|cjs)$/i.test(resolved) && !resolved.startsWith('vendor/') && !visited.has(url.pathname)) {
+        queue.push(url.pathname);
       }
     } catch (error) {
+      if (external) {
+        diagnostics.push({ path: fromPath, message: `Invalid external module URL: ${specifier}` });
+        return;
+      }
       if (resolved === 'logic.js') return; // logic.js missing is reported under path 'logic.js' below.
       const reason = (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'not found' : 'not readable';
       diagnostics.push({ path: fromPath, message: `Imported module ${reason}: ${specifier}` });
@@ -224,17 +239,19 @@ async function inspectLocalModuleGraph(
 
   for (const script of inlineScripts) {
     const { specifiers } = extractStaticModuleSpecifiers(script);
-    for (const specifier of specifiers) await enqueueSpecifier('index.html', specifier);
+    for (const specifier of specifiers) await enqueueSpecifier(inlineBaseUrl ?? playRoots[0] + 'index.html', specifier, 'index.html');
   }
   for (const entry of entryScripts) {
-    if (entry === 'logic.js') importsLogic = true;
-    if (!entry.startsWith('vendor/') && !visited.has(entry)) queue.push(entry);
+    const relative = moduleFilePath(entry);
+    if (relative === 'logic.js') importsLogic = true;
+    if (!relative.startsWith('vendor/') && !visited.has(entry)) queue.push(entry);
   }
 
   while (queue.length > 0 && visited.size < 200) {
-    const relative = queue.shift()!;
-    if (visited.has(relative)) continue;
-    visited.add(relative);
+    const urlPath = queue.shift()!;
+    if (visited.has(urlPath)) continue;
+    visited.add(urlPath);
+    const relative = moduleFilePath(urlPath);
     let source: string;
     try {
       source = await readFile(await safeFile(dir, relative), 'utf8');
@@ -250,9 +267,9 @@ async function inspectLocalModuleGraph(
       diagnostics.push({ path: relative, message: `JavaScript syntax error: ${syntaxError}` });
       continue;
     }
-    for (const specifier of specifiers) await enqueueSpecifier(relative, specifier);
+    for (const specifier of specifiers) await enqueueSpecifier(urlPath, specifier);
   }
-  return { diagnostics, importsLogic, visitedModules: [...visited], moduleSources, importsThree };
+  return { diagnostics, importsLogic, visitedModules: [...visited].map(moduleFilePath), moduleSources, importsThree };
 }
 
 function stripJsComments(source: string): string {
@@ -1296,12 +1313,14 @@ server.listen(port, '127.0.0.1', () => {
     if(!game.cover) warnings.push('No cover image is set; use openmotion_game_capture_cover.');
     let entryScripts: string[] = [];
     let inlineScripts: string[] = [];
+    let inlineBaseUrl: string | undefined;
     for (const relative of ['index.html','client.js']) try {
       const source = (await this.read(id, relative)).content;
       if (relative === 'index.html') {
         const deps = await gameEntryDependencies(source, dir, game, this.runtimeRoot);
         entryScripts = deps.entryScripts;
         inlineScripts = deps.inlineScripts;
+        inlineBaseUrl = deps.inlineBaseUrl;
         for (const message of deps.errors) {
           diagnostics.push({ path: relative, message });
         }
@@ -1311,7 +1330,7 @@ server.listen(port, '127.0.0.1', () => {
     } catch (e) {
       if (relative !== 'client.js' || (e as NodeJS.ErrnoException).code !== 'ENOENT') diagnostics.push({ path: relative, message: (e as Error).message });
     }
-    const moduleGraph = await inspectLocalModuleGraph(dir, entryScripts, inlineScripts, allowedHosts);
+    const moduleGraph = await inspectLocalModuleGraph(dir, entryScripts, inlineScripts, allowedHosts, id, inlineBaseUrl);
     diagnostics.push(...moduleGraph.diagnostics);
     if(game.multiplayer){
       let client='';try{client=(await this.read(id,'client.js')).content;}catch{}

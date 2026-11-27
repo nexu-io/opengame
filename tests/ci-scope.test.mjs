@@ -204,7 +204,7 @@ const unscheduledSuites = [
   'asset-routing.test.ts', 'assets-use.test.ts', 'brand-story-tracking.test.ts', 'bundled-npm-runtime.test.ts',
   'codex-host-handoff.test.ts', 'cold-start.test.ts', 'dsh-distribution.test.ts', 'dsh-integration.test.ts',
   'dsh-release.test.ts', 'dsh-template-cards.test.ts', 'final-video-delivery.test.ts', 'final-video-ui.test.ts',
-  'game-harness-generalization.test.ts', 'game-projects.test.ts', 'hosted-game-templates.test.ts',
+  'game-projects.test.ts', 'hosted-game-templates.test.ts',
   'inline-video-preview.test.ts', 'inline-video-result.test.ts', 'install-guide.test.ts', 'install-public-skill.test.ts', 'integration.test.ts',
   'legacy.test.ts', 'library-skill-catalog.test.ts', 'lint.test.ts', 'mcp-client.test.ts', 'mcp-config.test.ts', 'mcp.test.ts', 'media-save.test.ts',
   'npm-distribution-selection.test.ts', 'npm-installer.test.ts', 'npm-package.test.ts', 'onboarding-recovery.test.ts',

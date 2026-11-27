@@ -820,3 +820,49 @@ export function mountActor(gltf) { const rig = createHumanoidRig(gltf, { height:
     assert.equal(assertionsWithKinematics.find(a => a.name === 'kinematics:hero:noWalkFlicker')?.passed, false);
     assert.equal(assertionsWithKinematics.find(a => a.name === 'kinematics:hero:smoothBoneMotion')?.passed, true);
   }));
+
+test('H1: encoded module entry URLs and repeated files preserve distinct import bases', () =>
+  withWorkspace(async (_workspace, service) => {
+    const { game } = await service.create({ prompt: 'Encoded module graph', multiplayer: false });
+    await service.write(game.id, [
+      { path: 'src/nested/module.js', content: 'import "./c.js";' },
+      { path: 'src/c.js', content: 'export const value = 1;' },
+    ]);
+    for (const source of ['./src/nested%2Fmodule.js', `/motion-api/games/${game.id}/play/src/nested%2Fmodule.js`]) {
+      await service.write(game.id, [{ path: 'index.html', content: `<canvas></canvas><script type="module" src="${source}"></script>` }]);
+      assert.deepEqual((await service.validate(game.id)).diagnostics, []);
+      assert.equal((await service.publish(game.id)).game.status, 'published');
+    }
+
+    await service.write(game.id, [
+      { path: 'index.html', content: '<canvas></canvas><script type="module" src="./src/main.js"></script>' },
+      { path: 'src/main.js', content: 'import "./nested/module.js"; import "./nested%2Fmodule.js";' },
+      { path: 'src/nested/c.js', content: 'export const value = 1;' },
+      { path: 'src/c.js', content: 'export const = ;' },
+    ]);
+    const invalid = await service.validate(game.id);
+    assert.equal(invalid.passed, false);
+    assert.ok(invalid.diagnostics.some(row => row.path === 'src/c.js' && /JavaScript syntax error/.test(row.message)));
+    await assert.rejects(service.publish(game.id), /Game validation failed/);
+  }));
+
+test('H1: inline module imports use the document base URL', () =>
+  withWorkspace(async (_workspace, service) => {
+    const { game } = await service.create({ prompt: 'Inline base graph', multiplayer: false });
+    await service.write(game.id, [
+      { path: 'main.js', content: 'export const decoy = 1;' },
+      { path: 'src/main.js', content: 'import "./nested%2Fmodule.js";' },
+      { path: 'src/nested/module.js', content: 'import "./c.js";' },
+      { path: 'src/c.js', content: 'export const value = 1;' },
+    ]);
+    for (const baseHref of ['./src/', './src/unused.html?version=1', `/motion-api/games/${game.id}/play/src/`]) {
+      await service.write(game.id, [{ path: 'index.html', content: `<base href="${baseHref}"><canvas></canvas><script type="module">import "./main.js";</script>` }]);
+      assert.deepEqual((await service.validate(game.id)).diagnostics, []);
+      assert.equal((await service.publish(game.id)).game.status, 'published');
+    }
+    await service.write(game.id, [{ path: 'src/c.js', content: 'export const = ;' }]);
+    const invalid = await service.validate(game.id);
+    assert.equal(invalid.passed, false);
+    assert.ok(invalid.diagnostics.some(row => row.path === 'src/c.js' && /JavaScript syntax error/.test(row.message)));
+    await assert.rejects(service.publish(game.id), /Game validation failed/);
+  }));
