@@ -1,12 +1,6 @@
+import { crc32 } from 'node:zlib';
+
 // ZIP "store" format, so packaging has no runtime dependencies.
-function crc32(data) {
-  let crc = 0xffffffff;
-  for (const byte of data) {
-    crc ^= byte;
-    for (let n = 0; n < 8; n++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
 export function zip(entries) {
   const local = [], central = []; let offset = 0, directorySize = 0;
   for (const entry of entries) {
