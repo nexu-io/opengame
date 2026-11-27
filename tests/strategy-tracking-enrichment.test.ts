@@ -2156,12 +2156,16 @@ test('Multimodal failure attribution blind spots: AMR upstream codes, CONTENT_BL
     assert.equal(mediaGenerationError(err, 'submitting'), 'RATE_LIMITED');
     assert.equal(mediaGenerationErrorCategory('RATE_LIMITED', 'submitting', 'amr_account'), 'rate_limit');
   }
-  assert.equal(extractUpstreamErrorCode(new ProviderError('Connection refused', 503, 'audio_upstream_unavailable')), 'audio_upstream_unavailable');
-  assert.equal(mediaGenerationError(new ProviderError('Connection refused', 503, 'audio_upstream_unavailable'), 'submitting'), 'PROVIDER_UNAVAILABLE');
-  for (const retainedCode of ['execution_interrupted', 'media_persistence_failed', 'image_task_expired', 'video_content_expired', 'video_task_not_found', 'expired', 'upstream_error'] as const) {
+  for (const unavailableCode of ['audio_upstream_unavailable', 'audio_metering_unavailable'] as const) {
+    assert.equal(extractUpstreamErrorCode(new ProviderError('Service unavailable', 503, unavailableCode)), unavailableCode);
+    assert.equal(mediaGenerationError(new ProviderError('Service unavailable', 503, unavailableCode), 'submitting'), 'PROVIDER_UNAVAILABLE');
+  }
+  for (const retainedCode of ['execution_interrupted', 'media_persistence_failed', 'image_task_expired', 'video_content_expired', 'video_task_not_found', 'content_expired', 'expired', 'upstream_error'] as const) {
     assert.equal(extractUpstreamErrorCode(new ProviderError('failed', 502, retainedCode)), retainedCode);
   }
-  assert.equal(mediaGenerationError(new ProviderError('expired', undefined, 'expired'), 'remote_task'), 'TIMEOUT');
+  for (const expiredCode of ['expired', 'image_task_expired', 'video_content_expired', 'video_task_not_found', 'content_expired'] as const) {
+    assert.equal(mediaGenerationError(new ProviderError('expired', undefined, expiredCode), 'remote_task'), 'TIMEOUT');
+  }
   assert.equal(resolveRemoteTaskUpstreamCode('failed', { code: 'provider_error', message: 'Prompt rejected by safety policy' }), 'content_policy_violation');
   assert.equal(resolveRemoteTaskUpstreamCode('expired', undefined, 'expired'), 'expired');
   assert.equal(resolveRemoteTaskUpstreamCode('expired', undefined, 'video_content_expired'), 'video_content_expired');
@@ -2265,7 +2269,8 @@ test('Multimodal failure attribution blind spots: AMR upstream codes, CONTENT_BL
   assert.equal(content410Res?.properties.failure_phase, 'remote_task');
   assert.equal(content410Res?.properties.remote_task_id, 'vid-410');
   assert.equal(content410Res?.properties.upstream_error_code, 'video_content_expired');
-  assert.notEqual(content410Res?.properties.error_code, 'DOWNLOAD_FAILED');
+  assert.equal(content410Res?.properties.error_code, 'TIMEOUT');
+  assert.equal(content410Res?.properties.error_category, 'timeout');
 
   const content404StructRes = events.find(e => e.event === 'media_generation_result' && e.properties.job_id === content404StructVidJob.id);
   assert.equal(content404StructRes?.properties.remote_terminal, true);
@@ -2273,7 +2278,8 @@ test('Multimodal failure attribution blind spots: AMR upstream codes, CONTENT_BL
   assert.equal(content404StructRes?.properties.failure_phase, 'remote_task');
   assert.equal(content404StructRes?.properties.remote_task_id, 'vid-404-struct');
   assert.equal(content404StructRes?.properties.upstream_error_code, 'video_task_not_found');
-  assert.notEqual(content404StructRes?.properties.error_code, 'DOWNLOAD_FAILED');
+  assert.equal(content404StructRes?.properties.error_code, 'TIMEOUT');
+  assert.equal(content404StructRes?.properties.error_category, 'timeout');
 
   const legacyPolicyRes = events.find(e => e.event === 'media_generation_result' && e.properties.job_id === legacyPolicyImgJob.id);
   assert.equal(legacyPolicyRes?.properties.failure_phase, 'remote_task');

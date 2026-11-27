@@ -791,10 +791,10 @@ export function recordMediaGenerationResult(
   const total_output_bytes = input.totalOutputBytes !== undefined && input.jobState === 'completed'
     ? Math.min(MAX_OUTPUT_BYTES_FIELD, Math.max(0, Math.round(input.totalOutputBytes)))
     : undefined;
-  const OFFICIAL_AMR_ORIGIN = 'https://amr-api.open-design.ai';
+  const officialAmrOrigin = productionApi.replace(/\/+$/, '');
   const normalizedOrigin = typeof input.providerOrigin === 'string' ? input.providerOrigin.trim().replace(/\/+$/, '') : '';
   const isOfficialAmr = (input.routeChannel === 'amr_account' || input.routeChannel === 'amr_opendesign')
-    && normalizedOrigin === OFFICIAL_AMR_ORIGIN;
+    && normalizedOrigin === officialAmrOrigin;
   const rawRemoteTaskId = isOfficialAmr && typeof input.remoteTaskId === 'string' ? input.remoteTaskId : '';
   const remote_task_id = /^[A-Za-z0-9_.-]{1,128}$/.test(rawRemoteTaskId) ? rawRemoteTaskId : undefined;
   tracking?.track('media_generation_result', {

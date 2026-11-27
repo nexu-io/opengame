@@ -423,6 +423,10 @@ export function mediaGenerationError(error: unknown, phase?: string): MediaGener
   if (
     upstreamCode === 'timeout'
     || upstreamCode === 'expired'
+    || upstreamCode === 'image_task_expired'
+    || upstreamCode === 'video_content_expired'
+    || upstreamCode === 'video_task_not_found'
+    || upstreamCode === 'content_expired'
     || upstreamCode === 'provider_deadline_exceeded'
     || upstreamCode === 'media_link_timeout'
     || upstreamCode === 'media_operation_timeout'
@@ -459,7 +463,11 @@ export function mediaGenerationError(error: unknown, phase?: string): MediaGener
     || upstreamCode === 'server_busy'
     || status === 429
   ) return 'RATE_LIMITED';
-  if (upstreamCode === 'upstream_provider_forbidden' || upstreamCode === 'audio_upstream_unavailable') return 'PROVIDER_UNAVAILABLE';
+  if (
+    upstreamCode === 'upstream_provider_forbidden'
+    || upstreamCode === 'audio_upstream_unavailable'
+    || upstreamCode === 'audio_metering_unavailable'
+  ) return 'PROVIDER_UNAVAILABLE';
   if (upstreamCode === 'unauthorized' || status === 401) return 'AUTH_REJECTED';
   if (upstreamCode === 'invalid_request' || upstreamCode === 'asset_too_large' || upstreamCode === 'unsupported_media_type') return 'INVALID_REQUEST';
   const explicitSafetyRejection = isExplicitSafetyRejectionText(text);
