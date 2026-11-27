@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { agentInvocation } from './agent-discovery.ts';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -139,8 +140,9 @@ const bridgeClaudeRunner: ClaudeTurnRunner = async ({
     ...(model ? ['--model', model] : []),
     ...(threadId ? ['--resume', threadId] : []),
   ];
+  const command = await agentInvocation(bin, args);
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(bin, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    const child = spawn(command.bin, command.args, { cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     let buffer = '';
     let stderr = '';
     let settled = false;
