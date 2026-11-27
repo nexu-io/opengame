@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   refresh:
-    if: github.repository == 'nexu-io/openmotion' && github.ref == 'refs/heads/main'
+    if: (github.repository == 'nexu-io/openmotion' || github.repository == 'nexu-io/opengame') && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -43,5 +43,5 @@ jobs:
           if git diff --cached --quiet; then exit 0; fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'docs: refresh OpenMotion star history'
+          git commit -m 'docs: refresh README star history'
           git push origin HEAD:refs/heads/readme-charts
