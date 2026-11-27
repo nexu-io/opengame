@@ -1816,53 +1816,68 @@ export class GameRuntime {
     };
     inspect(ast);
     const replacements: { start: number; end: number; text: string }[] = [];
-    const exports: string[] = [];
+    const exports = new Map<string, string>();
+    const declaredNames = (pattern: any): string[] => {
+      if (!pattern) return [];
+      if (pattern.type === 'Identifier') return [pattern.name];
+      if (pattern.type === 'ObjectPattern') return pattern.properties.flatMap((property: any) => declaredNames(property.type === 'RestElement' ? property.argument : property.value));
+      if (pattern.type === 'ArrayPattern') return pattern.elements.flatMap(declaredNames);
+      if (pattern.type === 'AssignmentPattern') return declaredNames(pattern.left);
+      if (pattern.type === 'RestElement') return declaredNames(pattern.argument);
+      return [];
+    };
     for (const node of ast.body as any[]) {
       if (node.type === 'ExportNamedDeclaration') {
         if (node.source) throw new GameError('Re-exports are unavailable');
         if (node.declaration) {
           const decl = node.declaration;
-          exports.push(...(decl.id ? [decl.id.name] : decl.declarations.map((d: any) => d.id.name)));
+          for (const name of decl.id ? [decl.id.name] : decl.declarations.flatMap((d: any) => declaredNames(d.id))) exports.set(name, name);
           replacements.push({ start: node.start, end: decl.start, text: '' });
-        } else { exports.push(...node.specifiers.map((s: any) => s.exported.name)); replacements.push({ start: node.start, end: node.end, text: node.specifiers.map((s: any) => `const ${s.exported.name} = ${s.local.name};`).filter((_: string, i: number) => node.specifiers[i].exported.name !== node.specifiers[i].local.name).join('\n') }); }
+        } else {
+          for (const specifier of node.specifiers) exports.set(specifier.exported.name ?? specifier.exported.value, specifier.local.name);
+          // A removed export still separates surrounding statements in semicolon-free modules.
+          replacements.push({ start: node.start, end: node.end, text: ';' });
+        }
       } else if (node.type === 'ExportDefaultDeclaration' || node.type === 'ImportDeclaration') throw new GameError('Use the six named logic exports');
     }
-    this.optionalExports = new Set(exports);
-    for (const name of ['meta','setup','validateAction','applyAction','isGameOver','viewFor']) if (!exports.includes(name)) throw new GameError(`Missing logic export: ${name}`);
+    this.optionalExports = new Set(exports.keys());
+    for (const name of ['meta','setup','validateAction','applyAction','isGameOver','viewFor']) if (!exports.has(name)) throw new GameError(`Missing logic export: ${name}`);
     for (const replacement of replacements.sort((a,b) => b.start-a.start)) source = source.slice(0,replacement.start) + replacement.text + source.slice(replacement.end);
     this.context = vm.createContext(Object.create(null), { codeGeneration: { strings: false, wasm: false }, microtaskMode: 'afterEvaluate' });
     const hash = createHash('sha256').update(seed).digest().readUInt32LE();
-    this.run(`"use strict"; Math.random=undefined; globalThis.Date=undefined; let seed=${hash}; const ctx={tick:0,now:0,random(){seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;}}; let state; ${source}\nif([setup,validateAction,applyAction,isGameOver,viewFor].some(f=>typeof f!=='function'))throw Error('Invalid logic functions');`);
-    this.meta = JSON.parse(this.run('JSON.stringify(meta)'));
+    const namespace = [...exports].map(([name, local]) => `get [${JSON.stringify(name)}]() { return ${local}; }`).join(',');
+    // Keep module declarations out of the runtime's scope and preserve live export aliases.
+    this.run(`"use strict"; Math.random=undefined; globalThis.Date=undefined; let seed=${hash}; const ctx={tick:0,now:0,random(){seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;}}; let state; const gameModule=Object.freeze((function(){${source}\nreturn {${namespace}};})());\nif(['setup','validateAction','applyAction','isGameOver','viewFor'].some(name=>typeof gameModule[name]!=='function'))throw Error('Invalid logic functions');`);
+    this.meta = JSON.parse(this.run('JSON.stringify(gameModule.meta)'));
     if (!Number.isInteger(this.meta.minPlayers) || !Number.isInteger(this.meta.maxPlayers) || this.meta.minPlayers < 1 || this.meta.maxPlayers < this.meta.minPlayers || this.meta.maxPlayers > 32) throw new GameError('Invalid player limits');
     this.meta.tickRate ??= 20;
     if (!Number.isFinite(this.meta.tickRate) || this.meta.tickRate < 1 || this.meta.tickRate > 60) throw new GameError('tickRate must be 1–60 Hz');
   }
   private run(code: string): any { return vm.runInContext(code, this.context, { timeout: 50 }); }
-  setup(players: string[]) { this.run(`state=setup(ctx,${JSON.stringify(players)}); if(state===undefined || state?.then)throw Error('setup must return synchronous state'); JSON.stringify(state);`); }
-  tick(tick: number) { this.run(`ctx.tick=${tick};ctx.now=${tick * 1000 / this.meta.tickRate}; if(meta.serverTick === true) state=applyAction(state,null,{type:'tick'},ctx);`); }
-  membership(player: string, connected: boolean, expired = false) { this.run(`if(meta.serverTick === true) state=applyAction(state,null,${JSON.stringify({type:'membership',player,connected,expired})},ctx);`); }
+  setup(players: string[]) { this.run(`state=(0,gameModule.setup)(ctx,${JSON.stringify(players)}); if(state===undefined || state?.then)throw Error('setup must return synchronous state'); JSON.stringify(state);`); }
+  tick(tick: number) { this.run(`ctx.tick=${tick};ctx.now=${tick * 1000 / this.meta.tickRate}; if(gameModule.meta.serverTick === true) state=(0,gameModule.applyAction)(state,null,{type:'tick'},ctx);`); }
+  membership(player: string, connected: boolean, expired = false) { this.run(`if(gameModule.meta.serverTick === true) state=(0,gameModule.applyAction)(state,null,${JSON.stringify({type:'membership',player,connected,expired})},ctx);`); }
   apply(player: string, action: unknown, dryRun = false) {
-    this.run(`{const action=JSON.parse(${JSON.stringify(JSON.stringify(action))}); const valid=validateAction(state,${JSON.stringify(player)},action,ctx); if(typeof valid!=='boolean')throw Error('validateAction must return boolean'); if(valid||${dryRun}) {state=applyAction(state,${JSON.stringify(player)},action,ctx); if(state===undefined || state?.then)throw Error('applyAction must return synchronous state'); JSON.stringify(state);}}`);
+    this.run(`{const action=JSON.parse(${JSON.stringify(JSON.stringify(action))}); const valid=(0,gameModule.validateAction)(state,${JSON.stringify(player)},action,ctx); if(typeof valid!=='boolean')throw Error('validateAction must return boolean'); if(valid||${dryRun}) {state=(0,gameModule.applyAction)(state,${JSON.stringify(player)},action,ctx); if(state===undefined || state?.then)throw Error('applyAction must return synchronous state'); JSON.stringify(state);}}`);
   }
   view(player: string) {
-    const result = this.run(`(() => { const view=viewFor(state,${JSON.stringify(player)},ctx); if(view?.then)throw Error('viewFor must return synchronous JSON'); return JSON.stringify(view); })()`);
+    const result = this.run(`(() => { const view=(0,gameModule.viewFor)(state,${JSON.stringify(player)},ctx); if(view?.then)throw Error('viewFor must return synchronous JSON'); return JSON.stringify(view); })()`);
     if (typeof result !== 'string' || result.length > 1024 * 1024) throw new GameError('viewFor must return JSON under 1 MiB');
     return JSON.parse(result);
   }
   referenceRoute(index: number) {
     if(!this.optionalExports.has('referenceRoute'))throw new GameError('logic.js does not export referenceRoute(playerIndex)');
-    const result=this.run(`(()=>{if(typeof referenceRoute!=='function')throw Error('logic.js does not export referenceRoute(playerIndex)');return JSON.stringify(referenceRoute(${index}));})()`);
+    const result=this.run(`(()=>{if(typeof gameModule.referenceRoute!=='function')throw Error('logic.js does not export referenceRoute(playerIndex)');return JSON.stringify((0,gameModule.referenceRoute)(${index}));})()`);
     if(typeof result!=='string'||result.length>1024*1024)throw new GameError('referenceRoute must return a JSON route under 1 MiB');
     return JSON.parse(result);
   }
   summary(player: string) {
-    const json=this.run(`JSON.stringify(${this.optionalExports.has('summarize')} && typeof summarize==='function'?summarize(JSON.parse(JSON.stringify(state))):viewFor(state,${JSON.stringify(player)},ctx))`);
+    const json=this.run(`JSON.stringify(${this.optionalExports.has('summarize')} && typeof gameModule.summarize==='function'?(0,gameModule.summarize)(JSON.parse(JSON.stringify(state))):(0,gameModule.viewFor)(state,${JSON.stringify(player)},ctx))`);
     if(typeof json!=='string'||json.length>32768)throw new GameError('Simulation summary must be JSON under 32 KiB; export summarize(state) for large views');
     return JSON.parse(json);
   }
   over(): { over: boolean; winners?: string[] } {
-    const result = JSON.parse(this.run('JSON.stringify(isGameOver(state,ctx))'));
+    const result = JSON.parse(this.run('JSON.stringify((0,gameModule.isGameOver)(state,ctx))'));
     if (typeof result?.over !== 'boolean' || (result.winners !== undefined && (!Array.isArray(result.winners) || result.winners.some((id: unknown) => typeof id !== 'string')))) throw new GameError('Invalid isGameOver result');
     return result;
   }
