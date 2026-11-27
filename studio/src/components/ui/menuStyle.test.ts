@@ -14,6 +14,7 @@ const NOT_ROW_MENUS = new Set([
   "player/components/SpeedMenu.tsx",
   "super-agent/ArtifactBrowserPane.tsx",
   "super-agent/ArtifactDeliverableCard.tsx",
+  "super-agent/GameStudioTopbar.tsx",
 ]);
 
 function sources(dir: string): string[] {
