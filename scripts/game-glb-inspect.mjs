@@ -17,9 +17,18 @@ export function inspectGlb(bytes) {
   if (!doc) throw Error('Missing GLB JSON chunk');
   function times(index) {
     const accessor = doc.accessors[index];
-    if (accessor.componentType !== 5126 || accessor.type !== 'SCALAR' || accessor.sparse) throw Error('Unsupported animation time accessor');
-    const view = doc.bufferViews[accessor.bufferView];
-    if (!binary || view.buffer !== 0) throw Error('Animation requires an embedded buffer');
+    if (accessor.componentType !== 5126 || accessor.type !== 'SCALAR') throw Error('Unsupported animation time accessor');
+    const view = doc.bufferViews?.[accessor.bufferView];
+    if (accessor.sparse || !binary || !view || view.buffer !== 0) {
+      // Animation input bounds are required by glTF and include sparse changes.
+      // They also describe compressed timelines without decoding their storage.
+      if ([accessor.min, accessor.max].every(bound => Array.isArray(bound) && bound.length === 1 && Number.isFinite(bound[0]))) {
+        const first = Math.fround(accessor.min[0]), last = Math.fround(accessor.max[0]);
+        if (Number.isFinite(first) && Number.isFinite(last) && first >= 0 && last >= first) return [first, last];
+      }
+      if (accessor.sparse || !view) throw Error('Unsupported animation time accessor');
+      throw Error('Animation requires an embedded buffer');
+    }
     const start = (view.byteOffset ?? 0) + (accessor.byteOffset ?? 0), stride = view.byteStride ?? 4;
     const result = [];
     for (let i = 0; i < accessor.count; i++) {
