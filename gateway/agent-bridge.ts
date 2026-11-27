@@ -141,6 +141,7 @@ const bridgeClaudeRunner: ClaudeTurnRunner = async ({
     ...(threadId ? ['--resume', threadId] : []),
   ];
   const command = await agentInvocation(bin, args);
+  signal.throwIfAborted();
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command.bin, command.args, { cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     let buffer = '';
