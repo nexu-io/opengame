@@ -655,7 +655,7 @@ test('provider setup handoff tracks MCP entries exclusively without counting Web
 test('upgrade links track one result per stdio and HTTP MCP inspect, excluding WebMCP calls', t => withTelemetryEnvUnlocked(() => fixture(async store => {
   const { rpc } = await import('../mcp.ts');
   const { gatewayFor } = await import('../gateway/service.ts');
-  const { decodeMonetizationShortlink, PRODUCT_ID } = await import('../shared/product-identity.ts');
+  const { attributedEntryIdFor, PRODUCT_ID } = await import('../shared/product-identity.ts');
   const events: PendingEvent[] = [];
   const tracking = core(async batch => { events.push(...batch); return 'accepted'; });
   store.tracking = tracking;
@@ -677,22 +677,13 @@ test('upgrade links track one result per stdio and HTTP MCP inspect, excluding W
   const checkUpgrade = (upgrade: { url: string; entryId: string }, expected: { channel: 'mcp_stdio' | 'mcp_http'; host: string; touchpoint: string }) => {
     const parsed = new URL(upgrade.url);
     assert.equal(parsed.origin, 'https://open-design.ai');
-    assert.match(parsed.pathname, /^\/t\/[A-Za-z0-9_-]+$/);
-    assert.equal(parsed.search, '');
-    const decoded = decodeMonetizationShortlink(upgrade.url);
-    assert.deepEqual(decoded, {
-      version: 'v1',
-      target: 'd',
-      entryId: upgrade.entryId,
-      product: PRODUCT_ID,
-      channel: expected.channel,
-      host: expected.host,
-      touchpoint: expected.touchpoint,
-      studioId: 'unknown',
-      modality: 'all',
-      placementId: `${expected.channel}__${expected.host}__unknown__all`,
-      destinationUrl: 'https://open-design.ai/cloud/dashboard?billing=plan',
-    });
+    assert.equal(parsed.pathname, '/cloud/dashboard');
+    assert.equal(parsed.searchParams.get('billing'), 'plan');
+    assert.equal(parsed.searchParams.get('od_origin'), PRODUCT_ID);
+    assert.equal(parsed.searchParams.get('od_entry_id'), attributedEntryIdFor(PRODUCT_ID, upgrade.entryId));
+    assert.equal(parsed.searchParams.get('od_entry_source'), expected.touchpoint);
+    assert.ok(Number.isFinite(Date.parse(parsed.searchParams.get('od_entry_at') ?? '')));
+    assert.equal(parsed.searchParams.get('od_placement_id'), `${expected.channel}__${expected.host}__unknown__all`);
     assert.equal(fetcher.mock.callCount(), 0);
   };
   try {
@@ -809,7 +800,7 @@ for (const plan of ['free', 'go'] as const) {
     const { rpc } = await import('../mcp.ts');
     const { gatewayFor } = await import('../gateway/service.ts');
     const { buildOpenMotionWebMcpTools } = await import('../shared/webmcp-tools.ts');
-    const { decodeMonetizationShortlink, PRODUCT_ID } = await import('../shared/product-identity.ts');
+    const { attributedEntryIdFor, PRODUCT_ID } = await import('../shared/product-identity.ts');
     const events: PendingEvent[] = [];
     const tracking = core(async batch => { events.push(...batch); return 'accepted'; });
     store.tracking = tracking;
@@ -826,12 +817,14 @@ for (const plan of ['free', 'go'] as const) {
     const visibleUpgrade = (value: any, expectedChannel: 'mcp_stdio' | 'mcp_http') => {
       assert.ok(value.upgrade);
       assert.equal(value.upgrade.plan, 'plus');
-      const decoded = decodeMonetizationShortlink(value.upgrade.url);
-      assert.ok(decoded);
-      assert.equal(decoded.entryId, value.upgrade.entryId);
-      assert.equal(decoded.product, PRODUCT_ID);
-      assert.equal(decoded.channel, expectedChannel);
-      assert.equal(decoded.touchpoint, `agent_media_upgrade_${plan}`);
+      const parsed = new URL(value.upgrade.url);
+      assert.equal(parsed.origin, 'https://open-design.ai');
+      assert.equal(parsed.pathname, '/cloud/dashboard');
+      assert.equal(parsed.searchParams.get('billing'), 'plan');
+      assert.equal(parsed.searchParams.get('od_origin'), PRODUCT_ID);
+      assert.equal(parsed.searchParams.get('od_entry_id'), attributedEntryIdFor(PRODUCT_ID, value.upgrade.entryId));
+      assert.equal(parsed.searchParams.get('od_entry_source'), `agent_media_upgrade_${plan}`);
+      assert.equal(parsed.searchParams.get('od_placement_id')?.split('__')[0], expectedChannel);
       assert.equal(Object.hasOwn(value, '_upgradeLinkResult'), false);
     };
     const upgradeEvents = () => events.filter(event => event.event === 'upgrade_link_result');

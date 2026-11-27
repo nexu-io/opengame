@@ -7,7 +7,7 @@ import { gatewayFor } from '../gateway/service.ts';
 import { mediaUse, resetBalanceLowRecords } from '../gateway/media-use.ts';
 import { assetOperation } from '../gateway/asset-operations.ts';
 import { jobManage } from '../gateway/capability-center.ts';
-import { cleanBillingUrl, decodeMonetizationShortlink, PRODUCT_ID } from '../shared/product-identity.ts';
+import { attributedEntryIdFor, cleanBillingUrl, PRODUCT_ID } from '../shared/product-identity.ts';
 import { saveTrackingPreference } from '../shared/tracking.ts';
 import { uuid } from '../tracking/core.ts';
 
@@ -27,12 +27,12 @@ async function withTelemetryEnvUnlocked<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 for (const plan of ['free', 'go'] as const) {
-  test(`${plan} inspect returns an attributed shortlink without account intents or opening a browser`, t => withTelemetryEnvUnlocked(() => fixture(async store => {
+  test(`${plan} inspect returns an attributed direct billing URL without account intents or opening a browser`, t => withTelemetryEnvUnlocked(() => fixture(async store => {
     const gateway = gatewayFor(store);
     gateway.options.detect = async () => [];
     t.after(() => gateway.close());
     t.mock.method(gateway.account, 'summary', async () => ({ state: 'signed-in', plan, billingUnavailable: false }));
-    // A signed-in production account must still return a credential-free shortlink.
+    // A signed-in production account must still return a credential-free billing URL.
     await mkdir(gateway.account.home, { recursive: true });
     await writeFile(path.join(store.directory, 'account/session.json'), JSON.stringify({ id: 'test-session' }));
     await writeFile(path.join(gateway.account.home, 'config.json'), JSON.stringify({ profiles: { prod: {
@@ -59,23 +59,17 @@ for (const plan of ['free', 'go'] as const) {
     const checkAttribution = (url: string, entryId: string) => {
       const target = new URL(url);
       assert.equal(target.origin, 'https://open-design.ai');
-      assert.match(target.pathname, /^\/t\/[A-Za-z0-9_-]+$/);
-      assert.equal(target.search, '');
+      assert.equal(target.pathname, '/cloud/dashboard');
       assert.equal(target.hash, '');
-      const decoded = decodeMonetizationShortlink(url);
-      assert.deepEqual(decoded, {
-        version: 'v1',
-        target: 'd',
-        entryId,
-        product: PRODUCT_ID,
-        channel: 'mcp_stdio',
-        host: 'unknown',
-        touchpoint: `agent_media_upgrade_${plan}`,
-        studioId: 'unknown',
-        modality: 'all',
-        placementId: 'mcp_stdio__unknown__unknown__all',
-        destinationUrl: 'https://open-design.ai/cloud/dashboard?billing=plan',
-      });
+      assert.equal(target.searchParams.get('billing'), 'plan');
+      assert.equal(target.searchParams.get('od_origin'), PRODUCT_ID);
+      assert.equal(target.searchParams.get('od_entry_id'), attributedEntryIdFor(PRODUCT_ID, entryId));
+      assert.equal(target.searchParams.get('od_entry_source'), `agent_media_upgrade_${plan}`);
+      assert.ok(Number.isFinite(Date.parse(target.searchParams.get('od_entry_at') ?? '')));
+      assert.equal(target.searchParams.get('od_placement_id'), 'mcp_stdio__unknown__unknown__all');
+      for (const key of target.searchParams.keys()) {
+        assert.equal(key.startsWith('utm_'), false, `unexpected utm param: ${key}`);
+      }
     };
     const result = await mediaUse(store, { action: 'inspect' });
     assert.ok(result.upgrade);
@@ -212,19 +206,15 @@ test('BALANCE_LOW job status deduplicates _upgradeLinkResult per job.id across p
   assert.ok(first.topup);
   assert.match(first.topup.entryId, uuid);
   assert.deepEqual(first.settingsHandoff, { tool: 'openmotion_open_preview', arguments: { target: 'providers', entry: 'agent_media_balance_low' } });
-  assert.deepEqual(decodeMonetizationShortlink(first.topup.url), {
-    version: 'v1',
-    target: 'r',
-    entryId: first.topup.entryId,
-    product: PRODUCT_ID,
-    channel: 'mcp_http',
-    host: 'cursor',
-    touchpoint: 'agent_media_balance_low',
-    studioId: 'motion',
-    modality: 'video',
-    placementId: 'mcp_http__cursor__motion__video',
-    destinationUrl: 'https://open-design.ai/cloud/dashboard?billing=recharge',
-  });
+  const topupUrl = new URL(first.topup.url);
+  assert.equal(topupUrl.origin, 'https://open-design.ai');
+  assert.equal(topupUrl.pathname, '/cloud/dashboard');
+  assert.equal(topupUrl.searchParams.get('billing'), 'recharge');
+  assert.equal(topupUrl.searchParams.get('od_origin'), PRODUCT_ID);
+  assert.equal(topupUrl.searchParams.get('od_entry_id'), attributedEntryIdFor(PRODUCT_ID, first.topup.entryId));
+  assert.equal(topupUrl.searchParams.get('od_entry_source'), 'agent_media_balance_low');
+  assert.ok(Number.isFinite(Date.parse(topupUrl.searchParams.get('od_entry_at') ?? '')));
+  assert.equal(topupUrl.searchParams.get('od_placement_id'), 'mcp_http__cursor__motion__video');
   assert.deepEqual(first._upgradeLinkResult, {
     entry_from: 'agent_media_balance_low',
     entry_id: first.topup.entryId,
@@ -256,8 +246,7 @@ test('BALANCE_LOW job status deduplicates _upgradeLinkResult per job.id across p
     studio_id: 'assets',
     modality: 'audio',
   });
-  assert.equal(decodeMonetizationShortlink(assetFirst.topup.url)?.studioId, 'assets');
-  assert.equal(decodeMonetizationShortlink(assetFirst.topup.url)?.modality, 'audio');
+  assert.equal(new URL(assetFirst.topup.url).searchParams.get('od_placement_id'), 'mcp_stdio__cursor__assets__audio');
 
   const assetSecond: any = await jobManage(store, { action: 'status', jobId: assetJob.id }, undefined, 'mcp', host, 'mcp_stdio');
   assert.deepEqual(assetSecond.topup, assetFirst.topup);

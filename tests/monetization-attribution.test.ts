@@ -14,6 +14,7 @@ import {
   buildPlacementId,
   cleanBillingUrl,
   decodeMonetizationShortlink,
+  directAttributedBillingUrl,
   encodeMonetizationShortlink,
   PRODUCT_ID,
 } from '../shared/product-identity.ts';
@@ -121,6 +122,51 @@ test('9-segment monetization shortlink codec matches RFC 4648 Base64URL byte-for
   assert.equal(decodeMonetizationShortlink(Buffer.from(`v1|d|${expectedUuidB64Url}|unknownprod|mcp_stdio|codex|t|motion|all`).toString('base64url')), null);
   assert.equal(decodeMonetizationShortlink(Buffer.from('v1|d|short|opengame|mcp_stdio|codex|t|motion|all').toString('base64url')), null);
   assert.equal(decodeMonetizationShortlink(Buffer.from('v1|d|only|four').toString('base64url')), null);
+});
+
+test('directAttributedBillingUrl formats direct billing destinations with full od_* attribution and zero utm_* params', () => {
+  const entryId = '7d1c6f4e-6a1f-4c55-9a43-0c7a4a0a8f11';
+  const nowIso = '2026-11-27T04:00:00.000Z';
+
+  const planUrl = new URL(directAttributedBillingUrl({
+    target: 'd',
+    entryId,
+    product: 'opengame',
+    channel: 'mcp_stdio',
+    host: 'codex',
+    touchpoint: 'agent_media_upgrade_free',
+    studioId: 'motion',
+    modality: 'video',
+  }, nowIso));
+  assert.equal(`${planUrl.origin}${planUrl.pathname}`, 'https://open-design.ai/cloud/dashboard');
+  assert.equal(planUrl.searchParams.get('billing'), 'plan');
+  assert.equal(planUrl.searchParams.get('od_origin'), 'opengame');
+  assert.equal(planUrl.searchParams.get('od_entry_id'), `opengame-${entryId}`);
+  assert.equal(planUrl.searchParams.get('od_entry_source'), 'agent_media_upgrade_free');
+  assert.equal(planUrl.searchParams.get('od_entry_at'), nowIso);
+  assert.equal(planUrl.searchParams.get('od_placement_id'), 'mcp_stdio__codex__motion__video');
+  for (const key of planUrl.searchParams.keys()) {
+    assert.equal(key.startsWith('utm_'), false, `unexpected utm param: ${key}`);
+  }
+
+  const rechargeUrl = new URL(directAttributedBillingUrl({
+    target: 'r',
+    entryId,
+    product: 'openmotion',
+    channel: 'mcp_http',
+    host: 'claude_code',
+    touchpoint: 'agent_media_balance_low',
+    studioId: 'game',
+    modality: 'audio',
+  }, nowIso));
+  assert.equal(`${rechargeUrl.origin}${rechargeUrl.pathname}`, 'https://open-design.ai/cloud/dashboard');
+  assert.equal(rechargeUrl.searchParams.get('billing'), 'recharge');
+  assert.equal(rechargeUrl.searchParams.get('od_origin'), 'openmotion');
+  assert.equal(rechargeUrl.searchParams.get('od_entry_id'), entryId);
+  assert.equal(rechargeUrl.searchParams.get('od_placement_id'), 'mcp_http__claude_code__game__audio');
+
+  assert.throws(() => directAttributedBillingUrl({ target: 'x' as any, entryId }));
+  assert.throws(() => directAttributedBillingUrl({ target: 'd', entryId: 'not-a-uuid' }));
 });
 
 test('posthogCommonProperties keeps product=openmotion, adds resolved source_product, and preserves event channel', async () => {

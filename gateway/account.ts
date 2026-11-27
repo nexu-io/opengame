@@ -11,7 +11,7 @@ import {
   buildPlacementId,
   cleanBillingUrl,
   currentProductId,
-  encodeMonetizationShortlink,
+  directAttributedBillingUrl,
   type MonetizationModality,
 } from '../shared/product-identity.ts';
 import { slug, validField, type EventFields } from '../tracking/core.ts';
@@ -898,8 +898,10 @@ export class OpenDesignAccount {
     if (options.telemetryEnabled === false) {
       return { url: cleanBillingUrl('d') };
     }
+    // Temporary hotfix: emit direct attributed billing URLs until open-design.ai/t/:token
+    // is deployed to production (od-landing#429), then switch back to encodeMonetizationShortlink.
     return {
-      url: encodeMonetizationShortlink({
+      url: directAttributedBillingUrl({
         target: 'd',
         entryId,
         product: currentProductId(),
@@ -917,8 +919,10 @@ export class OpenDesignAccount {
     if (options.telemetryEnabled === false) {
       return { url: cleanBillingUrl('r') };
     }
+    // Temporary hotfix: emit direct attributed billing URLs until open-design.ai/t/:token
+    // is deployed to production (od-landing#429), then switch back to encodeMonetizationShortlink.
     return {
-      url: encodeMonetizationShortlink({
+      url: directAttributedBillingUrl({
         target: 'r',
         entryId,
         product: currentProductId(),

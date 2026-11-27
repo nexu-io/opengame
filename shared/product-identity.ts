@@ -340,6 +340,30 @@ export function cleanBillingUrl(target: MonetizationShortlinkTarget): string {
   return 'https://open-design.ai/pricing/';
 }
 
+export function directAttributedBillingUrl(
+  input: MonetizationShortlinkInput,
+  nowIso: string = new Date().toISOString(),
+): string {
+  if (!VALID_TARGETS.has(input.target)) {
+    throw new Error('INVALID_SHORTLINK_TARGET');
+  }
+  if (!UUID_PATTERN.test(input.entryId)) {
+    throw new Error('INVALID_ENTRY_UUID');
+  }
+  const product: ProductId = input.product && VALID_PRODUCTS.has(input.product) ? input.product : currentProductId();
+  const normalizedEntryId = input.entryId.toLowerCase();
+  const url = new URL(cleanBillingUrl(input.target));
+  url.searchParams.set('od_origin', product);
+  url.searchParams.set('od_entry_id', attributedEntryIdFor(product, normalizedEntryId));
+  url.searchParams.set('od_entry_source', sanitizeSegment(input.touchpoint, 'unknown', 64));
+  url.searchParams.set('od_entry_at', nowIso);
+  url.searchParams.set(
+    'od_placement_id',
+    buildPlacementId(input.channel, input.host, input.studioId, input.modality),
+  );
+  return url.toString();
+}
+
 export function encodeMonetizationShortlink(input: MonetizationShortlinkInput): string {
   if (!VALID_TARGETS.has(input.target)) {
     throw new Error('INVALID_SHORTLINK_TARGET');
