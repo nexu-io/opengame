@@ -83,8 +83,10 @@ async function renderViewer(
   },
 ) {
   const noop = () => {};
+  let setTabExternal: ((tabId: string) => void) | null = null;
   function Harness() {
     const [activeTabId, setActiveTabId] = useState(initialTabId);
+    setTabExternal = setActiveTabId;
     return (
       <ArtifactBrowserPane
         studioMode={options?.studioMode}
@@ -118,6 +120,14 @@ async function renderViewer(
     );
     await Promise.resolve();
   });
+  return {
+    selectTab: async (tabId: string) => {
+      await act(async () => {
+        setTabExternal?.(tabId);
+        await Promise.resolve();
+      });
+    },
+  };
 }
 
 it('waits for the isolated trial origin before navigating the game iframe', async () => {
@@ -452,7 +462,7 @@ describe('ArtifactBrowserPane Game Studio mode', () => {
       url: 'https://example.com',
       updatedAt: 101,
     };
-    await renderViewer([MY_GAME, webArtifact], MY_GAME.id, { studioMode: 'game' });
+    const { selectTab } = await renderViewer([MY_GAME, webArtifact], MY_GAME.id, { studioMode: 'game' });
 
     const codeTab = container.querySelector<HTMLButtonElement>('.om-sa-game-studio-tab[data-tab-id="code"]')!;
     expect(codeTab).not.toBeNull();
@@ -460,8 +470,8 @@ describe('ArtifactBrowserPane Game Studio mode', () => {
     expect(codeTab.getAttribute('aria-selected')).toBe('true');
     expect(container.querySelector('.om-sa-game-browser-bar')).toBeNull();
 
-    // Switching to a web artifact (no Code view) must fall back to Preview so the browser bar stays visible
-    await renderViewer([MY_GAME, webArtifact], webArtifact.id, { studioMode: 'game' });
+    // Switching to a web artifact (no Code view) in the same mounted viewer must fall back to Preview so the browser bar stays visible
+    await selectTab(webArtifact.id);
 
     const previewTab = container.querySelector<HTMLButtonElement>('.om-sa-game-studio-tab[data-tab-id="preview"]')!;
     expect(previewTab.getAttribute('aria-selected')).toBe('true');

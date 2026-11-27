@@ -31,7 +31,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 vi.mock('../motion/WebBrowser', async () => {
   const React = await import('react');
   const WebBrowser = React.forwardRef(function MockWebBrowser(
-    { url, onState }: { url: string; onState?: (state: any) => void },
+    { url, endpoint, onState }: { url: string; endpoint?: string; onState?: (state: any) => void },
     ref: React.ForwardedRef<any>,
   ) {
     const imgRef = React.useRef<HTMLImageElement>(null);
@@ -91,7 +91,7 @@ vi.mock('../motion/WebBrowser', async () => {
       clearConsole: async () => undefined,
     }));
     return (
-      <div data-testid="mock-web-browser">
+      <div data-testid="mock-web-browser" data-endpoint={endpoint ?? ''}>
         <img ref={imgRef} alt={url} />
         {url}
       </div>
@@ -1812,11 +1812,16 @@ it('opens clickable Markdown files and web links from Reasoning & Assistant in r
   expect(container.querySelector('.om-sa-deliverables')).toBeNull();
   expect(patchBodies.some(b => Boolean(b.addArtifact))).toBe(false);
 
-  // Click web Markdown link directly in Assistant message -> opens in right Viewer
+  // Click web Markdown link directly in Assistant message -> opens in right Viewer locally without mutating chat artifacts
   const assistantLink = container.querySelector<HTMLAnchorElement>('.om-sa-assistant-content .om-sa-link')!;
   await act(async () => assistantLink.click());
   await flush();
-  expect(patchBodies.some(b => b.addArtifact?.kind === 'web' && b.addArtifact?.url === 'https://example.com/guide')).toBe(true);
+  await vi.waitFor(async () => {
+    await flush();
+    expect(container.querySelector('[data-testid="mock-web-browser"]')?.textContent).toContain('https://example.com/guide');
+  }, { timeout: 5000 });
+  expect(patchBodies.some(b => Boolean(b.addArtifact))).toBe(false);
+  expect(container.querySelector('.om-sa-deliverables')).toBeNull();
 });
 
 it('enters pure Coding mode from Explore more and renders sidebar/header intent icons', async () => {
@@ -3911,8 +3916,9 @@ it('auto-enters Game mode when opened from Game Studio, plays games in Artifact 
   expect(trialFrame?.closest('.om-sa-iframe-stage')?.getAttribute('data-viewport')).toBe('desktop');
   expect(viewer?.querySelector('iframe[title="Gate Legion"]')).toBe(trialFrame);
 
-  // Switching to New tab inside Game mode keeps data-stage-viewer & studioMode locked so the right pane never flashes/shrinks
+  // Switching to New tab inside Game mode keeps data-stage-viewer & studioMode locked, and typing a URL opens a local web tab without jumping or mutating the left chat/composer
   expect(container.querySelector('.om-super-agent')?.getAttribute('data-stage-viewer')).toBe('true');
+  await typeInComposer(gameInput, 'Keep my draft intact', { clear: true });
   const switcherForNewTab = viewer!.querySelector<HTMLButtonElement>('button[aria-label="Switch preview tab or enter URL"]')!;
   await act(async () => switcherForNewTab.click());
   await flush();
@@ -3922,6 +3928,34 @@ it('auto-enters Game mode when opened from Game Studio, plays games in Artifact 
   await flush();
   expect(container.querySelector('.om-super-agent')?.getAttribute('data-stage-viewer')).toBe('true');
   expect(viewer?.getAttribute('data-studio-mode')).toBe('game');
+
+  const newTabSearchInput = viewer!.querySelector<HTMLInputElement>('.om-sa-newtab-search input')!;
+  expect(newTabSearchInput).toBeTruthy();
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    setter.call(newTabSearchInput, 'example.com');
+    newTabSearchInput.dispatchEvent(new Event('input', { bubbles: true }));
+    newTabSearchInput.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  });
+  await flush();
+  await vi.waitFor(async () => {
+    await flush();
+    expect(viewer?.querySelector('[data-testid="mock-web-browser"]')?.textContent).toContain('https://example.com/');
+  }, { timeout: 5000 });
+  expect(viewer?.querySelector('[data-testid="mock-web-browser"]')?.getAttribute('data-endpoint')).toContain('/motion-api/super-agent/browser/');
+  expect(chatCreateCalls).toBe(0);
+  expect(gameInput.textContent).toBe('Keep my draft intact');
+  expect(container.querySelector('.om-sa-deliverables')).toBeNull();
+
+  // Can switch back to the open game tab from the switcher without losing tabs
+  const switcherOnWebTab = viewer!.querySelector<HTMLButtonElement>('button[aria-label="Switch preview tab or enter URL"]')!;
+  await act(async () => switcherOnWebTab.click());
+  await flush();
+  const gameTabOption = [...document.querySelectorAll<HTMLButtonElement>('.om-sa-game-tab-select')].find(b => b.textContent?.includes('Gate Legion'))!;
+  expect(gameTabOption).toBeTruthy();
+  await act(async () => gameTabOption.click());
+  await flush();
+  expect(viewer?.querySelector('iframe[title="Gate Legion"]')).toBeTruthy();
 
   // Closing the last game preview tab via the switcher collapses the split viewer back to the full homepage
   for (let i = 0; i < 10; i++) {

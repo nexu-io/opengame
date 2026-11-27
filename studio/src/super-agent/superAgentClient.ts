@@ -365,13 +365,24 @@ export function subscribeSuperAgentChat(
   return () => source.close();
 }
 
-export function superAgentBrowserEndpoint(chatId: string, tabId: string) {
-  return `${SUPER_AGENT_API}/chats/${encodeURIComponent(chatId)}/browser/${encodeURIComponent(tabId)}`;
+export function superAgentBrowserEndpoint(
+  chatId: string | null,
+  tabId: string,
+  previewSessionId = 'preview',
+) {
+  if (chatId) {
+    return `${SUPER_AGENT_API}/chats/${encodeURIComponent(chatId)}/browser/${encodeURIComponent(tabId)}`;
+  }
+  return `${SUPER_AGENT_API}/browser/${encodeURIComponent(previewSessionId)}/${encodeURIComponent(tabId)}`;
 }
 
 /** Releases the server-side headless browser tab when the viewer closes or deletes a web tab. */
-export function closeSuperAgentBrowserTab(chatId: string, tabId: string): Promise<void> {
-  return fetch(superAgentBrowserEndpoint(chatId, tabId), { method: 'DELETE' }).then(
+export function closeSuperAgentBrowserTab(
+  chatId: string | null,
+  tabId: string,
+  previewSessionId = 'preview',
+): Promise<void> {
+  return fetch(superAgentBrowserEndpoint(chatId, tabId, previewSessionId), { method: 'DELETE' }).then(
     () => undefined,
     () => undefined,
   );
