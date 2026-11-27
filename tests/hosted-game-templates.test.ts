@@ -46,6 +46,27 @@ test('hosted bundle staging reduces a stored ZIP and round trips the same verifi
   assert.deepEqual(readProjectZip(bytes), readProjectZip(archive));
 });
 
+test('hosted bundle staging rejects a repack that changes an asset path', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'opengame-roundtrip-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const index = path.join(root, 'game-downloads.json');
+  const output = path.join(root, 'optimized');
+  // The ZIP reader strips one leading UTF-8 BOM each time it decodes a name.
+  const archive = zip([
+    { name: 'game.json', data: Buffer.from('{"id":"arcade"}') },
+    { name: 'index.html', data: Buffer.from('<p>Game</p>') },
+    { name: '\uFEFF\uFEFFasset.txt', data: Buffer.from('asset'.repeat(2048)) },
+  ]);
+  assert(readProjectZip(archive).has('\uFEFFasset.txt'));
+  const lock = { sha256: mediaDigest(archive), bytes: archive.length };
+  await writeFile(index, JSON.stringify({ schemaVersion: 1, games: { arcade: lock } }));
+
+  await assert.rejects(stageOptimizedGameBundles(index, output, async () => archive), /Optimized game bundle changed files: arcade/);
+  assert.deepEqual(await readdir(path.join(output, 'objects')), []);
+  await assert.rejects(readFile(path.join(output, 'game-downloads.json')), { code: 'ENOENT' });
+  await assert.rejects(readFile(path.join(output, 'optimization.json')), { code: 'ENOENT' });
+});
+
 test('shallow source checkout fetches only the selected LFS game and reuses it offline', {
   skip: spawnSync('git', ['lfs', 'version']).status !== 0 && 'requires Git LFS',
 }, async t => {

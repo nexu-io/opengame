@@ -195,6 +195,7 @@ export async function stageOptimizedGameBundles(
     const files = verifiedHostedGame(id, lock, await readArchive(id, lock));
     const packed = zip(Array.from(files, ([name, data]) => ({ name, data })), { deflate: true });
     if (packed.length >= lock.bytes) return;
+    assert.deepEqual(readProjectZip(packed), files, `Optimized game bundle changed files: ${id}`);
     const optimized = { sha256: mediaDigest(packed), bytes: packed.length };
     await writeAtomic(path.join(objects, optimized.sha256 + '.zip'), packed);
     games[id] = optimized;
