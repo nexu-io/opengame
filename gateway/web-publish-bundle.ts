@@ -111,6 +111,7 @@ async function collectSourceFiles(
   sourcePath: string,
   entryPath: string,
   kind: WebPublishTargetKind,
+  maxBytes: number,
 ): Promise<Array<{ path: string; data: Buffer }>> {
   const resolvedRoot = path.resolve(sourcePath);
   const rootInfo = await lstat(resolvedRoot).catch(() => null);
@@ -125,8 +126,8 @@ async function collectSourceFiles(
     if (!/\.html?$/i.test(resolvedRoot)) {
       throw new Error('INVALID_ARGUMENT: Single-file web publishing requires an .html or .htm file');
     }
-    if (rootInfo.size > MAX_PUBLISH_BYTES) {
-      throw new Error(`INVALID_ARGUMENT: Publication exceeds ${MAX_PUBLISH_BYTES / (1024 * 1024)} MiB limit`);
+    if (rootInfo.size > maxBytes) {
+      throw new Error(`INVALID_ARGUMENT: Publication exceeds ${maxBytes / (1024 * 1024)} MiB limit`);
     }
     return [{ path: entryPath, data: await readFile(resolvedRoot) }];
   }
@@ -166,9 +167,9 @@ async function collectSourceFiles(
         throw new Error(`INVALID_ARGUMENT: Publication exceeds ${MAX_PUBLISH_FILES} files limit`);
       }
       totalBytes += info.size;
-      const collectLimit = /\.glb$/i.test(relPosix) ? MAX_RAW_COLLECT_BYTES : MAX_PUBLISH_BYTES;
-      if (totalBytes > Math.max(collectLimit, results.some(f => /\.glb$/i.test(f.path)) ? MAX_RAW_COLLECT_BYTES : MAX_PUBLISH_BYTES)) {
-        throw new Error(`INVALID_ARGUMENT: Publication exceeds ${MAX_PUBLISH_BYTES / (1024 * 1024)} MiB limit`);
+      const collectLimit = /\.glb$/i.test(relPosix) ? MAX_RAW_COLLECT_BYTES : maxBytes;
+      if (totalBytes > Math.max(collectLimit, results.some(f => /\.glb$/i.test(f.path)) ? MAX_RAW_COLLECT_BYTES : maxBytes)) {
+        throw new Error(`INVALID_ARGUMENT: Publication exceeds ${maxBytes / (1024 * 1024)} MiB limit`);
       }
       results.push({ path: relPosix, data: await readFile(absPath) });
     }
@@ -199,9 +200,10 @@ export async function buildPublishBundle(input: {
   virtualEntryHtml?: string;
   maxBytes?: number;
 }): Promise<PublishBundle> {
+  const maxBytes = input.maxBytes ?? MAX_PUBLISH_BYTES;
   const rawFiles = input.virtualEntryHtml !== undefined
     ? [{ path: input.entryPath, data: Buffer.from(input.virtualEntryHtml, 'utf8') }]
-    : await collectSourceFiles(input.sourcePath, input.entryPath, input.kind);
+    : await collectSourceFiles(input.sourcePath, input.entryPath, input.kind, maxBytes);
 
   let assetLibrary: AssetLibrary | null = null;
   const getAssetLibrary = () => {
@@ -217,7 +219,6 @@ export async function buildPublishBundle(input: {
   let totalBytes = 0;
   let optimizedGlbCount = 0;
   let optimizedRasterCount = 0;
-  const maxBytes = input.maxBytes ?? MAX_PUBLISH_BYTES;
 
   const resolveBundledAssetPath = async (assetId: string, versionId: string): Promise<string | null> => {
     const key = `${assetId}/${versionId}`;
