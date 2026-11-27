@@ -212,6 +212,7 @@ export type StageTimingTracker = {
   get pipelineStep(): MediaGenerationPipelineStep | undefined;
   get remoteTerminal(): boolean;
   get hasRemoteId(): boolean;
+  get remoteId(): string | undefined;
   setActiveStage: (stage: MediaGenerationFailurePhase) => void;
   startRemoteDirect: (now?: number) => void;
   markStage: (
@@ -233,6 +234,7 @@ export function createStageTimingTracker(initialStage: MediaGenerationFailurePha
   let pipelineStep: MediaGenerationPipelineStep | undefined;
   let remoteTerminal = false;
   let hasRemoteId = false;
+  let remoteId: string | undefined;
   let uploadStartMs: number | undefined;
   let uploadMs: number | undefined;
   let remoteStartMs: number | undefined;
@@ -273,6 +275,7 @@ export function createStageTimingTracker(initialStage: MediaGenerationFailurePha
     get pipelineStep() { return pipelineStep; },
     get remoteTerminal() { return remoteTerminal; },
     get hasRemoteId() { return hasRemoteId; },
+    get remoteId() { return remoteId; },
     setActiveStage(stage: MediaGenerationFailurePhase) {
       activeStage = stage;
     },
@@ -281,7 +284,13 @@ export function createStageTimingTracker(initialStage: MediaGenerationFailurePha
     },
     markStage(phase, options = {}) {
       const now = options.now ?? Date.now();
-      if (options.remoteId) hasRemoteId = true;
+      if (options.pipelineStep && options.pipelineStep !== pipelineStep && !options.remoteId) {
+        remoteId = undefined;
+      }
+      if (options.remoteId) {
+        hasRemoteId = true;
+        remoteId = options.remoteId;
+      }
       if (options.remoteTerminal) remoteTerminal = true;
       if (options.pipelineStep) pipelineStep = options.pipelineStep;
 
@@ -730,6 +739,8 @@ export type RecordMediaGenerationResultInput = MediaGenerationCommonInput & Live
   cancelWaitMs?: number;
   remoteTerminal?: boolean;
   hasRemoteId: boolean;
+  remoteTaskId?: string;
+  providerOrigin?: string;
   isResumable?: boolean;
   savePending?: boolean;
   totalOutputBytes?: number;
@@ -780,6 +791,12 @@ export function recordMediaGenerationResult(
   const total_output_bytes = input.totalOutputBytes !== undefined && input.jobState === 'completed'
     ? Math.min(MAX_OUTPUT_BYTES_FIELD, Math.max(0, Math.round(input.totalOutputBytes)))
     : undefined;
+  const officialAmrOrigin = productionApi.replace(/\/+$/, '');
+  const normalizedOrigin = typeof input.providerOrigin === 'string' ? input.providerOrigin.trim().replace(/\/+$/, '') : '';
+  const isOfficialAmr = (input.routeChannel === 'amr_account' || input.routeChannel === 'amr_opendesign')
+    && normalizedOrigin === officialAmrOrigin;
+  const rawRemoteTaskId = isOfficialAmr && typeof input.remoteTaskId === 'string' ? input.remoteTaskId : '';
+  const remote_task_id = /^[A-Za-z0-9_.-]{1,128}$/.test(rawRemoteTaskId) ? rawRemoteTaskId : undefined;
   tracking?.track('media_generation_result', {
     modality: input.modality,
     job_id: input.jobId,
@@ -800,6 +817,7 @@ export function recordMediaGenerationResult(
     attempt_kind: input.attemptKind,
     ...(typeof input.remoteTerminal === 'boolean' ? { remote_terminal: input.remoteTerminal } : {}),
     has_remote_id: input.hasRemoteId,
+    ...(remote_task_id ? { remote_task_id } : {}),
     ...(input.jobState === 'failed' && input.isResumable !== undefined ? { is_resumable: input.isResumable } : {}),
     ...(input.jobState !== 'completed' && input.savePending !== undefined ? { save_pending: input.savePending } : {}),
     ...(input.reconnectedCount ? { reconnected_count: Math.min(86_400_000, input.reconnectedCount) } : {}),

@@ -255,7 +255,7 @@ export const omEvents = {
     upload_ms: 'integer', remote_ms: 'integer', download_ms: 'integer', save_ms: 'integer',
     cancel_wait_ms: 'integer',
     attempt_kind: ['initial', 'resume', 'retry_save'], remote_terminal: 'boolean',
-    has_remote_id: 'boolean', is_resumable: 'boolean', save_pending: 'boolean',
+    has_remote_id: 'boolean', remote_task_id: 'code', is_resumable: 'boolean', save_pending: 'boolean',
     reconnected_count: 'integer', total_output_bytes: { min: 0, max: 536_870_912, integer: true },
     failure_phase: mediaGenerationFailurePhases,
     phase_before_cancel: mediaGenerationCancelPhases,

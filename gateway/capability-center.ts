@@ -1136,6 +1136,8 @@ export async function capabilityRun(
                 endToEndMs: doneAt - requestCreatedAt,
                 ...finalTimings,
                 hasRemoteId: stages.hasRemoteId || typeof output.result?.taskId === 'string',
+                remoteTaskId: stages.remoteId ?? (typeof output.result?.taskId === 'string' ? output.result.taskId : undefined),
+                providerOrigin: scriptMeta.providerOrigin,
                 totalOutputBytes: outputBytes,
               }, host);
             }
@@ -1196,6 +1198,8 @@ export async function capabilityRun(
                 ...finalTimings,
                 remoteTerminal: stages.remoteTerminal ? true : undefined,
                 hasRemoteId: stages.hasRemoteId,
+                remoteTaskId: stages.remoteId,
+                providerOrigin: scriptMeta.providerOrigin,
                 isResumable: false,
                 savePending: false,
                 failurePhase,
