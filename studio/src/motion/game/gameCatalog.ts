@@ -1,4 +1,4 @@
-import { compareGameCatalogOrder, gameGenreLabels, gameGenres, gameSettings, gameStyles, type GameBrief, type GameCard, type GameCatalog, type GameCreated, type GameGenre, type GameRemixOptions, type GameSetting, type GameStyle, type GameTrailer, type GameHandoff } from '../../../../shared/game-contract';
+import { compareGameCatalogOrder, gameGenreLabels, gameGenres, gameSettings, gameStyles, isListedGameTemplate, type GameBrief, type GameCard, type GameCatalog, type GameCreated, type GameGenre, type GameRemixOptions, type GameSetting, type GameStyle, type GameTrailer, type GameHandoff } from '../../../../shared/game-contract';
 import { motionApi } from '../useWorkspace';
 import { isLocalGamePreviewUrl } from '../../../../shared/local-game-preview';
 
@@ -106,10 +106,13 @@ export const settingCovers = Object.fromEntries(gameSettings.map(setting => [set
 
 // Template covers and assets stay in the template folder and are served by the local game service, so they
 // are not bundled twice. Without the service (the only time this list is shown), a card uses its genre artwork.
-export const bundledGames: GameCard[] = Object.entries(bundledMeta).map(([path, meta]): GameCard => {
-  const id = folder(path);
-  return { ...meta, id, cover: genreCovers[meta.genre] ?? null, playUrl: `bundled:${id}`, reaction: 0, favorite: false, source: 'template', remixOf: null };
-}).sort(compareGameCatalogOrder);
+export const bundledGames: GameCard[] = Object.entries(bundledMeta)
+  .map(([path, meta]): GameCard => {
+    const id = folder(path);
+    return { ...meta, id, cover: genreCovers[meta.genre] ?? null, playUrl: `bundled:${id}`, reaction: 0, favorite: false, source: 'template', remixOf: null };
+  })
+  .filter(game => isListedGameTemplate(game.id))
+  .sort(compareGameCatalogOrder);
 
 /** A bundled page that loads sibling files (./assets/..., ./src/..., ./app.part0.js) cannot run from a blob URL. */
 export const needsGameService = (html: string) => /["'(]\.?\/?(?:assets|src)\/|["']\.\/[^"']+\.(?:js|css|json|wasm)\b|<(?:script|link)\b[^>]+(?:src|href)=["'](?!https?:|data:|blob:|#)/i.test(html);
@@ -164,7 +167,10 @@ export const coverUrl = (game: GameCard) => game.cover && !game.cover.startsWith
 const json = (body: unknown): RequestInit => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 export const gameApi = {
-  catalog: () => motionApi<GameCatalog>('/games'),
+  catalog: async () => {
+    const catalog = await motionApi<GameCatalog>('/games');
+    return { ...catalog, games: catalog.games.filter(game => game.source !== 'template' || isListedGameTemplate(game.id)) };
+  },
   create: (brief: GameBrief) => motionApi<GameCreated>('/games', json(brief)),
   remix: (id: string, overrides?: GameRemixOptions) => motionApi<GameCreated>(`/games/${encodeURIComponent(id)}/remix`, json(overrides ?? {})),
   play: (id: string) => motionApi<GameCard>(`/games/${encodeURIComponent(id)}/play`, json({})),

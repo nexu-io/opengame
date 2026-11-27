@@ -34,6 +34,10 @@ test('local game previews expose only the game mapped to the isolated origin', a
   }
   assert.equal((await read(url.pathname, 'POST')).status, 404);
   assert.equal((await read(url.pathname, 'GET', `localhost:${url.port}`)).status, 404);
+  for (const id of ['school-tycoon-3d', 'arrow-pop-clear', 'shaman-block-pop']) {
+    const withdrawn = new URL(preview.url(id, '?gameStartup=1'));
+    assert.equal((await read(withdrawn.pathname + withdrawn.search, 'GET', withdrawn.host)).status, 404);
+  }
 });
 
 test('the game routes advertise isolated previews through the local Studio proxy and redirect only top-level play', async t => {
@@ -48,6 +52,14 @@ test('the game routes advertise isolated previews through the local Studio proxy
     return handler(req, res, store, context);
   });
   const gamePath = '/motion-api/games/tidebreaker';
+  const catalog = await (await send('/motion-api/games')).json();
+  assert(catalog.games.some((game: { id: string }) => game.id === 'tidebreaker'));
+  for (const id of ['school-tycoon-3d', 'arrow-pop-clear', 'shaman-block-pop']) {
+    const routes = ['/preview-url', '/play/index.html?gameStartup=1', '/files'];
+    assert(!catalog.games.some((game: { id: string }) => game.id === id));
+    assert(!catalog.issues?.some((issue: { id: string }) => issue.id === id));
+    for (const route of routes) assert.equal((await send(`/motion-api/games/${id}${route}`)).status, 404);
+  }
   const capability = await send(gamePath + '/preview-url');
   assert.equal(capability.status, 200);
   assert.deepEqual(await capability.json(), { url: preview.url('tidebreaker') });

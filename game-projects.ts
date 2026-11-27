@@ -25,7 +25,7 @@ import { HostedGameTemplates } from './shared/hosted-game-templates.ts';
 import { lfsPointer } from './shared/repository-template-catalog.ts';
 import { zip } from './scripts/zip.mjs';
 import { escapeHtml } from './shared/scenario-content.ts';
-import { compareGameCatalogOrder, formatGameBriefPrompt, gameAssetInstructions, gameGenreLabels, gameGenres, gameStyles, gameSettings, isReadyBuiltInTemplate, type GameBrief, type GameCard, type GameCatalog, type GameCatalogIssue, type GameCreated, type GameHandoff, type GameRemixOptions, type GameStyle, type RoomServerMessage, type GameTrailer, type GameTrailerStatus } from './shared/game-contract.ts';
+import { compareGameCatalogOrder, formatGameBriefPrompt, gameAssetInstructions, gameGenreLabels, gameGenres, gameStyles, gameSettings, isListedGameTemplate, isReadyBuiltInTemplate, type GameBrief, type GameCard, type GameCatalog, type GameCatalogIssue, type GameCreated, type GameHandoff, type GameRemixOptions, type GameStyle, type RoomServerMessage, type GameTrailer, type GameTrailerStatus } from './shared/game-contract.ts';
 
 const templatesRoot = fileURLToPath(new URL('./templates/games/', import.meta.url));
 const kitsRoot = fileURLToPath(new URL('./templates/game-kits/', import.meta.url));
@@ -905,7 +905,7 @@ export class GameProjects {
   private async locateCard(id: string, mineOnly = false) {
     idPart(id);
     for (const [root, source] of [[this.root, 'mine'], [this.templates, 'template']] as const) {
-      if (mineOnly && source !== 'mine') continue;
+      if (source === 'template' && (mineOnly || !isListedGameTemplate(id))) continue;
       const dir = path.join(root, id);
       try { await safeFile(dir, 'game.json'); return { dir, source }; }
       catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
@@ -931,6 +931,7 @@ export class GameProjects {
       const entries = await readdir(root, { withFileTypes: true }).catch(e => { if (e.code === 'ENOENT') return []; throw e; });
       // One unreadable folder (an interrupted create, a malformed game.json) is reported, not allowed to hide every other game.
       for (const entry of entries) if (entry.isDirectory() && !entry.name.startsWith('.')) {
+        if (root === this.templates && !isListedGameTemplate(entry.name)) continue;
         try { games.push(await this.get(entry.name)); }
         catch (error) { issues.push({ id: entry.name, message: (error as Error).message }); }
       }
