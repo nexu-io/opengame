@@ -11,6 +11,7 @@ export const productionApi = 'https://amr-api.open-design.ai';
 // TODO(OPEND-5839): switch to `/api/v1/media/models?include_all=true&expand=schema` once AMR ships full schema discovery.
 export const OPEN_DESIGN_MEDIA_MODELS_PATH = '/api/v1/media/models?include_audio=true';
 const CLOUD_MODEL_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,179}$/;
+const ACCOUNT_MODEL_ID_PATTERN = /^[\w./:-]{1,180}$/;
 
 /** Custom Cloud gateways keep their existing idempotency protocol. */
 export function mediaSubmitHeaders(baseUrl: string, jobId: string): Record<string, string> {
@@ -24,8 +25,9 @@ export type ParsedOpenDesignMediaModel = Model & { enabled: boolean };
 
 /** Shared parser for `/api/v1/media/models` rows across OpenDesign Cloud (API key) and signed-in Account. */
 export function parseOpenDesignMediaCatalog(rows: unknown[], provider: 'opendesign' | 'account'): ParsedOpenDesignMediaModel[] {
+  const idPattern = provider === 'account' ? ACCOUNT_MODEL_ID_PATTERN : CLOUD_MODEL_ID_PATTERN;
   return rows
-    .filter((row: any) => typeof row?.model === 'string' && CLOUD_MODEL_ID_PATTERN.test(row.model)
+    .filter((row: any) => typeof row?.model === 'string' && idPattern.test(row.model)
       && ['image', 'video', 'audio', 'audio_speech', 'audio_music', 'audio_sound_effects'].includes(row.kind))
     .map((row: any) => ({
       id: `${provider}:${row.model}`,

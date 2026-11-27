@@ -1028,7 +1028,7 @@ export class OpenDesignAccount {
           this.options.fetcher ?? fetch,
           `${directAccess.baseUrl}${OPEN_DESIGN_MEDIA_MODELS_PATH}`,
           { headers: { Authorization: `Bearer ${directAccess.key}` } },
-          { timeoutMs: 15_000, maxBytes: 1024 * 1024 },
+          { timeoutMs: 15_000, maxBytes: 16 * 1024 * 1024 },
         )
       : JSON.parse(await this.run(['media', 'models', '--json']));
     if (!Array.isArray(media.models)) throw new Error('OpenDesign media catalogue is unavailable');
@@ -1107,13 +1107,14 @@ export class OpenDesignAccount {
     signal: AbortSignal,
     progress: (phase: string) => Promise<void>,
   ): Promise<{ task_id?: unknown }> {
+    const fetcher = this.options.fetcher ?? fetch, api = access.baseUrl + '/api/v1/media';
+    const headers = { Authorization: `Bearer ${access.key}`, 'Content-Type': 'application/json' };
+    await progress('submitting');
+    signal.throwIfAborted();
     const currentAccess = await this.mediaAccess();
     if (job.providerOrigin !== await this.identity() || currentAccess?.keyId !== access.keyId) {
       throw new Error(jobMessages.accountChangedBeforeSubmit);
     }
-    const fetcher = this.options.fetcher ?? fetch, api = access.baseUrl + '/api/v1/media';
-    const headers = { Authorization: `Bearer ${access.key}`, 'Content-Type': 'application/json' };
-    await progress('submitting');
     let response: Response;
     try {
       response = await fetcher(api + endpoint, {
@@ -1156,6 +1157,7 @@ export class OpenDesignAccount {
     const soundEffects = music && isSfxModel(job.model);
     const speech = kind === 'audio' && !music;
     if ((reference || references.length) && kind !== 'image' && kind !== 'video') throw new Error('Account reference images are supported for image editing and video first frames only');
+    if ('images' in params) throw new Error('Account reference images must use pinned references');
     // Speech-only parameters never belong on music or sound-effects models.
     if (music && 'voice' in params) throw new Error('Unsupported account model parameter');
     if (soundEffects && job.prompt.trim().length > 450) throw new Error('Sound effects prompt must be at most 450 characters');
@@ -1209,6 +1211,11 @@ export class OpenDesignAccount {
         if (error instanceof Error && error.message === jobMessages.accountChangedAfterSubmit) throw error;
         const status = (error as { status?: number }).status;
         const upstreamCode = (error as { upstreamCode?: string }).upstreamCode;
+        if (status === 404 && upstreamCode === 'video_task_not_found') {
+          await progress('remote_failed');
+          await onResult?.({ error: { code: upstreamCode } }, true);
+          throw withErrorMeta(new Error(jobMessages.taskFailed, { cause: error }), { status, upstreamCode, errorSource: 'api' });
+        }
         if (status === 401) throw withErrorMeta(new Error(jobMessages.resultUnauthorized, { cause: error }), { status, upstreamCode, errorSource: 'api' });
         throw withErrorMeta(new Error(jobMessages.resultUnreadable, { cause: error }), { status, upstreamCode, errorSource: status !== undefined ? 'api' : undefined });
       }
@@ -1288,7 +1295,7 @@ export class OpenDesignAccount {
       try {
         const task = await retryRead(() => apiJson(this.options.fetcher ?? fetch,
           `${access.baseUrl}/api/v1/media/audio/tasks/${encodeURIComponent(taskId)}`,
-          { headers: { Authorization: `Bearer ${access.key}` }, signal }, { timeoutMs: 15_000, maxBytes: 1024 * 1024 }), signal, 3);
+          { headers: { Authorization: `Bearer ${access.key}` }, signal }, { timeoutMs: 15_000, maxBytes: 3 * 1024 * 1024 }), signal, 3);
         if (job.providerOrigin !== await this.identity()) throw new Error(jobMessages.accountChangedAfterSubmit);
         if (task.task_id !== taskId || task.model && task.model !== job.model.modelId) throw new Error(jobMessages.resultUnreadable);
         return task;

@@ -1534,6 +1534,34 @@ test('switching OpenDesign account during reference upload aborts before submitt
     /Account changed; the queued task was not submitted/,
   );
   assert.equal(submitPosts, 0, 'paid POST must never fire after an account switch during upload');
+
+  // Switching account inside the `submitting` progress callback must also abort before dispatching POST.
+  await writeFile(path.join(account.root, 'session.json'), JSON.stringify({ id: 'sess-account-A' }));
+  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({
+    profiles: { prod: { user: { id: 'user-A' }, controlKey: 'key-A', controlKeyId: 'key-id-A', runtimeKey: 'rt-A' } },
+  }));
+  await assert.rejects(
+    account.generate(
+      job,
+      store.directory,
+      new AbortController().signal,
+      async phase => {
+        if (phase === 'submitting') {
+          await writeFile(path.join(account.root, 'session.json'), JSON.stringify({ id: 'sess-account-C' }));
+          await writeFile(path.join(account.home, 'config.json'), JSON.stringify({
+            profiles: { prod: { user: { id: 'user-C' }, controlKey: 'key-C', controlKeyId: 'key-id-C', runtimeKey: 'rt-C' } },
+          }));
+        }
+      },
+    ),
+    /Account changed; the queued task was not submitted/,
+  );
+  assert.equal(submitPosts, 0, 'paid POST must never fire after an account switch during submitting');
+  await assert.rejects(
+    account.generate({ ...job, providerOrigin: 'sess-account-C', parameters: { images: ['raw-asset-id'] } }, store.directory, new AbortController().signal, async () => {}),
+    /pinned references/,
+  );
+  assert.equal(submitPosts, 0, 'raw parameters.images must be rejected on account route');
 }));
 
 test('production account media discovery fetches /api/v1/media/models directly via HTTP and forwards native model parameters without CLI allowlist blocking', t => fixture(async store => {
