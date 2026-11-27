@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { appendFile, link, mkdir, mkdtemp, open, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { appendFile, link, mkdir, mkdtemp, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { uptime } from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
@@ -16,35 +17,71 @@ export const DEFAULT_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 export const DEFAULT_HEALTHY_AFTER_MS = 15_000;
 export const DEFAULT_MAX_CRASHES = 2;
 export const DEFAULT_INSTALL_LOCK_TIMEOUT_MS = 5_000;
+export const DEFAULT_INSTALL_LOCK_STALE_MS = 15 * 60_000;
+const CORRUPT_LOCK_GRACE_MS = 2_000;
+const REBOOT_CLOCK_SKEW_MS = 60_000;
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+function parseNonNegativeMs(explicit, envValue, fallback) {
+  if (typeof explicit === 'number' && Number.isFinite(explicit) && explicit >= 0) return explicit;
+  if (typeof envValue === 'string' && envValue.trim() !== '') {
+    const parsed = Number(envValue);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  return fallback;
+}
 
 function parseLockOwner(raw) {
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;
-  if (/^\d+$/.test(trimmed)) return { pid: Number(trimmed), token: null };
+  if (/^\d+$/.test(trimmed)) {
+    const pid = Number(trimmed);
+    return Number.isSafeInteger(pid) && pid > 0 ? { pid, token: null, createdAt: null } : null;
+  }
   try {
     const parsed = JSON.parse(trimmed);
     const pid = typeof parsed === 'number' ? parsed : parsed?.pid;
-    return Number.isSafeInteger(pid) ? { pid, token: parsed?.token ?? null } : null;
+    if (!Number.isSafeInteger(pid) || pid <= 0) return null;
+    const token = typeof parsed?.token === 'string' && parsed.token.trim() ? parsed.token : null;
+    const createdAt = typeof parsed?.createdAt === 'number' && Number.isFinite(parsed.createdAt) ? parsed.createdAt : null;
+    return { pid, token, createdAt };
   } catch {
     return null;
   }
 }
 
+function isLockStale(owner, lockStat, now, maxAgeMs) {
+  if (!owner) {
+    return now - lockStat.mtimeMs >= Math.min(maxAgeMs, CORRUPT_LOCK_GRACE_MS);
+  }
+  if (!processAlive(owner.pid)) return true;
+  const lockCreatedAt = owner.createdAt !== null ? Math.min(owner.createdAt, lockStat.mtimeMs) : lockStat.mtimeMs;
+  if (now - lockCreatedAt >= maxAgeMs) return true;
+  const systemUptimeMs = uptime() * 1000;
+  if (Number.isFinite(systemUptimeMs) && systemUptimeMs > 0) {
+    const bootTimeMs = now - systemUptimeMs;
+    if (lockCreatedAt < bootTimeMs - REBOOT_CLOCK_SKEW_MS) return true;
+  }
+  return false;
+}
+
 /**
- * Acquire `install.lock` with dead-PID reclamation and a bounded retry wait.
- * Reclaims locks left behind by crashed/interrupted setup runs while never stealing
- * a live owner's lock.
+ * Acquire `install.lock` with stale-lock reclamation and a bounded retry wait.
+ * Reclaims locks when:
+ * - the recorded owning PID has exited,
+ * - the lock predates the current OS boot (PID reuse after reboot),
+ * - the lock exceeds `staleMs` (default 15 minutes, matching `withCacheLock`), or
+ * - the lock file is empty/truncated/corrupt past a brief grace window.
  */
-export async function withInstallLock(filename, work, { timeoutMs } = {}) {
-  const configured = Number(process.env.OPENGAME_INSTALL_LOCK_TIMEOUT_MS);
-  const waitMs = Number.isFinite(timeoutMs) ? timeoutMs : (Number.isFinite(configured) && configured >= 0 ? configured : DEFAULT_INSTALL_LOCK_TIMEOUT_MS);
+export async function withInstallLock(filename, work, { timeoutMs, staleMs } = {}) {
+  const waitMs = parseNonNegativeMs(timeoutMs, process.env.OPENGAME_INSTALL_LOCK_TIMEOUT_MS, DEFAULT_INSTALL_LOCK_TIMEOUT_MS);
+  const maxAgeMs = parseNonNegativeMs(staleMs, process.env.OPENGAME_INSTALL_LOCK_STALE_MS, DEFAULT_INSTALL_LOCK_STALE_MS);
   await mkdir(path.dirname(filename), { recursive: true });
   const token = randomUUID();
   const candidate = filename + '.' + token;
-  await writeFile(candidate, JSON.stringify({ pid: process.pid, token }), { mode: 0o600 });
+  await writeFile(candidate, JSON.stringify({ pid: process.pid, token, createdAt: Date.now() }), { mode: 0o600 });
   const deadline = Date.now() + waitMs;
   try {
     for (;;) {
@@ -54,25 +91,33 @@ export async function withInstallLock(filename, work, { timeoutMs } = {}) {
       } catch (error) {
         if (error.code !== 'EEXIST') throw error;
       }
-      const raw = await readFile(filename, 'utf8').catch(error => {
-        if (error.code === 'ENOENT') return null;
-        throw error;
-      });
-      if (raw === null) continue;
+      const [raw, lockStat] = await Promise.all([
+        readFile(filename, 'utf8').catch(error => (error.code === 'ENOENT' ? null : Promise.reject(error))),
+        stat(filename).catch(error => (error.code === 'ENOENT' ? null : Promise.reject(error))),
+      ]);
+      if (raw === null || lockStat === null) continue;
       const owner = parseLockOwner(raw);
-      if (owner?.pid && !processAlive(owner.pid)) {
+      if (isLockStale(owner, lockStat, Date.now(), maxAgeMs)) {
         await withCacheLock(filename + '.reclaim', async () => {
-          const currentRaw = await readFile(filename, 'utf8').catch(error => {
-            if (error.code === 'ENOENT') return null;
-            throw error;
-          });
-          if (currentRaw === raw) await rm(filename, { force: true });
+          const [currentRaw, currentStat] = await Promise.all([
+            readFile(filename, 'utf8').catch(error => (error.code === 'ENOENT' ? null : Promise.reject(error))),
+            stat(filename).catch(error => (error.code === 'ENOENT' ? null : Promise.reject(error))),
+          ]);
+          if (currentRaw === raw && currentStat && currentStat.ino === lockStat.ino && currentStat.mtimeMs === lockStat.mtimeMs) {
+            await rm(filename, { force: true });
+          }
         });
         continue;
       }
       if (Date.now() >= deadline) {
+        const ownerDesc = owner?.pid ? `pid ${owner.pid}` : 'unknown owner';
+        const staleLabel = maxAgeMs >= 60_000 ? `${Math.round(maxAgeMs / 60_000)}m` : `${Math.max(1, Math.round(maxAgeMs / 1000))}s`;
         throw Object.assign(
-          new Error(`Another OpenGame operation is using ${filename} (pid ${owner?.pid ?? 'unknown'}). Retry after it finishes.`),
+          new Error(
+            `Another OpenGame operation is using ${filename} (${ownerDesc}). `
+            + `Retry after it finishes; stale locks are reclaimed automatically after the owning process exits or after ${staleLabel}, `
+            + `or confirm no OpenGame setup/update is running and remove ${filename} manually.`,
+          ),
           { code: 'INSTALL_LOCK_BUSY', lockFile: filename, ownerPid: owner?.pid ?? null },
         );
       }

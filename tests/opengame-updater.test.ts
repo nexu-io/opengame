@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { existsSync } from 'node:fs';
-import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { spawn, spawnSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
+import { tmpdir, uptime } from 'node:os';
 import path from 'node:path';
 import { packageOpenGame } from '../scripts/package-opengame.mjs';
 import { setup, diagnose, callInstalled, update } from '../scripts/opengame-launcher.mjs';
@@ -351,7 +351,7 @@ await writeFile(file, JSON.stringify(pkg, null, 2));
 
     // 10a. Sustained live install.lock contention during crash path logs a skip instead of crashing the launcher with an uncaught throw.
     const installLockFile = path.join(home, 'install.lock');
-    await writeFile(installLockFile, JSON.stringify({ pid: process.pid, token: 'held-live' }), { mode: 0o600 });
+    await writeFile(installLockFile, JSON.stringify({ pid: process.pid, token: 'held-live', createdAt: Date.now() }), { mode: 0o600 });
     try {
       const contendedCrash = await new Promise<{ code: number | null; stderr: string }>((resolve, reject) => {
         const child = spawn(process.execPath, [path.join(home, 'run-mcp.mjs')], {
@@ -554,4 +554,73 @@ test('unpinned host platforms (for example Linux CI) fall back to system/env nat
     assert.deepEqual(status.components, []);
     assert.equal(status.capabilities.capture, true);
   });
+});
+
+test('withInstallLock reclaims expired, pre-boot, corrupt, and dead-PID locks while guiding manual cleanup on live contention', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'opengame-lock-stale-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const lockFile = path.join(dir, 'install.lock');
+
+  // 1. Live reused PID in JSON lock whose createdAt exceeds staleMs is reclaimed automatically.
+  await writeFile(lockFile, JSON.stringify({ pid: process.pid, token: 'reused-pid', createdAt: Date.now() - 20 * 60_000 }));
+  const expiredJson = await withInstallLock(lockFile, async () => {
+    const active = JSON.parse(await readFile(lockFile, 'utf8'));
+    assert.equal(active.pid, process.pid);
+    assert.notEqual(active.token, 'reused-pid');
+    assert.equal(typeof active.createdAt, 'number');
+    return 'reclaimed-expired-json';
+  }, { timeoutMs: 200 });
+  assert.equal(expiredJson, 'reclaimed-expired-json');
+  assert.equal(existsSync(lockFile), false);
+
+  // 2. Legacy bare-PID lock with live PID whose mtime exceeds staleMs is reclaimed automatically.
+  const oldDate = new Date(Date.now() - 20 * 60_000);
+  await writeFile(lockFile, String(process.pid));
+  await utimes(lockFile, oldDate, oldDate);
+  const expiredLegacy = await withInstallLock(lockFile, async () => 'reclaimed-expired-legacy', { timeoutMs: 200 });
+  assert.equal(expiredLegacy, 'reclaimed-expired-legacy');
+
+  // 3. Token-less JSON lock with live PID past max age is reclaimed automatically.
+  await writeFile(lockFile, JSON.stringify({ pid: process.pid }));
+  await utimes(lockFile, oldDate, oldDate);
+  const expiredTokenless = await withInstallLock(lockFile, async () => 'reclaimed-expired-tokenless', { timeoutMs: 200 });
+  assert.equal(expiredTokenless, 'reclaimed-expired-tokenless');
+
+  // 4. Pre-boot lock with live PID is reclaimed even when staleMs is larger than system uptime.
+  const preBootTs = Date.now() - Math.round(uptime() * 1000) - 120_000;
+  await writeFile(lockFile, JSON.stringify({ pid: process.pid, token: 'before-reboot', createdAt: preBootTs }));
+  const preBoot = await withInstallLock(lockFile, async () => 'reclaimed-pre-boot', {
+    timeoutMs: 200,
+    staleMs: 365 * 24 * 60 * 60_000,
+  });
+  assert.equal(preBoot, 'reclaimed-pre-boot');
+
+  // 5. Empty and truncated/corrupt lock files are reclaimed after the brief grace window.
+  const corruptDate = new Date(Date.now() - 5_000);
+  await writeFile(lockFile, '');
+  await utimes(lockFile, corruptDate, corruptDate);
+  assert.equal(await withInstallLock(lockFile, async () => 'reclaimed-empty', { timeoutMs: 200 }), 'reclaimed-empty');
+
+  await writeFile(lockFile, '{"pid":');
+  await utimes(lockFile, corruptDate, corruptDate);
+  assert.equal(await withInstallLock(lockFile, async () => 'reclaimed-truncated', { timeoutMs: 200 }), 'reclaimed-truncated');
+
+  // 6. Fresh live lock is NEVER stolen and timeout error explains both auto-reclaim and manual removal.
+  const liveContent = JSON.stringify({ pid: process.pid, token: 'active-owner', createdAt: Date.now() });
+  await writeFile(lockFile, liveContent);
+  try {
+    await assert.rejects(
+      () => withInstallLock(lockFile, async () => 'should-not-run', { timeoutMs: 120 }),
+      (error: any) => {
+        assert.equal(error.code, 'INSTALL_LOCK_BUSY');
+        assert.match(error.message, new RegExp(`pid ${process.pid}`));
+        assert.match(error.message, /after 15m/);
+        assert.match(error.message, /remove .*install\.lock manually/);
+        return true;
+      },
+    );
+    assert.equal(await readFile(lockFile, 'utf8'), liveContent, 'Fresh live lock must remain untouched after timeout');
+  } finally {
+    await rm(lockFile, { force: true });
+  }
 });
