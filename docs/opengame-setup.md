@@ -33,6 +33,8 @@ npm ci
 npm run build:studio
 ```
 
+If `npm ci` stalls after the dependency tree prints on a machine with pnpm installed, `less@4.5.1`'s postinstall has treated this checkout as a monorepo (it only checks that `node_modules/less/scripts/../../../package.json` exists, which is this repo's own manifest) and is downloading a Playwright Chromium (162 MiB) from `cdn.playwright.dev`. Stop it and rerun that step as `CI=1 npm ci` (`set CI=1 && npm ci` in Windows `cmd`); `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD` does not help, because the script shells out to `pnpm exec playwright install`.
+
 The shallow clone includes catalog metadata, covers, Tidebreaker, and the featured showcase templates. The full catalog of additional templates is pinned by SHA-256 in `templates/game-downloads.json` and downloaded on demand from immutable R2 bundles into your workspace cache the first time you play or remix a title. Any remaining in-repo template with Git LFS assets also fetches on demand (or manually via `git lfs pull --include="templates/games/<game-id>/**" --exclude=""`). Do not bulk-download unselected templates during setup; fetch a game's assets only when the user plays or remixes it. Optional videos have separate [storage instructions](repository-storage.md).
 
 ## Start a separate workspace
