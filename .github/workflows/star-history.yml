@@ -2,7 +2,7 @@ name: Update README star history
 
 on:
   schedule:
-    - cron: '17 0 * * *' # 08:17 in Shanghai
+    - cron: '17 */6 * * *' # Every 6 hours (02:17, 08:17, 14:17, 20:17 in Shanghai)
   workflow_dispatch:
 
 permissions:
