@@ -2240,6 +2240,7 @@ export function ExecutionTimeline({
                         <ArtifactDeliverableCard
                           key={artifact.id}
                           artifact={artifact}
+                          chatId={chat.id}
                           layout={useHeroSingleLayout ? 'hero' : 'default'}
                           isActiveInViewer={Boolean(activeViewerArtifactId && activeViewerArtifactId === artifact.id)}
                           onOpenArtifactId={onOpenArtifactId}

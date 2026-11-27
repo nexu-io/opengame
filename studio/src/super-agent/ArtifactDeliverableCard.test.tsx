@@ -4,7 +4,9 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SuperAgentArtifact } from '../../../shared/super-agent';
 import { I18nProvider } from '../i18n/I18n';
+import { bundledGames } from '../motion/game/gameCatalog';
 import { ArtifactDeliverableCard, SupportingAssetRow } from './ArtifactDeliverableCard';
+import { gamePublishActions, gamePublishSessionFor, resetGamePublishStore } from './gamePublish/gamePublishStore';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -16,6 +18,7 @@ async function flush() {
 }
 
 afterEach(() => {
+  resetGamePublishStore();
   document.body.innerHTML = '';
   vi.restoreAllMocks();
 });
@@ -37,6 +40,7 @@ function renderCard(artifact: SuperAgentArtifact, handlers: Partial<Parameters<t
       <I18nProvider>
         <ArtifactDeliverableCard
           artifact={artifact}
+          chatId={handlers.chatId}
           layout={handlers.layout}
           isActiveInViewer={handlers.isActiveInViewer}
           onOpenArtifactId={onOpenArtifactId}
@@ -96,6 +100,7 @@ describe('ArtifactDeliverableCard', () => {
 
     const text = container.querySelector('.om-sa-deliverable-actions')?.textContent ?? '';
     expect(text).toContain('Play');
+    expect(text).toContain('Publish');
     expect(text).toContain('Share');
     expect(text).toContain('Export ZIP');
 
@@ -385,5 +390,101 @@ describe('ArtifactDeliverableCard', () => {
     act(() => root.unmount());
     expect(pauseSpy).toHaveBeenCalled();
     container.remove();
+  });
+
+  it('opens and toggles the game publish wizard from the game deliverable card, and hides Publish on bundled templates', async () => {
+    const gameArtifact: SuperAgentArtifact = {
+      id: 'game:gold-jar',
+      kind: 'game-project',
+      title: 'Gold Jar',
+      subtitle: 'casual · Playable ad',
+      playableAd: true,
+      scenario: 'portrait',
+      projectId: 'gold-jar',
+      entry: 'index.html',
+      url: '/motion-api/games/gold-jar/play/index.html',
+      createdAt: 1,
+      updatedAt: 2,
+    };
+
+    const onOpenArtifactId = vi.fn();
+    const { container, root } = renderCard(gameArtifact, {
+      chatId: 'chat-game-1',
+      layout: 'hero',
+      isActiveInViewer: false,
+      onOpenArtifactId,
+    });
+    await flush();
+
+    const publishBtn = () => container.querySelector<HTMLButtonElement>('.om-sa-deliverable-publish-btn');
+    expect(publishBtn()).toBeTruthy();
+    expect(publishBtn()?.textContent).toContain('Publish');
+    expect(publishBtn()?.getAttribute('aria-pressed')).toBe('false');
+    expect(publishBtn()?.hasAttribute('data-active')).toBe(false);
+
+    // Clicking Publish when viewer is closed opens the publish session and opens the game artifact in the viewer
+    await act(async () => publishBtn()!.click());
+    expect(onOpenArtifactId).toHaveBeenCalledWith('game:gold-jar');
+    expect(gamePublishSessionFor('game:gold-jar')).toMatchObject({
+      open: true,
+      chatId: 'chat-game-1',
+      gameId: 'gold-jar',
+      gameTitle: 'Gold Jar',
+      orientation: 'portrait',
+      link: { targetId: 'gold-jar', filePath: 'index.html', title: 'Gold Jar' },
+    });
+
+    // When viewer is still closed (isActiveInViewer=false), clicking Publish keeps the session open and re-opens the viewer
+    onOpenArtifactId.mockClear();
+    await act(async () => publishBtn()!.click());
+    expect(onOpenArtifactId).toHaveBeenCalledWith('game:gold-jar');
+    expect(gamePublishSessionFor('game:gold-jar')?.open).toBe(true);
+
+    // Once active in viewer with publish session open, button reflects active state and toggles the panel closed on click
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <ArtifactDeliverableCard
+            artifact={gameArtifact}
+            chatId="chat-game-1"
+            layout="hero"
+            isActiveInViewer
+            onOpenArtifactId={onOpenArtifactId}
+          />
+        </I18nProvider>,
+      );
+    });
+    expect(publishBtn()?.getAttribute('aria-pressed')).toBe('true');
+    expect(publishBtn()?.hasAttribute('data-active')).toBe(true);
+
+    onOpenArtifactId.mockClear();
+    await act(async () => publishBtn()!.click());
+    expect(gamePublishSessionFor('game:gold-jar')?.open).toBe(false);
+    expect(publishBtn()?.getAttribute('aria-pressed')).toBe('false');
+    expect(onOpenArtifactId).not.toHaveBeenCalled();
+
+    // Closing or reopening externally via store keeps the card button synced
+    await act(async () => gamePublishActions.reopen('game:gold-jar'));
+    expect(publishBtn()?.getAttribute('aria-pressed')).toBe('true');
+
+    act(() => root.unmount());
+    container.remove();
+
+    // Bundled template games are trial-only and must not expose Publish
+    const bundled = bundledGames[0];
+    if (bundled) {
+      const templateRender = renderCard({
+        id: `game:${bundled.id}`,
+        kind: 'game-project',
+        title: bundled.title,
+        projectId: bundled.id,
+        url: `/motion-api/games/${bundled.id}/play/index.html`,
+        createdAt: 1,
+        updatedAt: 2,
+      }, { layout: 'hero' });
+      expect(templateRender.container.querySelector('.om-sa-deliverable-publish-btn')).toBeNull();
+      act(() => templateRender.root.unmount());
+      templateRender.container.remove();
+    }
   });
 });

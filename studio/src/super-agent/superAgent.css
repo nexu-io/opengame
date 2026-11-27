@@ -8179,6 +8179,18 @@
   min-height: 0;
 }
 
+.om-sa-deliverable-card[data-kind='game-project'][data-layout='hero'] .om-sa-deliverable-hero-footer,
+.om-sa-deliverable-card[data-kind='game-project'][data-layout='hero'] .om-sa-deliverable-hero-compact {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--motion-space-10);
+}
+
+.om-sa-deliverable-card[data-kind='game-project'][data-layout='hero'] .om-sa-deliverable-main {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
 .om-sa-deliverable-card[data-layout='hero'] .om-sa-deliverable-main:hover {
   background: transparent;
 }

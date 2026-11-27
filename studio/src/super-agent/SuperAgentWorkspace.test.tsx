@@ -8746,3 +8746,137 @@ it('keeps the game building overlay mounted while a chat is waiting on approval'
   }, { timeout: 3000 });
   expect(document.querySelector(`.om-sa-viewer iframe[title="${gameArtifact.title}"]`)).toBeNull();
 });
+
+it('opens the Artifact Viewer publish panel directly from the game deliverable hero card and keeps Publish toggle synced', async () => {
+  clearSuperAgentCache();
+  resetGamePublishStore();
+  const chatId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const gameId = 'gold-jar-publish-card';
+  const gameArtifact: SuperAgentChat['artifacts'][number] = {
+    id: `game:${gameId}`,
+    kind: 'game-project',
+    title: 'Gold Jar',
+    subtitle: 'casual · Playable ad',
+    playableAd: true,
+    scenario: 'portrait',
+    projectId: gameId,
+    entry: 'index.html',
+    url: `/motion-api/games/${gameId}/play/index.html`,
+    createdAt: 1002,
+    updatedAt: 1002,
+  };
+  const chat: SuperAgentChat = {
+    ...sampleChat,
+    id: chatId,
+    title: 'Gold Jar',
+    intent: 'game',
+    state: 'idle',
+    approvals: [],
+    messages: [
+      { id: 'm1', role: 'user', text: 'Make a vertical pin-pulling gold jar game', createdAt: 1001 },
+      {
+        id: 'm2',
+        role: 'tool',
+        text: 'Created game',
+        createdAt: 1002,
+        toolEvent: {
+          callId: 'c1',
+          tool: 'openmotion_game_create',
+          label: 'Create game',
+          status: 'done',
+          artifactId: gameArtifact.id,
+        },
+      },
+      { id: 'm3', role: 'assistant', text: 'Gold Jar is ready.', createdAt: 1003 },
+    ],
+    artifacts: [gameArtifact],
+    activeArtifactId: gameArtifact.id,
+  };
+
+  const baseFetch = globalThis.fetch;
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const json = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+    if (url === `${SUPER_AGENT_API}/chats` && (!init?.method || init.method === 'GET')) {
+      return json({ conversations: [summarizeSuperAgentChat(chat)] });
+    }
+    if (url === `${SUPER_AGENT_API}/chats/${chatId}` && (!init?.method || init.method === 'GET')) {
+      return json({ conversation: chat });
+    }
+    if (url === `${SUPER_AGENT_API}/chats/${chatId}` && init?.method === 'PATCH') {
+      return json({ conversation: chat });
+    }
+    if (url === '/motion-api/games') {
+      return json({
+        games: [
+          {
+            id: gameId,
+            title: 'Gold Jar',
+            description: 'Pin-pulling game',
+            genre: 'casual',
+            orientation: 'portrait',
+            multiplayer: false,
+            maxPlayers: 1,
+            status: 'ready',
+            source: 'mine',
+            playUrl: `/motion-api/games/${gameId}/play/index.html`,
+            plays: 0,
+            likes: 0,
+            dislikes: 0,
+            createdAt: '2026-11-27T00:00:00.000Z',
+            updatedAt: '2026-11-27T00:00:00.000Z',
+          },
+        ],
+      });
+    }
+    if (url === '/motion-api/settings/account') {
+      return json({ state: 'signed-out' });
+    }
+    return baseFetch(input, init);
+  }) as typeof fetch;
+
+  await act(async () => {
+    root.render(
+      <I18nProvider initialLocale="en">
+        <SuperAgentWorkspace
+          active
+          chatId={chatId}
+          onChatIdChange={vi.fn()}
+          onOpenDesignProject={vi.fn()}
+          onOpenMotionProject={vi.fn()}
+          onOpenAsset={vi.fn()}
+          onOpenBrandKit={vi.fn()}
+          onOpenAgentSettings={vi.fn()}
+          onOpenMcp={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+  });
+  await flush();
+
+  const cardPublishBtn = () => container.querySelector<HTMLButtonElement>('.om-sa-deliverable-card[data-layout="hero"] .om-sa-deliverable-publish-btn');
+  const viewerPublishBtn = () => container.querySelector<HTMLButtonElement>('.om-sa-viewer .om-sa-publish-trigger');
+  const publishPanel = () => container.querySelector('aside[aria-label="Publish panel"]');
+
+  await vi.waitFor(() => expect(cardPublishBtn()).toBeTruthy());
+  expect(container.querySelector('.om-sa-viewer')).toBeNull();
+  expect(publishPanel()).toBeNull();
+  expect(cardPublishBtn()?.getAttribute('aria-pressed')).toBe('false');
+
+  // Click Publish on the hero deliverable card -> opens viewer AND publish panel immediately
+  await act(async () => cardPublishBtn()!.click());
+  await vi.waitFor(async () => {
+    await flush();
+    expect(publishPanel()).toBeTruthy();
+  }, { timeout: 3000 });
+  expect(publishPanel()?.querySelector('[role="radio"][aria-label="WeChat Mini Game"]')).toBeTruthy();
+  expect(cardPublishBtn()?.getAttribute('aria-pressed')).toBe('true');
+  expect(viewerPublishBtn()?.getAttribute('aria-pressed')).toBe('true');
+
+  // Click Publish on the card again -> toggles publish panel closed, keeping both buttons in sync
+  await act(async () => cardPublishBtn()!.click());
+  expect(publishPanel()).toBeNull();
+  expect(cardPublishBtn()?.getAttribute('aria-pressed')).toBe('false');
+  expect(viewerPublishBtn()?.getAttribute('aria-pressed')).toBe('false');
+});
