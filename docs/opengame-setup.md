@@ -4,7 +4,7 @@ This guide installs the `nexu-io/opengame` checkout and connects its game tools 
 
 ## Prerequisites
 
-- Git, Git LFS, npm and Node.js **26.11.1** (the CI version). `package.json` declares Node.js 22.18.0 or later.
+- Git, Git LFS, npm and Node.js **26.11.1**, the version pinned in CI. Use this version for `npm ci` and the Studio build. Some locked dependencies need a newer Node.js version than the application package minimum of 22.18.0.
 - A local agent with stdio MCP support for AI-assisted creation. Browsing and playing bundled games does not require an agent connection.
 - Chrome/Chromium for automated game screenshots and play-tests. Video trailers additionally require FFmpeg/ffprobe and the prepared export runtime.
 - Media-provider credentials or an OpenDesign account only when using the corresponding generation or hosting services.

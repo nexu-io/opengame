@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="package.json"><img src="docs/readme/badges/node.svg" alt="Node.js 22.18+"></a>
+  <a href="docs/opengame-setup.md#prerequisites"><img src="docs/readme/badges/node.svg" alt="Node.js 26.11.1"></a>
   <a href="LICENSE"><img src="docs/readme/badges/license.svg" alt="Apache 2.0 license"></a>
   <a href="https://github.com/nexu-io/open-design"><img src="docs/readme/badges/built-by-opendesign.svg" alt="Built by OpenDesign"></a>
 </p>
@@ -62,7 +62,7 @@ npx skills add https://github.com/nexu-io/opengame/tree/skills --skill opengame
 
 ### 3. Run OpenGame Studio locally from source
 
-Requires **Git**, **Git LFS**, **npm**, and **Node.js 22.18+** (CI pins Node.js 26.11.1). Browse the catalog immediately after startup. Playing or remixing a template downloads its assets on first use. Tidebreaker works offline.
+Requires **Git**, **Git LFS**, **npm**, and **Node.js 26.11.1**, the version pinned in CI. Browse the catalog immediately after startup. Playing or remixing a template downloads its assets on first use. Tidebreaker works offline.
 
 ```sh
 git -c filter.lfs.process= -c filter.lfs.smudge= -c filter.lfs.required=false clone --depth 1 --single-branch --branch main https://github.com/nexu-io/opengame.git
