@@ -176,6 +176,33 @@ export function isHostAllowed(hostHeader: string | undefined, env: NodeJS.Proces
   }
 }
 
+/**
+ * Accept a browser write when its Origin names this server or an explicitly
+ * allowed hostname.
+ *
+ * Same-origin comparison alone is not enough behind a reverse proxy or tunnel:
+ * those forward the browser's Origin unchanged while rewriting Host to the
+ * loopback listener, which made every mutating Studio request fail with 403
+ * even though the deployment had declared its public hostname through
+ * MOTION_ALLOWED_HOSTS / MOTION_PUBLIC_ORIGIN. Requests without an Origin
+ * header are non-browser callers and stay allowed, as before.
+ */
+export function isTrustedMutationOrigin(
+  originHeader: string | undefined,
+  hostHeader: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (!originHeader) return true;
+  try {
+    const origin = new URL(originHeader);
+    if (origin.protocol !== 'http:' && origin.protocol !== 'https:') return false;
+    if (hostHeader && origin.host.toLowerCase() === hostHeader.toLowerCase()) return true;
+    return allowedHosts(env).has(origin.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 function sanitizeBridgeAgents(rawList: unknown): LocalAgent[] {
   if (!Array.isArray(rawList)) return [];
   const results: LocalAgent[] = [];

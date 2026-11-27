@@ -6,7 +6,7 @@ import { transcriptsFor, closeTranscripts } from './gateway/transcription.ts';
 import { projectArchiveHttp } from './gateway/project-archive-http.ts';
 import { modelMetadata } from './gateway/model-metadata.ts';
 import { assetConversations } from './gateway/asset-chat.ts';
-import { agentRuntimesFor, isHostAllowed, isLocalDirectEnabled, resolvePublicOrigin } from './gateway/agent-runtimes.ts';
+import { agentRuntimesFor, isHostAllowed, isLocalDirectEnabled, isTrustedMutationOrigin, resolvePublicOrigin } from './gateway/agent-runtimes.ts';
 import { renderBridgeInstallPowerShellScript, renderBridgeInstallShellScript, renderStandaloneBridgeScript } from './gateway/agent-bridge-script.ts';
 import { mcpHttpFor } from './gateway/mcp-http.ts';
 import { contentBatchesFor } from './gateway/content-batch.ts';
@@ -495,7 +495,7 @@ export async function handler(req: IncomingMessage, res: ServerResponse, store =
       /^\/(?:motion|design)-api\/triggers\/[a-f0-9-]{36}\/fire$/.test(rawPath)
       && ((typeof req.headers.authorization === 'string' && /^Bearer\s+/i.test(req.headers.authorization))
         || typeof req.headers['x-openmotion-signature'] === 'string');
-    if (!['GET', 'HEAD'].includes(req.method || '') && !isBridgeDaemonRoute && !isTriggerWebhookRoute && (!req.headers.origin || new URL(req.headers.origin).host !== host)) {
+    if (!['GET', 'HEAD'].includes(req.method || '') && !isBridgeDaemonRoute && !isTriggerWebhookRoute && !isTrustedMutationOrigin(req.headers.origin, host)) {
       return json(res, 403, { error: '仅允许当前预览页面发起修改' });
     }
     const projectHeader = req.headers['x-opendesign-project-id'];
