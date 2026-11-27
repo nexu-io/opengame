@@ -72,6 +72,8 @@ async function safeFile(root: string, relative: string, writing = false) {
   return current;
 }
 
+type InlineGameScript = { source: string; sourceType: 'script' | 'module' };
+
 async function gameEntryDependencies(html: string, dir: string, game: GameCard, runtimeRoot: string) {
   // Resolve the same installed DOM parser used by the Hyperframes source tools.
   const runtimeRequire = createRequire(path.join(runtimeRoot, 'package.json'));
@@ -84,13 +86,14 @@ async function gameEntryDependencies(html: string, dir: string, game: GameCard, 
   const base = (authoredBase && URL.parse(authoredBase, entry)) || entry;
   const errors = new Set<string>();
   const entryScripts: string[] = [];
-  const inlineScripts: string[] = [];
+  const inlineScripts: InlineGameScript[] = [];
 
   for (const element of document.querySelectorAll('script:not([src])')) {
     if (element.closest('template, noscript')) continue;
     const type = element.getAttribute('type')?.trim().toLowerCase();
     if (type && type !== 'module' && !/^(?:text|application)\/(?:x-)?(?:java|ecma)script(?:\s*;|$)/.test(type)) continue;
-    if (element.textContent?.trim()) inlineScripts.push(element.textContent);
+    if (type !== 'module' && element.hasAttribute('nomodule')) continue;
+    if (element.textContent?.trim()) inlineScripts.push({ source: element.textContent, sourceType: type === 'module' ? 'module' : 'script' });
   }
 
   for (const element of document.querySelectorAll('script[src], link[href]')) {
@@ -135,11 +138,12 @@ async function gameEntryDependencies(html: string, dir: string, game: GameCard, 
   return { errors: [...errors], entryScripts, inlineScripts };
 }
 
-function extractStaticModuleSpecifiers(source: string): { specifiers: string[]; syntaxError?: string } {
+function extractStaticModuleSpecifiers(source: string, sourceType?: 'script' | 'module'): { specifiers: string[]; syntaxError?: string } {
   let ast: any;
   try {
-    ast = parseModule(source, { ecmaVersion: 'latest', sourceType: 'module' });
+    ast = parseModule(source, { ecmaVersion: 'latest', sourceType: sourceType ?? 'module' });
   } catch (error) {
+    if (sourceType) return { specifiers: [], syntaxError: (error as Error).message };
     try {
       ast = parseModule(source, { ecmaVersion: 'latest', sourceType: 'script' });
     } catch {
@@ -180,7 +184,7 @@ function findDisallowedHostDiagnostics(relative: string, source: string, allowed
 async function inspectLocalModuleGraph(
   dir: string,
   entryScripts: string[],
-  inlineScripts: string[],
+  inlineScripts: InlineGameScript[],
   allowedHosts: string[],
 ): Promise<{ diagnostics: { path: string; message: string }[]; importsLogic: boolean; visitedModules: string[]; moduleSources: Map<string, string>; importsThree: boolean }> {
   const diagnostics: { path: string; message: string }[] = [];
@@ -223,7 +227,11 @@ async function inspectLocalModuleGraph(
   };
 
   for (const script of inlineScripts) {
-    const { specifiers } = extractStaticModuleSpecifiers(script);
+    const { specifiers, syntaxError } = extractStaticModuleSpecifiers(script.source, script.sourceType);
+    if (syntaxError) {
+      diagnostics.push({ path: 'index.html', message: `JavaScript syntax error: ${syntaxError}` });
+      continue;
+    }
     for (const specifier of specifiers) await enqueueSpecifier('index.html', specifier);
   }
   for (const entry of entryScripts) {
@@ -1295,7 +1303,7 @@ server.listen(port, '127.0.0.1', () => {
     for(const file of ['design/plan.md','design/assets.csv','design/verification.md'])try{await this.read(id,file);}catch(error){warnings.push(`Missing or unreadable ${file}: ${(error as Error).message}`);}
     if(!game.cover) warnings.push('No cover image is set; use openmotion_game_capture_cover.');
     let entryScripts: string[] = [];
-    let inlineScripts: string[] = [];
+    let inlineScripts: InlineGameScript[] = [];
     for (const relative of ['index.html','client.js']) try {
       const source = (await this.read(id, relative)).content;
       if (relative === 'index.html') {

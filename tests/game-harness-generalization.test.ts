@@ -200,6 +200,28 @@ test('H1: adaptive validation supports modular solo ESM games without logic.js a
     assert.ok(broken.diagnostics.some(d => d.path === 'src/world.js' && /evil\.example/.test(d.message)));
   }));
 
+test('H1: inline script syntax blocks publication while inert script data remains valid', () =>
+  withWorkspace(async (_workspace, service) => {
+    const { game } = await service.create({ prompt: 'Inline game', multiplayer: false });
+    await service.write(game.id, [{ path: 'index.html', content: '<canvas></canvas><script>const score = ;</script>' }]);
+    const broken = await service.validate(game.id);
+    assert.equal(broken.passed, false);
+    assert.ok(broken.diagnostics.some(row => row.path === 'index.html' && /JavaScript syntax error/.test(row.message)));
+    await assert.rejects(service.publish(game.id), /Game validation failed/);
+
+    await service.write(game.id, [{ path: 'index.html', content: [
+      '<canvas></canvas>',
+      '<script type="application/json">{"label":"Game data"}</script>',
+      '<template><script>const invalid = ;</script></template>',
+      '<noscript><script>const invalid = ;</script></noscript>',
+      '<script nomodule>const invalid = ;</script>',
+      '<script>with ({ score: 1 }) { score; }</script>',
+      '<script type="module">await Promise.resolve(); export const score = 1;</script>',
+    ].join('') }]);
+    assert.deepEqual((await service.validate(game.id)).diagnostics, []);
+    assert.equal((await service.publish(game.id)).game.status, 'published');
+  }));
+
 test('H2: validateGameScript supports screenshot & action inputs and gamePlaytestAssertions flattens runSelfTests & sandbox phases', () => {
   const script = validateGameScript([
     { type: 'screenshot', label: 'entry_ready' },
