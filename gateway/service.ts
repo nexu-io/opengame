@@ -691,7 +691,7 @@ export class ModelGateway {
     return this.store.lock(async () => {
       const job = await this.getJob(id);
       try {
-        if (!(job.model.provider === 'opendesign' || accountResumableMedia(job)) || !job.remoteId || !/^[a-zA-Z0-9_-]{1,180}$/.test(job.remoteId)) throw new Error('Only an existing Cloud or direct account image/sound-effects task can be resumed');
+        if (!(job.model.provider === 'opendesign' || accountResumableMedia(job)) || !job.remoteId || !/^[a-zA-Z0-9_-]{1,180}$/.test(job.remoteId)) throw new Error('Only an existing Cloud or account media task can be resumed');
         if (['queued', 'running', 'completed'].includes(job.state)) return job;
         if (!resumableJob(job)) throw new Error(job.savePending ? 'Use retry_save for retained local outputs' : 'This task cannot be resumed');
         if (job.projectId && !this.store.projectCatalog().projects.some(project => project.id === job.projectId)) throw new Error('Project not found');
@@ -954,27 +954,27 @@ export class ModelGateway {
         const inputs = (job.references ?? (job.reference ? [job.reference] : [])).map((item, index) => ({ file: path.join(dir, referenceFile(index, item.mimeType)), mimeType: item.mimeType, bytes: item.bytes }));
         const reference = inputs[0]?.file;
         const willUploadReferences = !job.remoteId && inputs.length > 0 && job.modality !== 'audio'
-          && (job.model.provider === 'opendesign' || (job.model.provider === 'account' && job.modality === 'image' && (inputs.length > 1 || job.parameters?.background !== undefined)));
+          && (job.model.provider === 'opendesign' || job.model.provider === 'account');
         stages.setActiveStage(job.model.provider === 'codex'
           ? 'generating'
           : job.remoteId ? 'polling' : willUploadReferences ? 'uploading' : 'submitting');
         if (!willUploadReferences) stages.startRemoteDirect();
+        const keepResult = async (data: Record<string, unknown>, remoteTerminal = false) => {
+          if (!data || Object.getPrototypeOf(data) !== Object.prototype || JSON.stringify(data).length > 2_000_000) return;
+          const redact = (value: unknown): unknown => typeof value === 'string' ? key ? value.replaceAll(key, '[redacted]') : value
+            : Array.isArray(value) ? value.map(redact) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([name, item]) => [key ? name.replaceAll(key, '[redacted]') : name, redact(item)])) : value;
+          const clean = redact(data) as Record<string, unknown>;
+          if (JSON.stringify(clean).length > 2_000_000) return;
+          await this.store.lock(async () => { const current = await this.getJob(job.id); if (current.state !== 'running') return; current.result = clean; if (remoteTerminal) current.remoteTerminal = true; current.updatedAt = Date.now(); await this.saveJob(current); });
+        };
         if (job.model.provider === 'account') {
-          buffers = await this.account.generate(job, dir, controller.signal, progress, reference, inputs);
+          buffers = await this.account.generate(job, dir, controller.signal, progress, reference, inputs, keepResult);
         } else if (job.model.provider === 'codex') {
           await progress('generating');
           const imageOptions = { ...job.model.defaults, ...job.parameters };
           buffers = [await (this.options.codex ?? generateCodexImage)(job.prompt + (Object.keys(imageOptions).length ? '\nImage options: ' + JSON.stringify(imageOptions) : ''), dir, controller.signal, reference)];
         } else {
           const adapter = isMediaProvider(job.model.provider) ? providerAdapters[job.model.provider] : compatibleProvider;
-          const keepResult = async (data: Record<string, unknown>, remoteTerminal = false) => {
-            if (!data || Object.getPrototypeOf(data) !== Object.prototype || JSON.stringify(data).length > 2_000_000) return;
-            const redact = (value: unknown): unknown => typeof value === 'string' ? key ? value.replaceAll(key, '[redacted]') : value
-              : Array.isArray(value) ? value.map(redact) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([name, item]) => [key ? name.replaceAll(key, '[redacted]') : name, redact(item)])) : value;
-            const clean = redact(data) as Record<string, unknown>;
-            if (JSON.stringify(clean).length > 2_000_000) return;
-            await this.store.lock(async () => { const current = await this.getJob(job.id); if (current.state !== 'running') return; current.result = clean; if (remoteTerminal) current.remoteTerminal = true; current.updatedAt = Date.now(); await this.saveJob(current); });
-          };
           const urls = await adapter.generate(job, { key, baseUrl: job.providerOrigin, fetcher: this.options.fetcher ?? fetch, signal: controller.signal, progress, pollMs: this.options.pollMs, references: inputs, result: keepResult });
           await this.connections.verifyKey(job.model.provider, key, 'verified', job.providerOrigin);
           await progress('downloading');
@@ -1102,7 +1102,7 @@ export class ModelGateway {
     } finally {
       clearTimeout(timeout); clearInterval(cancelPoll);
       const current = await this.getJob(job.id);
-      const keepDownload = current.model.provider === 'account' && current.modality === 'image' && resumableJob(current);
+      const keepDownload = current.model.provider === 'account' && (current.modality === 'image' || current.modality === 'audio') && resumableJob(current);
       if (!retained && !keepDownload) await rm(dir, { recursive: true, force: true });
     }
   }

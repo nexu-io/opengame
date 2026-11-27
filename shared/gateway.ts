@@ -1,6 +1,5 @@
 import type { LibraryGeneration } from './asset-library.ts';
 import type { GenerationOptions } from './generation-options.ts';
-import { isSfxModel } from './audio-kind.ts';
 import { openDesignImageReferenceCap } from './opendesign-models.ts';
 import type {
   MediaGenerationAccountPlan,
@@ -95,12 +94,9 @@ export function modelReferenceLimit(model: Model): number {
   }
   return model.modality === 'video' ? Math.min(model.maxInputImages ?? 0, 1) : 0;
 }
-/** True when a direct account job's modality/model supports resuming an existing remote task. */
+/** True when an account media job supports resuming an existing remote task. */
 export function accountResumableMedia(job: GenerationJob): boolean {
-  return job.model.provider === 'account' && (
-    job.modality === 'image'
-    || (job.modality === 'audio' && job.model.mode === 'text-to-audio' && isSfxModel(job.model))
-  );
+  return job.model.provider === 'account' && ['image', 'video', 'audio'].includes(job.modality);
 }
 /** Local eligibility; the service additionally rechecks project, origin and credentials. */
 export function resumableJob(job: GenerationJob): boolean {

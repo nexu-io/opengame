@@ -58,38 +58,64 @@ test('first-frame ratio policy leaves other providers, models and image editing 
   }
 });
 
-test('account first-frame video rejects fixed ratios before running the connector, forwards --first-frame, and still rejects audio references', () => fixture(async store => {
-  const calls: string[][] = [];
+test('account first-frame video rejects fixed ratios before submitting, uploads first_frame over HTTP, and still rejects audio references', () => fixture(async store => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=', 'base64');
+  const firstFramePath = path.join(store.directory, 'first-frame.png');
+  await writeFile(firstFramePath, png);
+  const submits: Record<string, unknown>[] = [];
+  let uploadCount = 0;
+  const fetcher = (async (input: any, init: any = {}) => {
+    const url = String(input), method = (init.method ?? 'GET').toUpperCase();
+    const headers = new Headers(init.headers);
+    if (url.startsWith('https://storage.example/')) {
+      assert.equal(method, 'PUT');
+      assert.equal(headers.get('Authorization'), null);
+      return new Response(null, { status: 200 });
+    }
+    assert.equal(headers.get('Authorization'), 'Bearer test-control');
+    const apiPath = url.replace('https://amr-api.open-design.ai/api/v1/media', '');
+    if (method === 'POST' && apiPath === '/uploads') {
+      uploadCount++;
+      return Response.json({ asset_id: `upload-${uploadCount}`, upload_url: `https://storage.example/${uploadCount}` });
+    }
+    if (method === 'POST' && /^\/uploads\/upload-\d+\/commit$/.test(apiPath)) return Response.json({ status: 'ready' });
+    if (method === 'POST' && apiPath === '/videos/tasks') {
+      assert.equal(headers.get('X-Source-Product'), 'openmotion');
+      assert.equal(headers.get('X-OpenMotion-Job-Id'), fixtureJobId);
+      assert.equal(headers.get('Idempotency-Key'), fixtureJobId);
+      submits.push(JSON.parse(String(init.body)));
+      return Response.json({ task_id: `task-${submits.length}`, status: 'queued' }, { status: 202 });
+    }
+    if (method === 'GET' && /^\/videos\/tasks\/task-\d+$/.test(apiPath)) {
+      return Response.json({ task_id: apiPath.split('/').at(-1), status: 'succeeded', model: 'wan-2.7' });
+    }
+    if (method === 'GET' && /^\/videos\/tasks\/task-\d+\/content$/.test(apiPath)) {
+      return new Response(Buffer.from('mp4'), { status: 200 });
+    }
+    throw new Error(`unexpected HTTP call: ${method} ${url}`);
+  }) as typeof fetch;
   const account = new OpenDesignAccount(store.directory, {
     pollMs: 0,
-    run: async (args, _signal, env) => {
-      assert.deepEqual(env, args[1] === 'gen' ? { VELA_SOURCE_PRODUCT: 'openmotion', VELA_OPENMOTION_JOB_ID: fixtureJobId } : undefined);
-      calls.push(args);
-      if (args[1] === 'gen') return JSON.stringify({ task_id: `task-${calls.length}` });
-      if (args[1] === 'get') {
-        const { writeFile } = await import('node:fs/promises');
-        await writeFile(args[args.indexOf('--output') + 1], Buffer.from('mp4'));
-        return JSON.stringify({ task_id: args[2], status: 'succeeded' });
-      }
-      throw new Error('unexpected connector call');
-    },
+    fetcher,
+    run: async () => { throw new Error('unexpected connector call'); },
   });
   account.identity = async () => 'fixture-session';
   account.summary = async () => ({ state: 'signed-in' } as AccountSummary);
+  await mkdir(account.home, { recursive: true });
+  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({ profiles: { prod: { user: { id: 'test' }, controlKey: 'test-control', controlKeyId: 'test-id', runtimeKey: 'test-runtime' } } }));
   const model: Model = { id: 'account:wan-2.7', provider: 'account', modelId: 'wan-2.7', label: 'Wan', modality: 'video', mode: 'text-to-video', source: 'live', maxInputImages: 1, defaults: { ratio: '16:9' } };
   const job = { id: fixtureJobId, model, modality: 'video', prompt: 'Walk forward', providerOrigin: 'fixture-session', parameters: { ratio: '16:9' } } as GenerationJob;
   try {
-    const run = (parameters: Record<string, unknown>, target: GenerationJob = job) => account.generate({ ...target, parameters }, store.directory, new AbortController().signal, async () => {}, 'first-frame.png');
+    const run = (parameters: Record<string, unknown>, target: GenerationJob = job) => account.generate({ ...target, parameters }, store.directory, new AbortController().signal, async () => {}, firstFramePath);
     await assert.rejects(run({ ratio: '16:9' }), /First-frame video/);
     const audioModel: Model = { id: 'account:elevenlabs-v3', provider: 'account', modelId: 'elevenlabs-v3', label: 'Eleven', modality: 'audio', mode: 'text-to-speech', source: 'live' };
     await assert.rejects(run({ voice: 'v1' }, { ...job, model: audioModel, modality: 'audio' }), /Account reference images are supported for image editing and video first frames only/);
-    assert.equal(calls.length, 0);
+    assert.equal(submits.length, 0);
     await run({});
     await run({ ratio: 'adaptive' });
-    const submits = calls.filter(args => args[1] === 'gen');
     assert.deepEqual(submits, [
-      ['video', 'gen', '--model', 'wan-2.7', '--prompt', 'Walk forward', '--first-frame', 'first-frame.png', '--no-wait', '--json', '--generate-audio'],
-      ['video', 'gen', '--model', 'wan-2.7', '--prompt', 'Walk forward', '--first-frame', 'first-frame.png', '--no-wait', '--json', '--ratio', 'adaptive', '--generate-audio'],
+      { model: 'wan-2.7', prompt: 'Walk forward', images: [{ asset_id: 'upload-1', role: 'first_frame' }] },
+      { ratio: 'adaptive', model: 'wan-2.7', prompt: 'Walk forward', images: [{ asset_id: 'upload-2', role: 'first_frame' }] },
     ]);
   } finally { account.close(); }
 }));
@@ -315,11 +341,26 @@ test('OpenDesign Cloud and account video models derive options from published ca
   }
 });
 
-test('account catalogue preserves capabilities and forwards explicit duration and native audio policy', () => fixture(async store => {
-  const calls: string[][] = [];
+test('account catalogue preserves capabilities and submits video duration and native audio directly via HTTP', () => fixture(async store => {
+  const submits: Record<string, unknown>[] = [];
+  const fetcher = (async (input: any, init: any = {}) => {
+    const url = String(input), method = (init.method ?? 'GET').toUpperCase();
+    const apiPath = url.replace('https://amr-api.open-design.ai/api/v1/media', '');
+    if (method === 'POST' && apiPath === '/videos/tasks') {
+      submits.push(JSON.parse(String(init.body)));
+      return Response.json({ task_id: `vt_${submits.length}`, status: 'queued' }, { status: 202 });
+    }
+    if (method === 'GET' && /^\/videos\/tasks\/vt_\d+$/.test(apiPath)) {
+      return Response.json({ task_id: apiPath.split('/').at(-1), status: 'succeeded' });
+    }
+    if (method === 'GET' && /^\/videos\/tasks\/vt_\d+\/content$/.test(apiPath)) {
+      return new Response(Buffer.from('mp4'), { status: 200 });
+    }
+    throw new Error(`unexpected HTTP call: ${method} ${url}`);
+  }) as typeof fetch;
   const account = new OpenDesignAccount(store.directory, {
+    fetcher,
     run: async args => {
-      calls.push(args);
       if (args[0] === 'model') return JSON.stringify({ source: 'remote', data: [] });
       if (args[0] === 'media') {
         return JSON.stringify({
@@ -343,17 +384,12 @@ test('account catalogue preserves capabilities and forwards explicit duration an
           ],
         });
       }
-      if (args[0] === 'video' && args[1] === 'gen') return JSON.stringify({ task_id: `vt_${calls.length}` });
-      if (args[0] === 'video' && args[1] === 'get') {
-        const { writeFile } = await import('node:fs/promises');
-        await writeFile(args[args.indexOf('--output') + 1], Buffer.from('mp4'));
-        return JSON.stringify({ task_id: args[2], status: 'succeeded' });
-      }
-      throw new Error(`unexpected call: ${args.join(' ')}`);
+      throw new Error(`unexpected connector call: ${args.join(' ')}`);
     },
     pollMs: 0,
   });
-  account.profile = async () => ({ runtimeKey: 'fixture-key' });
+  await mkdir(account.home, { recursive: true });
+  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({ profiles: { prod: { user: { id: 'test' }, controlKey: 'test-control', controlKeyId: 'test-id', runtimeKey: 'fixture-key' } } }));
   account.identity = async () => 'fixture-session';
   account.summary = async () => ({ state: 'signed-in' } as AccountSummary);
   try {
@@ -364,34 +400,26 @@ test('account catalogue preserves capabilities and forwards explicit duration an
     assert.equal(generationOptions(seedance)!.fields.find(f => f.key === 'duration')!.max, 30);
     assert.equal(generationOptions(wan)!.fields.find(f => f.key === 'duration')!.min, 2);
 
-    // 1. Seedance 2.5 with omitted generate_audio defaults to `--generate-audio`.
+    // 1. Seedance 2.5 with omitted generate_audio omits the field on HTTP (server default is audio on; never forced false).
     await account.generate(
       { id: 'job-15s-audio-default', model: seedance, modality: 'video', prompt: 'Drive along the boulevard', providerOrigin: 'fixture-session', parameters: { duration: 15 } } as GenerationJob,
       store.directory, new AbortController().signal, async () => {},
     );
-    const defaultAudioArgs = calls.filter(args => args[0] === 'video' && args[1] === 'gen').at(-1)!;
-    assert.equal(defaultAudioArgs[defaultAudioArgs.indexOf('--duration') + 1], '15');
-    assert.ok(defaultAudioArgs.includes('--generate-audio'));
-    assert.ok(!defaultAudioArgs.includes('--generate-audio=false'));
+    assert.deepEqual(submits.at(-1), { duration: 15, model: 'doubao-seedance-2-5-260628', prompt: 'Drive along the boulevard' });
 
-    // 2. Seedance 2.5 with explicit generate_audio: false passes `--generate-audio=false`.
+    // 2. Seedance 2.5 with explicit generate_audio: false forwards `generate_audio: false` on HTTP.
     await account.generate(
       { id: 'job-15s-audio-off', model: seedance, modality: 'video', prompt: 'Silent boulevard', providerOrigin: 'fixture-session', parameters: { duration: 15, generate_audio: false } } as GenerationJob,
       store.directory, new AbortController().signal, async () => {},
     );
-    const silentArgs = calls.filter(args => args[0] === 'video' && args[1] === 'gen').at(-1)!;
-    assert.equal(silentArgs[silentArgs.indexOf('--duration') + 1], '15');
-    assert.ok(silentArgs.includes('--generate-audio=false'));
+    assert.deepEqual(submits.at(-1), { duration: 15, generate_audio: false, model: 'doubao-seedance-2-5-260628', prompt: 'Silent boulevard' });
 
-    // 3. wan-2.7 passes `--generate-audio` so @powerformer/vela-cli@0.1.10 does not default to generate_audio=false (rejected by AMR with HTTP 400).
+    // 3. wan-2.7 submits directly over HTTP without injecting generate_audio=false (bypassing vela-cli@0.1.10 entirely).
     await account.generate(
       { id: 'job-wan-3s', model: wan, modality: 'video', prompt: 'Ocean cliff', providerOrigin: 'fixture-session', parameters: { duration: 3 } } as GenerationJob,
       store.directory, new AbortController().signal, async () => {},
     );
-    const wanArgs = calls.filter(args => args[0] === 'video' && args[1] === 'gen').at(-1)!;
-    assert.equal(wanArgs[wanArgs.indexOf('--duration') + 1], '3');
-    assert.ok(wanArgs.includes('--generate-audio'));
-    assert.ok(!wanArgs.includes('--generate-audio=false'));
+    assert.deepEqual(submits.at(-1), { duration: 3, model: 'wan-2.7', prompt: 'Ocean cliff' });
   } finally { account.close(); }
 }));
 
@@ -1110,20 +1138,29 @@ test('Magi-2 video compatibility: capabilities, always-on audio, first-frame fix
   assert.equal(defaultVideoAudioEnabled(futureAlwaysOn), true);
   assert.throws(() => validateGenerationOptions(futureAlwaysOn, { duration: 5, generate_audio: false }), /does not support generate_audio=false/);
 
-  // Account CLI forwards --generate-audio for magi-2 so vela-cli@0.1.10 does not default to generate_audio=false.
-  const calls: string[][] = [];
+  // Account magi-2 submits directly via HTTP /videos/tasks (bypassing vela-cli@0.1.10) and never injects generate_audio=false.
+  const submits: Record<string, unknown>[] = [];
   const account = new OpenDesignAccount(store.directory, {
     pollMs: 0,
-    run: async args => {
-      calls.push(args);
-      if (args[1] === 'gen') return JSON.stringify({ task_id: 'vt_magi_1' });
-      if (args[1] === 'get') {
-        await writeFile(args[args.indexOf('--output') + 1], Buffer.from('mp4'));
-        return JSON.stringify({ task_id: args[2], status: 'succeeded' });
+    fetcher: (async (input: any, init: any = {}) => {
+      const url = String(input), method = (init.method ?? 'GET').toUpperCase();
+      const apiPath = url.replace('https://amr-api.open-design.ai/api/v1/media', '');
+      if (method === 'POST' && apiPath === '/videos/tasks') {
+        submits.push(JSON.parse(String(init.body)));
+        return Response.json({ task_id: 'vt_magi_1', status: 'queued' }, { status: 202 });
       }
-      throw new Error(`unexpected call: ${args.join(' ')}`);
-    },
+      if (method === 'GET' && apiPath === '/videos/tasks/vt_magi_1') {
+        return Response.json({ task_id: 'vt_magi_1', status: 'succeeded', model: 'magi-2' });
+      }
+      if (method === 'GET' && apiPath === '/videos/tasks/vt_magi_1/content') {
+        return new Response(Buffer.from('mp4'), { status: 200 });
+      }
+      throw new Error(`unexpected HTTP call: ${method} ${url}`);
+    }) as typeof fetch,
+    run: async () => { throw new Error('unexpected connector call'); },
   });
+  await mkdir(account.home, { recursive: true });
+  await writeFile(path.join(account.home, 'config.json'), JSON.stringify({ profiles: { prod: { user: { id: 'test' }, controlKey: 'test-control', controlKeyId: 'test-id', runtimeKey: 'test-runtime' } } }));
   account.identity = async () => 'fixture-session';
   account.summary = async () => ({ state: 'signed-in' } as AccountSummary);
   try {
@@ -1135,9 +1172,7 @@ test('Magi-2 video compatibility: capabilities, always-on audio, first-frame fix
       { id: fixtureJobId, model: magiAccount, modality: 'video', prompt: 'Ocean sunset', providerOrigin: 'fixture-session', parameters: { duration: 5, resolution: '1080p', ratio: '16:9' } } as GenerationJob,
       store.directory, new AbortController().signal, async () => {},
     );
-    const submit = calls.find(args => args[0] === 'video' && args[1] === 'gen')!;
-    assert.ok(submit.includes('--generate-audio'));
-    assert.ok(!submit.includes('--generate-audio=false'));
+    assert.deepEqual(submits, [{ duration: 5, resolution: '1080p', ratio: '16:9', model: 'magi-2', prompt: 'Ocean sunset' }]);
   } finally { account.close(); }
 
   // 429 video_concurrency_limit_exceeded maps cleanly in AccountRequestError (explicit code, media 429, control-plane 429) and apiJson.
