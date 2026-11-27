@@ -851,7 +851,7 @@
     "Markdown, code, JSON, PDF, images, or media": "Markdown、代码、JSON、PDF、图片或音视频",
     "Attach folder…": "附加文件夹…",
     "Import all readable files from a local folder": "从本地文件夹导入所有可读文件",
-    "Open tabs": "已打开标签",
+    "Open tabs": "已打开的标签",
     "Files & folders": "文件与文件夹",
     "{count} messages": "{count} 条消息",
     "Skills & Workflows": "技能与工作流",
@@ -1150,7 +1150,10 @@
     "Remove genre": "移除类型",
     "Playable ad (game mode)": "赚钱游戏",
     "Viral game": "爆款游戏",
-    "Make your next viral game.": "做一款你的爆款游戏"
+    "Make your next viral game.": "做一款你的爆款游戏",
+    "Game Studio views": "游戏工作台视图",
+    "Switch preview tab or enter URL": "切换预览标签或输入网址",
+    "Browse web or enter a URL…": "浏览网页或输入网址…"
   },
   "ja": {
     "What would you like to create today?": "今日は何を作りますか？",
@@ -2303,7 +2306,10 @@
     "Remove genre": "ジャンルを外す",
     "Playable ad (game mode)": "プレイアブル広告",
     "Viral game": "バズるゲーム",
-    "Make your next viral game.": "次にバズるゲームを作ろう"
+    "Make your next viral game.": "次にバズるゲームを作ろう",
+    "Game Studio views": "Game Studio ビュー",
+    "Switch preview tab or enter URL": "プレビュータブを切り替えまたは URL を入力",
+    "Browse web or enter a URL…": "Web を検索または URL を入力…"
   },
   "ko": {
     "What would you like to create today?": "오늘은 무엇을 만들까요?",
@@ -3456,7 +3462,10 @@
     "Remove genre": "장르 제거",
     "Playable ad (game mode)": "플레이어블 광고",
     "Viral game": "바이럴 게임",
-    "Make your next viral game.": "다음 바이럴 게임을 만드세요"
+    "Make your next viral game.": "다음 바이럴 게임을 만드세요",
+    "Game Studio views": "Game Studio 보기",
+    "Switch preview tab or enter URL": "미리보기 탭 전환 또는 URL 입력",
+    "Browse web or enter a URL…": "웹 탐색 또는 URL 입력…"
   },
   "de": {
     "What would you like to create today?": "Was möchtest du heute gestalten?",
@@ -4612,7 +4621,10 @@
     "Remove genre": "Genre entfernen",
     "Playable ad (game mode)": "Playable Ad",
     "Viral game": "Virales Spiel",
-    "Make your next viral game.": "Erschaffe dein nächstes virales Spiel."
+    "Make your next viral game.": "Erschaffe dein nächstes virales Spiel.",
+    "Game Studio views": "Game Studio-Ansichten",
+    "Switch preview tab or enter URL": "Vorschau-Tab wechseln oder URL eingeben",
+    "Browse web or enter a URL…": "Web durchsuchen oder URL eingeben…"
   },
   "fr": {
     "What would you like to create today?": "Que voulez-vous créer aujourd’hui ?",
@@ -5768,7 +5780,10 @@
     "Remove genre": "Retirer le genre",
     "Playable ad (game mode)": "Publicité jouable",
     "Viral game": "Jeu viral",
-    "Make your next viral game.": "Créez votre prochain jeu viral."
+    "Make your next viral game.": "Créez votre prochain jeu viral.",
+    "Game Studio views": "Vues Game Studio",
+    "Switch preview tab or enter URL": "Changer d’onglet ou saisir une URL",
+    "Browse web or enter a URL…": "Parcourir le web ou saisir une URL…"
   },
   "ru": {
     "What would you like to create today?": "Что вы хотите создать сегодня?",
@@ -6926,7 +6941,10 @@
     "Remove genre": "Убрать жанр",
     "Playable ad (game mode)": "Играбельная реклама",
     "Viral game": "Вирусная игра",
-    "Make your next viral game.": "Создайте свою следующую вирусную игру."
+    "Make your next viral game.": "Создайте свою следующую вирусную игру.",
+    "Game Studio views": "Режимы Game Studio",
+    "Switch preview tab or enter URL": "Переключить вкладку или ввести URL",
+    "Browse web or enter a URL…": "Поиск в сети или ввод URL…"
   },
   "es": {
     "What would you like to create today?": "¿Qué te gustaría crear hoy?",
@@ -8082,7 +8100,10 @@
     "Remove genre": "Quitar género",
     "Playable ad (game mode)": "Anuncio jugable",
     "Viral game": "Juego viral",
-    "Make your next viral game.": "Crea tu próximo juego viral."
+    "Make your next viral game.": "Crea tu próximo juego viral.",
+    "Game Studio views": "Vistas de Game Studio",
+    "Switch preview tab or enter URL": "Cambiar pestaña o escribir URL",
+    "Browse web or enter a URL…": "Navegar o escribir una URL…"
   },
   "pt-BR": {
     "What would you like to create today?": "O que você quer criar hoje?",
@@ -8939,7 +8960,7 @@
     "Markdown, code, JSON, PDF, images, or media": "Markdown, código, JSON, PDF, imagens ou mídia",
     "Attach folder…": "Anexar pasta…",
     "Import all readable files from a local folder": "Importar todos os arquivos legíveis de uma pasta local",
-    "Open tabs": "Abas abertas",
+    "Open tabs": "Guias abertas",
     "Files & folders": "Arquivos e pastas",
     "{count} messages": "{count} mensagens",
     "Skills & Workflows": "Skills e fluxos",
@@ -9238,7 +9259,10 @@
     "Remove genre": "Remover gênero",
     "Playable ad (game mode)": "Anúncio jogável",
     "Viral game": "Jogo viral",
-    "Make your next viral game.": "Crie seu próximo jogo viral."
+    "Make your next viral game.": "Crie seu próximo jogo viral.",
+    "Game Studio views": "Visualizações do Game Studio",
+    "Switch preview tab or enter URL": "Alternar guia ou inserir URL",
+    "Browse web or enter a URL…": "Navegar na web ou inserir URL…"
   },
   "it": {
     "What would you like to create today?": "Cosa vuoi creare oggi?",
@@ -10394,7 +10418,10 @@
     "Remove genre": "Rimuovi genere",
     "Playable ad (game mode)": "Annuncio giocabile",
     "Viral game": "Gioco virale",
-    "Make your next viral game.": "Crea il tuo prossimo gioco virale."
+    "Make your next viral game.": "Crea il tuo prossimo gioco virale.",
+    "Game Studio views": "Viste Game Studio",
+    "Switch preview tab or enter URL": "Cambia scheda o inserisci URL",
+    "Browse web or enter a URL…": "Naviga sul web o inserisci un URL…"
   },
   "tr": {
     "What would you like to create today?": "Bugün ne oluşturmak istersin?",
@@ -11547,6 +11574,9 @@
     "Remove genre": "Türü kaldır",
     "Playable ad (game mode)": "Oynanabilir reklam",
     "Viral game": "Viral oyun",
-    "Make your next viral game.": "Bir sonraki viral oyununu yap."
+    "Make your next viral game.": "Bir sonraki viral oyununu yap.",
+    "Game Studio views": "Game Studio görünümleri",
+    "Switch preview tab or enter URL": "Önizleme sekmesini değiştir veya URL gir",
+    "Browse web or enter a URL…": "Webde gezin veya URL gir…"
   }
 }

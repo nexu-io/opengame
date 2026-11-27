@@ -487,15 +487,31 @@ export function SuperAgentWorkspace({
     () => (activeTabId !== NEW_VIEWER_TAB_ID ? viewerArtifacts.find(item => item.id === activeTabId) ?? null : null),
     [activeTabId, viewerArtifacts],
   );
+  const hasOpenGameTab = useMemo(
+    () => openTabIds.some(id => viewerArtifacts.find(item => item.id === id)?.kind === 'game-project'),
+    [openTabIds, viewerArtifacts],
+  );
+  const viewerStudioMode: 'default' | 'game' =
+    requestedMode === 'game'
+    || activeChat?.intent === 'game'
+    || currentViewerArtifact?.kind === 'game-project'
+    || hasOpenGameTab
+      ? 'game'
+      : 'default';
   const isStageViewerActive = Boolean(
     viewerOpen
-    && currentViewerArtifact
     && (
-      currentViewerArtifact.kind === 'game-project'
-      || currentViewerArtifact.kind === 'design-project'
-      || currentViewerArtifact.kind === 'motion-project'
-      || currentViewerArtifact.kind === 'motion-export'
-      || currentViewerArtifact.kind === 'asset-video'
+      viewerStudioMode === 'game'
+      || (
+        currentViewerArtifact
+        && (
+          currentViewerArtifact.kind === 'game-project'
+          || currentViewerArtifact.kind === 'design-project'
+          || currentViewerArtifact.kind === 'motion-project'
+          || currentViewerArtifact.kind === 'motion-export'
+          || currentViewerArtifact.kind === 'asset-video'
+        )
+      )
     ),
   );
 
@@ -2458,6 +2474,7 @@ export function SuperAgentWorkspace({
           <Suspense fallback={<RouteSurfaceFallback compact />}>
             <ArtifactBrowserPane
               active={active}
+              studioMode={viewerStudioMode}
               chatId={activeChat?.id ?? null}
               chatRunning={activeChat?.state === 'running' || activeChat?.state === 'waiting'}
               workingDir={activeChat?.workingDir}

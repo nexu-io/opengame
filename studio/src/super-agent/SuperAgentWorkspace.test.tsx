@@ -2471,13 +2471,11 @@ it('auto-sends queued game handoffs from Game Studio, renders gamepad-line icon,
   expect(stage?.getAttribute('data-viewport')).toBe('desktop');
   expect(document.querySelector('.om-sa-device-menu')).toBeNull();
 
-  const viewModeBtn = viewer.querySelector('.om-sa-view-mode-trigger') as HTMLButtonElement;
-  expect(viewModeBtn).toBeTruthy();
-  await act(async () => viewModeBtn.click());
-  await flush();
-  const codeBtn = [...document.querySelectorAll('.om-sa-view-mode-popover button')].find(b => b.textContent?.trim() === 'Code') as HTMLButtonElement;
-  expect(codeBtn).toBeTruthy();
-  await act(async () => codeBtn.click());
+  // Game Studio mode uses a single-row header with direct Preview/Code/Publish tabs
+  expect(viewer.querySelector('.om-sa-viewer-tabs-bar')).toBeNull();
+  const codeTabBtn = viewer.querySelector('.om-sa-game-studio-tabs [role="tab"][data-tab-id="code"]') as HTMLButtonElement;
+  expect(codeTabBtn).toBeTruthy();
+  await act(async () => codeTabBtn.click());
   await vi.waitFor(async () => {
     await flush();
     expect(viewer.textContent).toContain('<canvas id="dodge"></canvas>');
@@ -3771,7 +3769,13 @@ it('auto-enters Game mode when opened from Game Studio, plays games in Artifact 
   expect(viewer).toBeTruthy();
   expect(viewer?.textContent).toContain('The Little Prince: Star Journey');
   expect(viewer?.querySelector('.om-sa-publish-trigger')).toBeNull();
-  expect(viewer?.querySelector<HTMLInputElement>('input[aria-label="Artifact address bar"]')?.value).toBe('littleprince.dev');
+  const targetTrigger = viewer?.querySelector<HTMLButtonElement>('button[aria-label="Switch preview tab or enter URL"]')!;
+  expect(targetTrigger?.textContent).toContain('The Little Prince: Star Journey');
+  await act(async () => targetTrigger.click());
+  await flush();
+  expect(document.querySelector<HTMLInputElement>('.om-sa-game-switcher-popover input[aria-label="Artifact address bar"]')?.value).toBe('littleprince.dev');
+  await act(async () => targetTrigger.click());
+  await flush();
   expect(chatCreateCalls).toBe(0);
 
   // Clicking "Remix" in the Artifact Viewer adds a template chip and editable prompt.
@@ -3907,9 +3911,29 @@ it('auto-enters Game mode when opened from Game Studio, plays games in Artifact 
   expect(trialFrame?.closest('.om-sa-iframe-stage')?.getAttribute('data-viewport')).toBe('desktop');
   expect(viewer?.querySelector('iframe[title="Gate Legion"]')).toBe(trialFrame);
 
-  // Closing the last game preview tab collapses the split viewer back to the full homepage
-  while (container.querySelector<HTMLButtonElement>('.om-sa-viewer-tab-close')) {
-    const closeTab = container.querySelector<HTMLButtonElement>('.om-sa-viewer-tab-close')!;
+  // Switching to New tab inside Game mode keeps data-stage-viewer & studioMode locked so the right pane never flashes/shrinks
+  expect(container.querySelector('.om-super-agent')?.getAttribute('data-stage-viewer')).toBe('true');
+  const switcherForNewTab = viewer!.querySelector<HTMLButtonElement>('button[aria-label="Switch preview tab or enter URL"]')!;
+  await act(async () => switcherForNewTab.click());
+  await flush();
+  const newTabBtn = document.querySelector<HTMLButtonElement>('.om-sa-game-newtab-action')!;
+  expect(newTabBtn).toBeTruthy();
+  await act(async () => newTabBtn.click());
+  await flush();
+  expect(container.querySelector('.om-super-agent')?.getAttribute('data-stage-viewer')).toBe('true');
+  expect(viewer?.getAttribute('data-studio-mode')).toBe('game');
+
+  // Closing the last game preview tab via the switcher collapses the split viewer back to the full homepage
+  for (let i = 0; i < 10; i++) {
+    if (!container.querySelector('.om-sa-viewer')) break;
+    if (!document.querySelector('.om-sa-game-tab-close')) {
+      const switcher = container.querySelector<HTMLButtonElement>('button[aria-label="Switch preview tab or enter URL"]');
+      if (!switcher) break;
+      await act(async () => switcher.click());
+      await flush();
+    }
+    const closeTab = document.querySelector<HTMLButtonElement>('.om-sa-game-tab-close');
+    if (!closeTab) break;
     await act(async () => closeTab.click());
     await flush();
   }

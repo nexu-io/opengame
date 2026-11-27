@@ -445,6 +445,216 @@ export function injectViewportGuardHtml(rawHtml: Buffer | string): Buffer {
   return injectHeadScriptHtml(rawHtml, buildViewportGuardScript());
 }
 
+/**
+ * Root-level audio guard injected into game preview iframes before any game script runs.
+ * Intercepts both Web Audio API (AudioContext / webkitAudioContext destination routing via a
+ * private master GainNode) and HTMLMediaElement (<audio>, <video>, new Audio()) so Studio can
+ * mute/unmute and scale game volume cleanly even when a game provides no in-game sound toggle.
+ */
+function buildAudioGuardScript(): string {
+  return `<script data-om-audio-guard="1">
+(() => {
+  if (window.__OM_AUDIO_GUARD__) return;
+  window.__OM_AUDIO_GUARD__ = true;
+
+  var masterMuted = false;
+  var masterVolume = 1;
+  var clamp01 = function(v) {
+    var n = Number(v);
+    if (!Number.isFinite(n)) return 1;
+    return n < 0 ? 0 : n > 1 ? 1 : n;
+  };
+  var effectiveGain = function() {
+    return masterMuted ? 0 : clamp01(masterVolume);
+  };
+
+  // --- 1. Web Audio API master gain interception ---
+  var masterGains = new Set();
+  var destToMaster = new WeakMap();
+  var AudioNodeProto = typeof AudioNode !== 'undefined' ? AudioNode.prototype : null;
+  var origConnect = AudioNodeProto ? AudioNodeProto.connect : null;
+
+  function registerContext(ctx) {
+    if (!ctx || !origConnect) return ctx;
+    try {
+      var realDest = ctx.destination;
+      if (!realDest || destToMaster.has(realDest)) return ctx;
+      var gain = ctx.createGain();
+      gain.gain.value = effectiveGain();
+      origConnect.call(gain, realDest);
+      destToMaster.set(realDest, gain);
+      masterGains.add({ ctx: ctx, gain: gain });
+    } catch {}
+    return ctx;
+  }
+
+  if (AudioNodeProto && origConnect) {
+    AudioNodeProto.connect = function(destination) {
+      if (destination && destToMaster.has(destination)) {
+        var redirected = destToMaster.get(destination);
+        if (this !== redirected) {
+          var args = Array.prototype.slice.call(arguments);
+          args[0] = redirected;
+          return origConnect.apply(this, args);
+        }
+      }
+      return origConnect.apply(this, arguments);
+    };
+  }
+
+  function wrapAudioCtor(name) {
+    var NativeCtor = window[name];
+    if (typeof NativeCtor !== 'function') return;
+    var Wrapped = function() {
+      var instance = new (Function.prototype.bind.apply(NativeCtor, [null].concat(Array.prototype.slice.call(arguments))))();
+      return registerContext(instance);
+    };
+    Wrapped.prototype = NativeCtor.prototype;
+    try { Object.setPrototypeOf(Wrapped, NativeCtor); } catch {}
+    try { window[name] = Wrapped; } catch {}
+  }
+  wrapAudioCtor('AudioContext');
+  wrapAudioCtor('webkitAudioContext');
+
+  // --- 2. HTMLMediaElement (<audio>, <video>, new Audio()) interception ---
+  var mediaElements = new Set();
+  var mediaState = new WeakMap();
+  var MediaProto = typeof HTMLMediaElement !== 'undefined' ? HTMLMediaElement.prototype : null;
+  var origVolDesc = MediaProto ? Object.getOwnPropertyDescriptor(MediaProto, 'volume') : null;
+  var origMutedDesc = MediaProto ? Object.getOwnPropertyDescriptor(MediaProto, 'muted') : null;
+  var origPlay = MediaProto ? MediaProto.play : null;
+
+  function ensureMediaTracked(el) {
+    if (!el || typeof el !== 'object') return null;
+    var st = mediaState.get(el);
+    if (!st) {
+      var initialVol = 1;
+      var initialMuted = false;
+      try {
+        if (origVolDesc && origVolDesc.get) initialVol = clamp01(origVolDesc.get.call(el));
+        if (origMutedDesc && origMutedDesc.get) initialMuted = Boolean(origMutedDesc.get.call(el));
+      } catch {}
+      st = { volume: initialVol, muted: initialMuted };
+      mediaState.set(el, st);
+      mediaElements.add(el);
+    }
+    return st;
+  }
+
+  function applyMedia(el) {
+    var st = ensureMediaTracked(el);
+    if (!st) return;
+    try {
+      if (origMutedDesc && origMutedDesc.set) {
+        origMutedDesc.set.call(el, masterMuted || st.muted);
+      }
+      if (origVolDesc && origVolDesc.set) {
+        origVolDesc.set.call(el, masterMuted ? 0 : clamp01(st.volume * masterVolume));
+      }
+    } catch {}
+  }
+
+  if (MediaProto && origVolDesc && origVolDesc.configurable) {
+    Object.defineProperty(MediaProto, 'volume', {
+      configurable: true,
+      enumerable: origVolDesc.enumerable,
+      get: function() {
+        var st = ensureMediaTracked(this);
+        return st ? st.volume : 1;
+      },
+      set: function(v) {
+        var st = ensureMediaTracked(this);
+        if (st) st.volume = clamp01(v);
+        applyMedia(this);
+      }
+    });
+  }
+
+  if (MediaProto && origMutedDesc && origMutedDesc.configurable) {
+    Object.defineProperty(MediaProto, 'muted', {
+      configurable: true,
+      enumerable: origMutedDesc.enumerable,
+      get: function() {
+        var st = ensureMediaTracked(this);
+        return st ? st.muted : false;
+      },
+      set: function(v) {
+        var st = ensureMediaTracked(this);
+        if (st) st.muted = Boolean(v);
+        applyMedia(this);
+      }
+    });
+  }
+
+  if (MediaProto && origPlay) {
+    MediaProto.play = function() {
+      applyMedia(this);
+      return origPlay.apply(this, arguments);
+    };
+  }
+
+  if (typeof window.Audio === 'function') {
+    var NativeAudio = window.Audio;
+    var WrappedAudio = function(src) {
+      var el = arguments.length > 0 ? new NativeAudio(src) : new NativeAudio();
+      applyMedia(el);
+      return el;
+    };
+    WrappedAudio.prototype = NativeAudio.prototype;
+    try { Object.setPrototypeOf(WrappedAudio, NativeAudio); } catch {}
+    try { window.Audio = WrappedAudio; } catch {}
+  }
+
+  function scanDomMedia() {
+    if (!document || !document.querySelectorAll) return;
+    var nodes = document.querySelectorAll('audio, video');
+    for (var i = 0; i < nodes.length; i++) applyMedia(nodes[i]);
+  }
+
+  function applyAll() {
+    var g = effectiveGain();
+    masterGains.forEach(function(entry) {
+      try {
+        if (entry.ctx.state === 'closed') {
+          masterGains.delete(entry);
+          return;
+        }
+        if (entry.ctx.state === 'running' && entry.gain.gain.setTargetAtTime) {
+          entry.gain.gain.setTargetAtTime(g, entry.ctx.currentTime, 0.015);
+        } else {
+          entry.gain.gain.value = g;
+        }
+      } catch {}
+    });
+    scanDomMedia();
+    mediaElements.forEach(function(el) {
+      applyMedia(el);
+    });
+    if (masterMuted && window.speechSynthesis && typeof window.speechSynthesis.cancel === 'function') {
+      try { window.speechSynthesis.cancel(); } catch {}
+    }
+  }
+
+  window.addEventListener('message', function(event) {
+    var msg = event && event.data;
+    if (!msg || typeof msg !== 'object' || msg.type !== 'om:preview-audio') return;
+    if (typeof msg.muted === 'boolean') masterMuted = msg.muted;
+    if (typeof msg.volume === 'number') masterVolume = clamp01(msg.volume);
+    applyAll();
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', scanDomMedia, { once: true });
+  }
+  try { parent.postMessage({ type: 'om:audio-guard-ready' }, '*'); } catch {}
+})();
+</script>`;
+}
+
+export function injectAudioGuardHtml(rawHtml: Buffer | string): Buffer {
+  return injectHeadScriptHtml(rawHtml, buildAudioGuardScript());
+}
+
 export function injectPreviewBridgeHtml(rawHtml: Buffer | string, token: string, designAnnotations = false): Buffer {
   const buf = Buffer.isBuffer(rawHtml) ? rawHtml : Buffer.from(rawHtml, 'utf8');
   if (!isValidPreviewBridgeToken(token)) return buf;

@@ -19,7 +19,7 @@ import { WorkspaceStore } from './workspace.ts';
 import { ensureRuntime, execute, pluginRoot, HYPERFRAMES_VERSION } from './hyperframes.ts';
 import { verificationBinaries } from './scripts/verify-export.ts';
 import type { Duplex } from 'node:stream';
-import { injectPreviewBridgeHtml, injectViewportGuardHtml, isValidPreviewBridgeToken } from './shared/preview-bridge.ts';
+import { injectAudioGuardHtml, injectPreviewBridgeHtml, injectViewportGuardHtml, isValidPreviewBridgeToken } from './shared/preview-bridge.ts';
 import { attachmentDisposition } from './shared/http-header.ts';
 import { HostedGameTemplates } from './shared/hosted-game-templates.ts';
 import { lfsPointer } from './shared/repository-template-catalog.ts';
@@ -2016,7 +2016,10 @@ export async function gameHttp(req: IncomingMessage, res: ServerResponse, url: U
       let payload: Buffer = file.data;
       if (entry && file.mime.startsWith('text/html')) {
         if (hasBridge) payload = injectPreviewBridgeHtml(payload, bridgeToken);
-        if (wantsViewportGuard) payload = injectViewportGuardHtml(payload);
+        if (wantsViewportGuard) {
+          payload = injectViewportGuardHtml(payload);
+          payload = injectAudioGuardHtml(payload);
+        }
       }
       const origin = new URL(url); if (req.headers?.host) origin.host = req.headers.host;
       const encodedId = encodeURIComponent(id);
