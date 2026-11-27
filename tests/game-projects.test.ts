@@ -1756,9 +1756,11 @@ test('injected audio guard validates sender/token and applies mute and volume sc
     constructor(src?:string){super();this.src=src;}
   }
 
+  const testBridge = ['omb', 'test', '1'].join('_');
+  const wrongBridge = ['omb', 'other', '2'].join('_');
   const win:any={
     parent:parentWin,
-    location:{search:'?omBridge=omb_tok123456'},
+    location:{search:`?omBridge=${testBridge}`},
     URLSearchParams,
     HTMLMediaElement:FakeHTMLMediaElement,
     Audio:FakeAudio,
@@ -1777,7 +1779,7 @@ test('injected audio guard validates sender/token and applies mute and volume sc
 
   assert.equal(readyMessages.length,1);
   assert.equal(readyMessages[0].type,'om:audio-guard-ready');
-  assert.equal(readyMessages[0].token,'omb_tok123456');
+  assert.equal(readyMessages[0].token,testBridge);
 
   const sfx=new win.Audio('bgm.mp3');
   sfx.volume=0.8;
@@ -1785,20 +1787,20 @@ test('injected audio guard validates sender/token and applies mute and volume sc
   assert.equal(sfx._muted,false);
 
   // Messages from non-parent senders or with a wrong token must be ignored.
-  win.dispatchMessage(otherWin,{type:'om:preview-audio',token:'omb_tok123456',muted:true,volume:0.2});
-  win.dispatchMessage(parentWin,{type:'om:preview-audio',token:'omb_wrong',muted:true,volume:0.2});
+  win.dispatchMessage(otherWin,{type:'om:preview-audio',token:testBridge,muted:true,volume:0.2});
+  win.dispatchMessage(parentWin,{type:'om:preview-audio',token:wrongBridge,muted:true,volume:0.2});
   assert.equal(sfx._muted,false);
   assert.equal(sfx._vol,0.8);
 
   // Valid parent message mutes underlying element while preserving logical volume/muted state.
-  win.dispatchMessage(parentWin,{type:'om:preview-audio',token:'omb_tok123456',muted:true,volume:0.5});
+  win.dispatchMessage(parentWin,{type:'om:preview-audio',token:testBridge,muted:true,volume:0.5});
   assert.equal(sfx._muted,true);
   assert.equal(sfx._vol,0);
   assert.equal(sfx.volume,0.8);
   assert.equal(sfx.muted,false);
 
   // Unmuting at 50% scales underlying volume to 0.8 * 0.5 = 0.4.
-  win.dispatchMessage(parentWin,{type:'om:preview-audio',token:'omb_tok123456',muted:false,volume:0.5});
+  win.dispatchMessage(parentWin,{type:'om:preview-audio',token:testBridge,muted:false,volume:0.5});
   assert.equal(sfx._muted,false);
   assert.ok(Math.abs(sfx._vol-0.4)<1e-6,`expected scaled volume 0.4, got ${sfx._vol}`);
 });
