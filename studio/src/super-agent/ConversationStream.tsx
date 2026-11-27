@@ -283,6 +283,7 @@ export function ConversationStream({
   onChangeRequestedMode,
   onPlayGame,
   onDeployGame,
+  onGameFeedChange,
   onRetryLoad,
   onOpenSidebar,
   onToggleViewer,
@@ -356,6 +357,7 @@ export function ConversationStream({
   onChangeRequestedMode?: (mode: SuperAgentCreationModeId | null) => void;
   onPlayGame?: (game: GameCard) => void;
   onDeployGame?: (game: GameCard) => void;
+  onGameFeedChange?: (games: GameCard[]) => void;
   onRetryLoad: () => void;
   onOpenSidebar: () => void;
   onToggleViewer: () => void;
@@ -1812,6 +1814,7 @@ export function ConversationStream({
               onToggleAttachment={toggleResourceAttachment}
               onPlayGame={onPlayGame}
               onDeployGame={onDeployGame}
+              onGameFeedChange={onGameFeedChange}
               composer={activeMode.id === 'coding'
                 ? <div className="om-sa-composer-placement" ref={mountComposer} />
                 : <DockableModeComposer ref={dockRef} scrollRef={listRef} mountEditor={mountComposer}

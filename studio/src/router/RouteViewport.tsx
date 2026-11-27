@@ -493,6 +493,9 @@ export function RouteViewport({
             requestedMode={gameStudioActive ? 'game' : (page.superAgentMode ?? null)}
             requestedDesignModule={gameStudioActive ? null : (page.superAgentDesignModule ?? null)}
             requestedGameId={gameStudioActive ? (page.gameId ?? null) : null}
+            onActiveTemplateGameChange={gameStudioActive
+              ? gameId => navigatePage({ gameId }, true, 'keep')
+              : undefined}
             onBack={gameStudioActive ? returnToExplore : undefined}
             onChangeRequestedMode={mode => {
               navigatePage(

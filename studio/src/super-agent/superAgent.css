@@ -12127,3 +12127,283 @@
   .om-sa-screw-result { inset: auto 0 0; padding: var(--motion-space-8); }
   .om-sa-screw-result > svg { display: none; }
 }
+
+/* Template feed rail beside the template game, never over it (same look as the community game feed):
+   Prev / Next centred, then like, dislike, Remix, replay, info and full screen at the bottom. */
+.om-sa-template-feed {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  outline: none;
+}
+
+.om-sa-template-feed[data-placement="bottom"] {
+  flex-direction: column;
+}
+
+.om-sa-template-feed-stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.om-sa-template-feed-rail {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 76px;
+  padding: 12px 0;
+  background: transparent;
+  overflow-y: auto;
+}
+
+.om-sa-template-feed-nav,
+.om-sa-template-feed-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/*
+ * Side rail: Prev / Next stay at the exact vertical middle of the rail whatever actions a template
+ * shows (like / dislike only exist for some), so switching never moves them under the pointer.
+ * The two equal 1fr rows keep the middle fixed; only when the rail is too short do they grow.
+ */
+.om-sa-template-feed[data-placement="side"] .om-sa-template-feed-rail {
+  display: grid;
+  grid-template-rows: 1fr auto 1fr;
+  justify-items: center;
+}
+
+.om-sa-template-feed-nav {
+  justify-content: center;
+  gap: 14px;
+}
+
+.om-sa-template-feed[data-placement="side"] .om-sa-template-feed-nav {
+  grid-row: 2;
+}
+
+.om-sa-template-feed-actions {
+  flex: 0 0 auto;
+  gap: 12px;
+}
+
+.om-sa-template-feed[data-placement="side"] .om-sa-template-feed-actions {
+  grid-row: 3;
+  align-self: end;
+  padding-top: 16px;
+}
+
+/* Narrow screens: one row when it fits, otherwise wrap so every button stays on screen. */
+.om-sa-template-feed[data-placement="bottom"] .om-sa-template-feed-rail {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: auto;
+  padding: 8px 12px;
+  gap: 10px 20px;
+  overflow: visible;
+}
+
+.om-sa-template-feed[data-placement="bottom"] .om-sa-template-feed-nav,
+.om-sa-template-feed[data-placement="bottom"] .om-sa-template-feed-actions {
+  flex: 0 1 auto;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 14px;
+}
+
+.om-sa-template-feed-action {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 52px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--motion-text);
+  font-size: 11px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.om-sa-template-feed-action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  border-radius: 999px;
+  transition: background-color 120ms ease, color 120ms ease, transform 120ms ease;
+}
+
+.om-sa-template-feed-action[data-variant="plain"]:not(:disabled):hover .om-sa-template-feed-action-icon {
+  background: color-mix(in srgb, var(--motion-text) 10%, transparent);
+}
+
+.om-sa-template-feed-action[data-variant="circle"] .om-sa-template-feed-action-icon,
+.om-sa-template-feed-action[data-variant="primary"] .om-sa-template-feed-action-icon {
+  width: 44px;
+  height: 44px;
+}
+
+.om-sa-template-feed-action[data-variant="circle"] .om-sa-template-feed-action-icon {
+  background: color-mix(in srgb, var(--motion-text) 10%, transparent);
+}
+
+.om-sa-template-feed-action[data-variant="circle"]:not(:disabled):hover .om-sa-template-feed-action-icon {
+  background: color-mix(in srgb, var(--motion-text) 18%, transparent);
+}
+
+.om-sa-template-feed-action[data-variant="primary"] .om-sa-template-feed-action-icon {
+  background: var(--motion-accent);
+  color: var(--motion-on-action);
+}
+
+.om-sa-template-feed-action[data-variant="primary"]:not(:disabled):hover .om-sa-template-feed-action-icon {
+  transform: scale(1.06);
+}
+
+.om-sa-template-feed-action[data-variant="plain"][data-active] .om-sa-template-feed-action-icon {
+  color: var(--motion-accent);
+}
+
+.om-sa-template-feed-action:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.om-sa-template-feed-action-label {
+  max-width: 68px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--motion-muted);
+}
+
+.om-sa-template-feed-action[data-variant="primary"] .om-sa-template-feed-action-label {
+  color: var(--motion-text);
+  font-weight: 600;
+}
+
+/* Position stays available to screen readers; the rail itself shows no counter. */
+.om-sa-template-feed-count {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.om-sa-template-feed-info {
+  max-width: 280px;
+}
+
+.om-sa-template-feed-info-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 280px;
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--motion-text);
+}
+
+.om-sa-template-feed-info-body > p {
+  margin: 0;
+}
+
+/* Narrow screens: compact icon-only row so the game keeps its height (names stay in aria-label / tooltip). */
+.om-sa-template-feed[data-placement="bottom"] .om-sa-template-feed-action {
+  min-width: 36px;
+}
+
+.om-sa-template-feed[data-placement="bottom"] .om-sa-template-feed-action-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.om-sa-template-feed[data-placement="bottom"] .om-sa-template-feed-action[data-variant="circle"] .om-sa-template-feed-action-icon,
+.om-sa-template-feed[data-placement="bottom"] .om-sa-template-feed-action[data-variant="primary"] .om-sa-template-feed-action-icon {
+  width: 36px;
+  height: 36px;
+}
+
+.om-sa-template-feed[data-placement="bottom"] .om-sa-template-feed-action-icon {
+  width: 32px;
+  height: 36px;
+}
+
+.om-sa-template-feed[data-placement="bottom"] .om-sa-template-feed-rail {
+  gap: 6px 12px;
+  padding: 6px 8px;
+}
+
+.om-sa-template-feed[data-placement="bottom"] .om-sa-template-feed-nav,
+.om-sa-template-feed[data-placement="bottom"] .om-sa-template-feed-actions {
+  gap: 6px;
+}
+
+/* Template rail: the address row is hidden; viewport, Share and More live in the rail instead. */
+.om-sa-viewer-toolbar[data-feed-rail] {
+  display: none;
+}
+
+.om-sa-template-feed-tools {
+  display: contents;
+}
+
+/* Share keeps its own trigger markup (icon + label + live dot); lay it out like the other rail buttons. */
+.om-sa-template-feed-action.om-sa-template-feed-share {
+  position: relative;
+}
+
+.om-sa-template-feed-action.om-sa-template-feed-share > svg {
+  width: 32px;
+  height: 28px;
+  padding: 5px 7px;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.om-sa-template-feed-action.om-sa-template-feed-share:not(:disabled):hover > svg {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.om-sa-template-feed-action.om-sa-template-feed-share .om-web-publish-trigger-label {
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--motion-muted);
+}
+
+.om-sa-template-feed-action.om-sa-template-feed-share .om-web-publish-dot {
+  position: absolute;
+  top: 2px;
+  right: 18px;
+}
+
+.om-sa-template-feed[data-placement="bottom"] .om-sa-template-feed-action.om-sa-template-feed-share .om-web-publish-trigger-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.om-sa-template-feed[data-placement="bottom"] .om-sa-template-feed-action.om-sa-template-feed-share > svg {
+  height: 36px;
+  padding: 9px 7px;
+}

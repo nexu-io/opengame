@@ -884,6 +884,7 @@ export function ModeResourceShowcase({
   onToggleAttachment,
   onPlayGame,
   onDeployGame,
+  onGameFeedChange,
   composer,
   onApplyTemplate,
   onFocusComposer,
@@ -900,6 +901,8 @@ export function ModeResourceShowcase({
   onToggleAttachment: (item: SuperAgentResourceAttachment) => boolean | void;
   onPlayGame?: (game: GameCard) => void;
   onDeployGame?: (game: GameCard) => void;
+  /** Templates in the order this tab lists them, so the preview can step to the previous / next one. */
+  onGameFeedChange?: (games: GameCard[]) => void;
   composer: ReactNode;
   onApplyTemplate: () => void;
   onFocusComposer?: () => void;
@@ -1488,6 +1491,15 @@ export function ModeResourceShowcase({
     if (needle) return matched;
     return interleavePortrait(matched);
   }, [showGameCards, activeFilter, publishedGameTemplates, myGames, gameQuery, gameSort, locale, t]);
+
+  // Report the template order (tab, search, sort) to the preview's previous / next controls.
+  // The user's own games are not templates, so they are left out of the feed.
+  const gameFeedRef = useRef(onGameFeedChange);
+  gameFeedRef.current = onGameFeedChange;
+  useEffect(() => {
+    gameFeedRef.current?.(activeFilter === 'mine' ? [] : filteredGames.filter(game => game.source !== 'mine'));
+  }, [activeFilter, filteredGames]);
+  // No reset on unmount: expanding the viewer hides this list, and the preview keeps stepping through it.
 
   const totalCount = showGameCards
     ? filteredGames.length
