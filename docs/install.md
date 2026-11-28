@@ -73,6 +73,8 @@ npm run build:studio
 npm start
 ```
 
+If `npm ci` stalls after the dependency tree prints on a machine with pnpm installed, `less@4.5.1`'s postinstall has treated this checkout as a monorepo (it only checks that `node_modules/less/scripts/../../../package.json` exists, which is this repo's own manifest) and is downloading a Playwright Chromium (162 MiB) from `cdn.playwright.dev`. Stop it and rerun that step as `CI=1 npm ci` (`set CI=1 && npm ci` in Windows `cmd`); `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD` does not help, because the script shells out to `pnpm exec playwright install`.
+
 Open the actual studioUrl or previewUrl printed at startup. Follow [manual MCP configuration](../README.md#manual-mcp) and the [host adapter guide](agent-adapters.md) to connect this checkout's mcp.ts and the same data directory. Source preview/export also need working Chrome/Chromium and FFmpeg/ffprobe; see [runtime setup](usage.md). Merely starting Studio does not register an Agent connection. Once connected, run `node scripts/install-onboarding.mjs --host HOST` from the checkout using this connection's `MOTION_DATA_DIR`, replacing `HOST` with the actual host name such as `claude`. Then follow the shared onboarding below using the returned three IDs and presentation arguments.
 
 After source setup, follow [Installation-success reply](#installation-success-reply) below. Do not run the npm setup as well.
