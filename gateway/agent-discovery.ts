@@ -22,9 +22,21 @@ const PI_THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 
 export async function agentInvocation(bin: string, args: string[]): Promise<{ bin: string; args: string[] }> {
   if (!/\.cmd$/i.test(bin)) return { bin, args };
   const source = await readFile(bin, 'utf8');
-  const relative = source.match(/"%(?:dp0|~dp0)%?\\([^"\r\n]+\.(?:[cm]?js))"/i)?.[1];
-  if (!relative || relative.includes('..') || /[%!]/.test(relative)) throw new Error('Unsupported CLI shim; use the official executable');
-  return { bin: process.execPath, args: [path.resolve(path.dirname(bin), ...relative.split('\\')), ...args] };
+  // npm's cmd-shim template quotes several %dp0% paths: a `node.exe` launcher guard, then the entry
+  // point. Collect them all and prefer the JS entry, so an `.exe`-only shim still runs natively.
+  const targets = [...source.matchAll(/"%(?:dp0|~dp0)%?\\([^"\r\n]+\.(?:[cm]?js|exe))"/gi)]
+    .map(match => match[1])
+    .filter(relative => !relative.includes('..') && !/[%!]/.test(relative))
+    .filter(relative => !/(?:^|\\)node\.exe$/i.test(relative));
+  const resolveTarget = (pattern: RegExp) => {
+    const match = targets.find(relative => pattern.test(relative));
+    return match ? path.resolve(path.dirname(bin), ...match.split('\\')) : null;
+  };
+  const script = resolveTarget(/\.(?:[cm]?js)$/i);
+  if (script) return { bin: process.execPath, args: [script, ...args] };
+  const executable = resolveTarget(/\.exe$/i);
+  if (executable) return { bin: executable, args };
+  throw new Error('Unsupported CLI shim; use the official executable');
 }
 
 export const probeAgent: Probe = async (bin, args) => {

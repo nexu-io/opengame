@@ -22,7 +22,7 @@ Listing Agents checks executable locations without launching every client. Inspe
 | Gemini CLI, GitHub Copilot CLI, Kimi Code, Kiro CLI, Kilo Code, DeepSeek Harness, Hermes Agent, Devin, Grok Build, CodeBuddy Code, Qoder CLI, Trae CLI, DeepSeek Reasonix, Cline, IBM Bob | ACP initialize + `session/new` in a temporary directory (with bounded `config_option_update` wait, `session/delete` cleanup when supported, isolated temporary history for DeepSeek Harness, and per-model reasoning extraction); falls back to `models` or CLI `--help` choices when advertised |
 | DeepSeek TUI and unsupported CLI versions | Supported model choices advertised by CLI `--help` (or ACP if advertised), otherwise follow the Agent default or manually enter an exact model ID |
 
-Model discovery failures retain an actionable refresh message. An exact manually entered model ID does not assert that the account can use it. The Agent remains the authority for authentication and entitlement. Probe processes are bounded and their raw output is not returned to the browser or stored. An npm Windows `.cmd` shim is resolved to its JavaScript entry point for shell-free probes; unsupported shims fall back to manual guidance.
+Model discovery failures retain an actionable refresh message. An exact manually entered model ID does not assert that the account can use it. The Agent remains the authority for authentication and entitlement. Probe processes are bounded and their raw output is not returned to the browser or stored. An npm Windows `.cmd` shim is resolved to its JavaScript entry point, ignoring the shim's own `node.exe` launcher, or to the shim's native `.exe` target when it has no script; other shims fall back to manual guidance.
 
 ## Launch and connection
 

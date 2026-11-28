@@ -64,6 +64,46 @@ test('standalone bridge script passes node --check, embeds all 29 Agents, and in
     assert.ok(script.includes(JSON.stringify(agent.id)), `Missing agent ID in bridge script: ${agent.id}`);
   }
 
+  // The bridge keeps its own copy of the shim rules, so exercise that copy directly: npm's template
+  // quotes a node.exe launcher before the entry point, and native-binary CLIs quote an .exe.
+  const shimSource = script.slice(script.indexOf('async function agentInvocation'), script.indexOf('async function probeCli'));
+  const bridgeInvocation = new Function('readFile', 'path', 'process', `${shimSource}\nreturn agentInvocation;`)(
+    readFile, path, process,
+  ) as (bin: string, args: string[]) => Promise<{ bin: string; args: string[] }>;
+  const shimRoot = await mkdtemp(path.join(os.tmpdir(), 'openmotion-bridge-shim-'));
+  try {
+    const npmShim = path.join(shimRoot, 'npm-cli.cmd');
+    await writeFile(npmShim, [
+      '@ECHO off',
+      'IF EXIST "%dp0%\\node.exe" (',
+      '  SET "_prog=%dp0%\\node.exe"',
+      ')',
+      'endLocal & "%_prog%"  "%dp0%\\node_modules\\@scope\\pkg\\bundle\\entry.js" %*',
+    ].join('\r\n'));
+    assert.deepEqual(await bridgeInvocation(npmShim, ['models']), {
+      bin: process.execPath,
+      args: [path.join(shimRoot, 'node_modules/@scope/pkg/bundle/entry.js'), 'models'],
+    });
+
+    const nativeShim = path.join(shimRoot, 'native-cli.cmd');
+    await writeFile(nativeShim, '"%dp0%\\node_modules\\@scope\\pkg\\bin\\cli.exe"   %*');
+    assert.deepEqual(await bridgeInvocation(nativeShim, ['models']), {
+      bin: path.join(shimRoot, 'node_modules/@scope/pkg/bin/cli.exe'),
+      args: ['models'],
+    });
+
+    const chainedShim = path.join(shimRoot, 'chained.cmd');
+    await writeFile(chainedShim, '"%dp0%\\bin\\other.cmd" %*');
+    await assert.rejects(bridgeInvocation(chainedShim, []), /Unsupported CLI shim/);
+
+    // Only the node launcher is left once the guard is ignored: no entry point, so refuse it.
+    const launcherOnlyShim = path.join(shimRoot, 'launcher-only.cmd');
+    await writeFile(launcherOnlyShim, 'IF EXIST "%dp0%\\node.exe" ( SET "_prog=%dp0%\\node.exe" )\r\n');
+    await assert.rejects(bridgeInvocation(launcherOnlyShim, []), /Unsupported CLI shim/);
+  } finally {
+    await rm(shimRoot, { recursive: true, force: true });
+  }
+
   const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'openmotion-bridge-syntax-'));
   try {
     const file = path.join(tmpDir, 'openmotion-agent-bridge.mjs');

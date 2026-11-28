@@ -275,6 +275,32 @@ test('ACP discovery lists session models, denies client operations, handles asyn
 
   const shim = path.join(root, 'agent.cmd'); await writeFile(shim, '"%dp0%\\node_modules\\agent\\cli.js" %*');
   assert.deepEqual(await agentInvocation(shim, ['--version']), { bin: process.execPath, args: [path.join(root, 'node_modules/agent/cli.js'), '--version'] });
+
+  // npm shims for CLIs that ship a native binary point at the executable, not a JS entry point.
+  const nativeShim = path.join(root, 'native-agent.cmd'); await writeFile(nativeShim, '"%dp0%\\node_modules\\@native\\cli\\bin\\native-agent.exe"   %*');
+  assert.deepEqual(await agentInvocation(nativeShim, ['models']), { bin: path.join(root, 'node_modules/@native/cli/bin/native-agent.exe'), args: ['models'] });
+
+  // Real npm shims quote a node.exe launcher guard before the entry point; the entry must win.
+  const npmShim = path.join(root, 'npm-agent.cmd');
+  await writeFile(npmShim, [
+    '@ECHO off',
+    'IF EXIST "%dp0%\\node.exe" (',
+    '  SET "_prog=%dp0%\\node.exe"',
+    ') ELSE (',
+    '  SET "_prog=node"',
+    ')',
+    'endLocal & "%_prog%"  "%dp0%\\node_modules\\@scope\\pkg\\bundle\\entry.js" %*',
+  ].join('\r\n'));
+  assert.deepEqual(await agentInvocation(npmShim, ['models']), { bin: process.execPath, args: [path.join(root, 'node_modules/@scope/pkg/bundle/entry.js'), 'models'] });
+
+  // A shim that only names the node launcher carries no entry point and stays refused.
+  const launcherOnlyShim = path.join(root, 'launcher-only.cmd');
+  await writeFile(launcherOnlyShim, 'IF EXIST "%dp0%\\node.exe" ( SET "_prog=%dp0%\\node.exe" )\r\n');
+  await assert.rejects(agentInvocation(launcherOnlyShim, []), /Unsupported CLI shim/);
+
+  // Chained shell shims are still refused: they cannot be spawned without a shell.
+  const chainedShim = path.join(root, 'chained.cmd'); await writeFile(chainedShim, '"%dp0%\\bin\\other.cmd" %*');
+  await assert.rejects(agentInvocation(chainedShim, []), /Unsupported CLI shim/);
 });
 
 test('Codex app-server, Claude stdio initialize and Pi RPC protocol discoverers parse live catalogs', async t => {
