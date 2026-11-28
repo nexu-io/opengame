@@ -1,6 +1,7 @@
 /** Shared local Game Studio service. HTTP and MCP operate on the same projects. */
 import { randomUUID, createHash } from 'node:crypto';
-import { mkdir, readdir, readFile, writeFile, rename, rm, lstat, realpath, copyFile, access, rmdir } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { mkdir, readdir, readFile, writeFile, rename, rm, lstat, realpath, copyFile, access, rmdir, open } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
@@ -48,8 +49,28 @@ export function cleanGamePath(value: unknown): string {
   if (typeof value !== 'string' || value.length > 240 || /[\\\x00-\x1f]/.test(value) || value.split('/').some(p => !p || p.startsWith('.') || p.includes(':'))) throw new GameError('Unsafe game file path');
   return value;
 }
+async function readGameFile(file: string, text = false): Promise<Buffer> {
+  const check = (info: { isFile(): boolean; size: number }) => {
+    if (!info.isFile()) throw new GameError('Expected a regular game file');
+    if (text && info.size > LIMIT) throw new GameError('Text file exceeds 8 MiB');
+  };
+  // Keep the pre-open check on platforms without O_NOFOLLOW/O_NONBLOCK support.
+  check(await lstat(file));
+  const handle = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+  try {
+    check(await handle.stat());
+    if (!text) return await handle.readFile();
+    const chunks: Buffer[] = []; let bytes = 0;
+    for await (const chunk of handle.createReadStream({ autoClose: false })) {
+      bytes += chunk.length;
+      if (bytes > LIMIT) throw new GameError('Text file exceeds 8 MiB');
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks, bytes);
+  } finally { await handle.close(); }
+}
 async function jsonFile<T>(file: string, fallback?: T): Promise<T> {
-  try { return JSON.parse(await readFile(file, 'utf8')); }
+  try { return JSON.parse((await readGameFile(file)).toString('utf8')); }
   catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT' && fallback !== undefined) return fallback; throw e; }
 }
 async function saveJson(file: string, data: unknown) {
@@ -237,7 +258,7 @@ async function inspectLocalModuleGraph(
     visited.add(relative);
     let source: string;
     try {
-      source = await readFile(await safeFile(dir, relative), 'utf8');
+      source = (await readGameFile(await safeFile(dir, relative))).toString('utf8');
     } catch {
       continue;
     }
@@ -1161,8 +1182,7 @@ server.listen(port, '127.0.0.1', () => {
   async read(id: string, relative: string) {
     if (!textExtensions.test(relative) || relative.toLowerCase() === 'game.json' || relative.toLowerCase().startsWith('trailer/')) throw new GameError('Only game text source may be read');
     const file = await safeFile((await this.locate(id)).dir, relative);
-    if ((await lstat(file)).size > LIMIT) throw new GameError('Text file exceeds 8 MiB');
-    return { path: relative, content: await readFile(file, 'utf8') };
+    return { path: relative, content: (await readGameFile(file, true)).toString('utf8') };
   }
   async rename(id: string, title: string) {
     return this.mutate(async () => {
@@ -1261,7 +1281,7 @@ server.listen(port, '127.0.0.1', () => {
       const cover = cleanGamePath(patch.cover);
       if (/[?#]/.test(cover) || !/\.(?:png|jpe?g|webp|avif|gif|svg|ico)$/i.test(cover)) throw new GameError('cover must be a project-relative image path');
       if (!(await lstat(await safeFile(dir,cover))).isFile()) throw new GameError('cover must be an existing game image file');
-      assertGameCoverSize(gameCoverDimensions(await readFile(await safeFile(dir,cover)),path.extname(cover)));
+      assertGameCoverSize(gameCoverDimensions(await readGameFile(await safeFile(dir,cover)),path.extname(cover)));
       changes.cover = cover;
     }
     if (Object.hasOwn(patch,'i18n')) {
@@ -1791,10 +1811,10 @@ server.listen(port, '127.0.0.1', () => {
       }
       file = await safeFile(await this.hosted.directory(id, card.dir), relative);
     }
-    let data = await readFile(file);
+    let data = await readGameFile(file);
     if (card.source === 'template' && root === card.dir && lfsPointer(data)) {
       const directory = await this.hosted.directory(id, card.dir);
-      data = await readFile(await safeFile(directory, relative));
+      data = await readGameFile(await safeFile(directory, relative));
       if (lfsPointer(data)) throw new GameError(`Missing Git LFS data for ${id}/${relative}`, 503);
     }
     return { data, mime: mime[path.extname(file).toLowerCase()] ?? 'application/octet-stream' };
