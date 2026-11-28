@@ -1186,7 +1186,10 @@
     "Viral game": "爆款游戏",
     "Make your next viral game.": "做一款你的爆款游戏",
     "Ask Agent to download": "让 Agent 下载",
-    "Add supported assets directly or ask the Agent to download an item.": "可直接添加支持的素材，也可让 Agent 下载所选素材。"
+    "Add supported assets directly or ask the Agent to download an item.": "可直接添加支持的素材，也可让 Agent 下载所选素材。",
+    "Opened game asset catalog": "已打开游戏素材库",
+    "Searched game assets": "已搜索游戏素材",
+    "Downloaded game asset": "已下载游戏素材"
   },
   "ja": {
     "Game asset catalog": "ゲーム素材カタログ",
@@ -2375,7 +2378,10 @@
     "Viral game": "バズるゲーム",
     "Make your next viral game.": "次にバズるゲームを作ろう",
     "Ask Agent to download": "Agent にダウンロードを依頼",
-    "Add supported assets directly or ask the Agent to download an item.": "対応する素材を直接追加するか、Agent にダウンロードを依頼できます。"
+    "Add supported assets directly or ask the Agent to download an item.": "対応する素材を直接追加するか、Agent にダウンロードを依頼できます。",
+    "Opened game asset catalog": "ゲーム素材カタログを開きました",
+    "Searched game assets": "ゲーム素材を検索しました",
+    "Downloaded game asset": "ゲーム素材をダウンロードしました"
   },
   "ko": {
     "Game asset catalog": "게임 에셋 카탈로그",
@@ -3564,7 +3570,10 @@
     "Viral game": "바이럴 게임",
     "Make your next viral game.": "다음 바이럴 게임을 만드세요",
     "Ask Agent to download": "Agent에게 다운로드 요청",
-    "Add supported assets directly or ask the Agent to download an item.": "지원되는 에셋을 바로 추가하거나 Agent에게 다운로드를 요청하세요."
+    "Add supported assets directly or ask the Agent to download an item.": "지원되는 에셋을 바로 추가하거나 Agent에게 다운로드를 요청하세요.",
+    "Opened game asset catalog": "게임 에셋 카탈로그를 열었습니다",
+    "Searched game assets": "게임 에셋을 검색했습니다",
+    "Downloaded game asset": "게임 에셋을 다운로드했습니다"
   },
   "de": {
     "Game asset catalog": "Spielasset-Katalog",
@@ -4756,7 +4765,10 @@
     "Viral game": "Virales Spiel",
     "Make your next viral game.": "Erschaffe dein nächstes virales Spiel.",
     "Ask Agent to download": "Agent um Download bitten",
-    "Add supported assets directly or ask the Agent to download an item.": "Unterstützte Assets direkt hinzufügen oder den Agent um den Download bitten."
+    "Add supported assets directly or ask the Agent to download an item.": "Unterstützte Assets direkt hinzufügen oder den Agent um den Download bitten.",
+    "Opened game asset catalog": "Spielasset-Katalog geöffnet",
+    "Searched game assets": "Spielassets gesucht",
+    "Downloaded game asset": "Spielasset heruntergeladen"
   },
   "fr": {
     "Game asset catalog": "Catalogue de ressources de jeu",
@@ -5948,7 +5960,10 @@
     "Viral game": "Jeu viral",
     "Make your next viral game.": "Créez votre prochain jeu viral.",
     "Ask Agent to download": "Demander à l’Agent de télécharger",
-    "Add supported assets directly or ask the Agent to download an item.": "Ajoutez directement une ressource compatible ou demandez à l’Agent de la télécharger."
+    "Add supported assets directly or ask the Agent to download an item.": "Ajoutez directement une ressource compatible ou demandez à l’Agent de la télécharger.",
+    "Opened game asset catalog": "Catalogue de ressources de jeu ouvert",
+    "Searched game assets": "Ressources de jeu recherchées",
+    "Downloaded game asset": "Ressource de jeu téléchargée"
   },
   "ru": {
     "Game asset catalog": "Каталог игровых ресурсов",
@@ -7142,7 +7157,10 @@
     "Viral game": "Вирусная игра",
     "Make your next viral game.": "Создайте свою следующую вирусную игру.",
     "Ask Agent to download": "Попросить Агента скачать",
-    "Add supported assets directly or ask the Agent to download an item.": "Добавьте поддерживаемый ресурс напрямую или попросите Агента скачать его."
+    "Add supported assets directly or ask the Agent to download an item.": "Добавьте поддерживаемый ресурс напрямую или попросите Агента скачать его.",
+    "Opened game asset catalog": "Каталог игровых ресурсов открыт",
+    "Searched game assets": "Выполнен поиск игровых ресурсов",
+    "Downloaded game asset": "Игровой ресурс скачан"
   },
   "es": {
     "Game asset catalog": "Catálogo de recursos de juego",
@@ -8334,7 +8352,10 @@
     "Viral game": "Juego viral",
     "Make your next viral game.": "Crea tu próximo juego viral.",
     "Ask Agent to download": "Pedir al Agente que lo descargue",
-    "Add supported assets directly or ask the Agent to download an item.": "Añade directamente los recursos compatibles o pide al Agente que descargue un recurso."
+    "Add supported assets directly or ask the Agent to download an item.": "Añade directamente los recursos compatibles o pide al Agente que descargue un recurso.",
+    "Opened game asset catalog": "Catálogo de recursos de juego abierto",
+    "Searched game assets": "Recursos de juego buscados",
+    "Downloaded game asset": "Recurso de juego descargado"
   },
   "pt-BR": {
     "Game asset catalog": "Catálogo de recursos de jogos",
@@ -9526,7 +9547,10 @@
     "Viral game": "Jogo viral",
     "Make your next viral game.": "Crie seu próximo jogo viral.",
     "Ask Agent to download": "Pedir ao Agente para baixar",
-    "Add supported assets directly or ask the Agent to download an item.": "Adicione os recursos compatíveis diretamente ou peça ao Agente para baixar um item."
+    "Add supported assets directly or ask the Agent to download an item.": "Adicione os recursos compatíveis diretamente ou peça ao Agente para baixar um item.",
+    "Opened game asset catalog": "Catálogo de recursos de jogos aberto",
+    "Searched game assets": "Recursos de jogos pesquisados",
+    "Downloaded game asset": "Recurso de jogo baixado"
   },
   "it": {
     "Game asset catalog": "Catalogo delle risorse di gioco",
@@ -10718,7 +10742,10 @@
     "Viral game": "Gioco virale",
     "Make your next viral game.": "Crea il tuo prossimo gioco virale.",
     "Ask Agent to download": "Chiedi all’Agente di scaricarlo",
-    "Add supported assets directly or ask the Agent to download an item.": "Aggiungi direttamente le risorse supportate o chiedi all’Agente di scaricare una risorsa."
+    "Add supported assets directly or ask the Agent to download an item.": "Aggiungi direttamente le risorse supportate o chiedi all’Agente di scaricare una risorsa.",
+    "Opened game asset catalog": "Catalogo delle risorse di gioco aperto",
+    "Searched game assets": "Ricerca delle risorse di gioco eseguita",
+    "Downloaded game asset": "Risorsa di gioco scaricata"
   },
   "tr": {
     "Game asset catalog": "Oyun varlığı kataloğu",
@@ -11907,6 +11934,9 @@
     "Viral game": "Viral oyun",
     "Make your next viral game.": "Bir sonraki viral oyununu yap.",
     "Ask Agent to download": "Agent’tan indirmesini iste",
-    "Add supported assets directly or ask the Agent to download an item.": "Desteklenen varlıkları doğrudan ekleyin veya Agent’tan bir öğeyi indirmesini isteyin."
+    "Add supported assets directly or ask the Agent to download an item.": "Desteklenen varlıkları doğrudan ekleyin veya Agent’tan bir öğeyi indirmesini isteyin.",
+    "Opened game asset catalog": "Oyun varlığı kataloğu açıldı",
+    "Searched game assets": "Oyun varlıkları arandı",
+    "Downloaded game asset": "Oyun varlığı indirildi"
   }
 }
