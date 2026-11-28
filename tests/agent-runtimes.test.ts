@@ -19,6 +19,7 @@ import {
   deploymentMode,
   isHostAllowed,
   isLocalDirectEnabled,
+  isTrustedMutationOrigin,
   resolvePublicOrigin,
 } from '../gateway/agent-runtimes.ts';
 import type { AssetAgentRpc } from '../gateway/asset-chat.ts';
@@ -56,6 +57,52 @@ test('deployment policy & host helpers control local-direct availability and pub
   assert.equal(isHostAllowed('127.0.0.1:4173', {}), true);
   assert.equal(isHostAllowed('evil.example.com', {}), false);
   assert.equal(isHostAllowed('cloud.example.com:443', { MOTION_ALLOWED_HOSTS: 'cloud.example.com' }), true);
+});
+
+test('browser writes accept a proxied Origin that matches a declared public host', async () => {
+  const env = { MOTION_ALLOWED_HOSTS: 'studio.example.com', MOTION_PUBLIC_ORIGIN: 'https://studio.example.com' };
+  // Direct same-origin requests keep working, and non-browser callers without Origin stay allowed.
+  assert.equal(isTrustedMutationOrigin('http://127.0.0.1:4173', '127.0.0.1:4173', {}), true);
+  assert.equal(isTrustedMutationOrigin(undefined, '127.0.0.1:4173', {}), true);
+  // A tunnel forwards the browser Origin unchanged while rewriting Host to the loopback listener.
+  assert.equal(isTrustedMutationOrigin('https://studio.example.com', '127.0.0.1:4173', env), true);
+  assert.equal(isTrustedMutationOrigin('https://evil.example.com', '127.0.0.1:4173', env), false);
+  assert.equal(isTrustedMutationOrigin('https://evil.example.com', '127.0.0.1:4173', {}), false);
+  assert.equal(isTrustedMutationOrigin('not a url', '127.0.0.1:4173', env), false);
+  assert.equal(isTrustedMutationOrigin('file:///etc/passwd', '127.0.0.1:4173', env), false);
+
+  // The real handler rejects the mismatched Origin before the fix and accepts the declared host.
+  const previousAllowed = process.env.MOTION_ALLOWED_HOSTS;
+  const previousPublic = process.env.MOTION_PUBLIC_ORIGIN;
+  process.env.MOTION_ALLOWED_HOSTS = 'studio.example.com';
+  process.env.MOTION_PUBLIC_ORIGIN = 'https://studio.example.com';
+  try {
+    const { WorkspaceStore } = await import('../workspace.ts');
+    const { handler } = await import('../server.ts');
+    const { Readable } = await import('node:stream');
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'openmotion-origin-'));
+    try {
+      const call = async (origin: string) => {
+        const req = Object.assign(Readable.from([Buffer.from('{}')]), {
+          method: 'POST', url: '/api/games/unknown-game/like',
+          headers: { host: '127.0.0.1:4173', origin, 'content-type': 'application/json' },
+        });
+        let status = 0;
+        const res = {
+          setHeader() {}, writeHead(code: number) { status = code; }, end() {},
+        } as any;
+        await handler(req as any, res, new WorkspaceStore(directory), {} as any);
+        return status;
+      };
+      assert.equal(await call('https://studio.example.com'), 404);
+      assert.equal(await call('https://evil.example.com'), 403);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  } finally {
+    if (previousAllowed === undefined) delete process.env.MOTION_ALLOWED_HOSTS; else process.env.MOTION_ALLOWED_HOSTS = previousAllowed;
+    if (previousPublic === undefined) delete process.env.MOTION_PUBLIC_ORIGIN; else process.env.MOTION_PUBLIC_ORIGIN = previousPublic;
+  }
 });
 
 test('standalone bridge script passes node --check, embeds all 29 Agents, and install.sh validates inputs', async () => {

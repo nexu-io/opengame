@@ -1,5 +1,11 @@
 # 公开变更记录
 
+## 2026-11-27: Accept declared public hosts for browser writes behind a proxy
+
+- Problem & scope: `server.ts` compared the browser `Origin` against the raw `Host` header for every mutating request. A reverse proxy or tunnel (for example a published HTTPS port in front of the loopback listener) forwards `Origin: https://studio.example.com` but rewrites `Host: 127.0.0.1:4173`, so Play, Remix, metadata edits, uploads and every other Studio write failed with `403 仅允许当前预览页面发起修改` even when the deployment had already declared that hostname through `MOTION_ALLOWED_HOSTS` / `MOTION_PUBLIC_ORIGIN`. GET requests kept working, which made the failure look like a client bug.
+- Fix: Add `isTrustedMutationOrigin(origin, host, env)` in `gateway/agent-runtimes.ts` — the same policy `mcp-http.ts#checkOrigin` already applied, now shared by the HTTP handler: a write is accepted when `Origin` matches `Host` or when its hostname is in `allowedHosts(env)`; requests without `Origin` stay allowed for non-browser callers, and non-HTTP(S) schemes or unparsable Origins are rejected.
+- Validation: `tests/agent-runtimes.test.ts` covers the direct same-origin case, the proxied case with a declared host, an undeclared host, a missing Origin and non-HTTP schemes, plus a real `handler()` call asserting 404 (accepted) versus 403 (rejected); `npm run check` / `npx tsc -p tsconfig.backend.json` stay clean and a rebuilt Studio behind a rewriting proxy serves Play and Remix normally.
+
 ## 2026-11-25: Preserve optional template-copy attribution
 
 - Carry template and copy-attempt identity from Studio copy actions through existing template-read telemetry, including manual clipboard fallback.
