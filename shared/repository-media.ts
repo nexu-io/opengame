@@ -47,6 +47,9 @@ export function validateMediaManifest(value: MediaManifest): MediaManifest {
 
 /** Read a bounded stream; never follow redirects or accept partial/corrupt media. */
 export async function boundedMediaBody(response: Response, limit: number): Promise<Buffer> {
+  // Release a rejected response instead of leaving its stream/connection open
+  // until garbage collection or the fetch timeout. Preserve the HTTP error.
+  if (response.status !== 200) await response.body?.cancel().catch(() => undefined);
   assert.equal(response.status, 200, `Media download returned HTTP ${response.status}`);
   assert(response.body, 'Missing media body');
   const chunks: Buffer[] = [];

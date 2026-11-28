@@ -42,6 +42,7 @@ function safePath(value: string): void {
 }
 
 async function responseBytes(response: Response, limit: number): Promise<Buffer> {
+  if (!response.ok) await response.body?.cancel().catch(() => undefined);
   assert(response.ok, `Hosted template request failed (HTTP ${response.status})`);
   return boundedMediaBody(response, limit);
 }

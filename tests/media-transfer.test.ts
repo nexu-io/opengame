@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { createServer } from 'node:http';
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { commitCleanup, finalizeMediaCleanup, prepareMediaCleanup, preparePullRequest, publishMedia, readGitTreePair, type GitTreeResponse, type TreeFile } from '../scripts/prepare-pr-media.ts';
 import { pullMedia } from '../scripts/repository-media.ts';
-import { downloadMedia, mediaDigest, mediaKey, mediaOrigin, validateMediaManifest, type MediaLock } from '../shared/repository-media.ts';
+import { boundedMediaBody, downloadMedia, mediaDigest, mediaKey, mediaOrigin, validateMediaManifest, type MediaLock } from '../shared/repository-media.ts';
+import { loadHostedCatalog } from '../shared/hosted-template-catalog.ts';
+import { HostedGameTemplates, defaultLfsBatchUrl } from '../shared/hosted-game-templates.ts';
 import { refreshManifest } from '../scripts/template-library.ts';
 import { mergePreparedPullRequest, preparedMergeStatus } from '../scripts/merge-prepared-pr.ts';
 import { checkRepositoryStorage } from '../scripts/check-repository-storage.ts';
@@ -198,6 +201,85 @@ test('media retries never accept or repeat HTTP failures, over-budget bodies or 
     await assert.rejects(downloadMedia(lock, (async () => { requests++; return response; }) as typeof fetch));
     assert.equal(requests, 1);
   }
+});
+
+test('rejected media HTTP responses cancel the live body and release the connection', { timeout: 5000 }, async t => {
+  let closed!: () => void;
+  const responseClosed = new Promise<void>(resolve => { closed = resolve; });
+  const server = createServer((_req, res) => {
+    res.once('close', closed);
+    res.writeHead(503, { 'Content-Type': 'text/plain' });
+    res.write('The error response is still streaming');
+    // Intentionally leave the body open: rejecting its status must release it.
+  });
+  t.after(() => new Promise<void>(resolve => {
+    server.close(() => resolve());
+    server.closeAllConnections();
+  }));
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+  const response = await fetch(`http://127.0.0.1:${address.port}/media`);
+  await assert.rejects(boundedMediaBody(response, 128), /Media download returned HTTP 503/);
+  assert.equal(response.bodyUsed, true, 'The rejected body must be consumed or cancelled');
+  await responseClosed;
+});
+
+test('media HTTP diagnostics survive body cancellation errors and absent bodies', async () => {
+  let cancellations = 0;
+  const response = new Response(new ReadableStream({
+    cancel() { cancellations++; throw new Error('cleanup failed'); },
+  }), { status: 404 });
+  await assert.rejects(boundedMediaBody(response, 128), /Media download returned HTTP 404/);
+  assert.equal(cancellations, 1);
+  await assert.rejects(boundedMediaBody(new Response(null, { status: 304 }), 128), /Media download returned HTTP 304/);
+});
+
+test('successful media bodies still stream completely and oversized bodies cancel', async () => {
+  const bytes = Buffer.from('complete media bytes');
+  assert.deepEqual(await boundedMediaBody(new Response(new Uint8Array(bytes)), bytes.length), bytes);
+  let cancellations = 0;
+  const oversized = new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(16));
+      controller.enqueue(new Uint8Array(17));
+    },
+    cancel() { cancellations++; },
+  }));
+  await assert.rejects(boundedMediaBody(oversized, 32), /exceeds its declared size/);
+  assert.equal(cancellations, 1);
+});
+
+test('hosted catalog status failures cancel before returning the catalog diagnostic', async () => {
+  let cancellations = 0;
+  await assert.rejects(loadHostedCatalog(async () => new Response(new ReadableStream({
+    cancel() { cancellations++; },
+  }), { status: 503 })), /Hosted template request failed \(HTTP 503\)/);
+  assert.equal(cancellations, 1);
+});
+
+test('Git LFS batch status failures cancel before returning the fallback diagnostic', async t => {
+  const root = await isolated(t);
+  const templates = path.join(root, 'app/templates/games');
+  const installed = path.join(templates, 'demo');
+  await mkdir(installed, { recursive: true });
+  await writeFile(path.join(templates, '.gitattributes'), '*.bin filter=lfs diff=lfs merge=lfs -text\n');
+  await writeFile(path.join(installed, 'game.json'), '{"id":"demo"}');
+  await writeFile(path.join(installed, 'index.html'), '<canvas></canvas>');
+  await writeFile(path.join(installed, 'asset.bin'), `version https://git-lfs.github.com/spec/v1\noid sha256:${'a'.repeat(64)}\nsize 8\n`);
+  let cancellations = 0;
+  const hosted = new HostedGameTemplates(path.join(templates, '../game-downloads.json'), path.join(root, 'cache'), {
+    fetcher: async url => {
+      assert.equal(url, defaultLfsBatchUrl);
+      return new Response(new ReadableStream({ cancel() { cancellations++; } }), { status: 503 });
+    },
+  });
+  await assert.rejects(hosted.directory('demo', installed), (error: Error & { cause?: Error }) => {
+    assert.match(error.message, /Could not fetch demo via Git LFS or HTTPS fallback/);
+    assert.match(error.cause?.message ?? '', /Git LFS batch request returned HTTP 503/);
+    return true;
+  });
+  assert.equal(cancellations, 1);
 });
 
 test('optional media pulls restore exact bytes, reuse valid files and reject corrupt bodies and symlinks', async t => {

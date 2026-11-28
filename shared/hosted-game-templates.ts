@@ -218,6 +218,7 @@ async function fetchMissingLfsObjects(
       credentials: 'omit',
       signal: AbortSignal.timeout(30_000),
     });
+    if (response.status !== 200) await response.body?.cancel().catch(() => undefined);
     assert.equal(response.status, 200, `Git LFS batch request returned HTTP ${response.status}`);
     const payload = await response.json() as { objects?: LfsBatchItem[] };
     assert(Array.isArray(payload?.objects), 'Invalid Git LFS batch response');
