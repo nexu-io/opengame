@@ -8916,3 +8916,48 @@ it('opens the Artifact Viewer publish panel directly from the game deliverable h
   expect(cardPublishBtn()?.getAttribute('aria-pressed')).toBe('false');
   expect(viewerPublishBtn()?.getAttribute('aria-pressed')).toBe('false');
 });
+
+it('shows the Super Agent stream scrollbar only while scrolling', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  try {
+    await act(async () => {
+      root.render(
+        <I18nProvider initialLocale="en">
+          <SuperAgentWorkspace
+            active
+            initialMode="game"
+            chatId={null}
+            onChatIdChange={vi.fn()}
+            onOpenDesignProject={vi.fn()}
+            onOpenMotionProject={vi.fn()}
+            onOpenAsset={vi.fn()}
+            onOpenBrandKit={vi.fn()}
+            onOpenAgentSettings={vi.fn()}
+            onOpenMcp={vi.fn()}
+          />
+        </I18nProvider>,
+      );
+    });
+
+    const scroller = container.querySelector<HTMLElement>('.om-sa-messages')!;
+    expect(scroller).toBeTruthy();
+    expect(scroller.dataset.scrolling).toBeUndefined();
+
+    await act(async () => {
+      scroller.dispatchEvent(new Event('scroll', { bubbles: false }));
+    });
+    expect(scroller.dataset.scrolling).toBe('true');
+
+    await act(async () => {
+      vi.advanceTimersByTime(749);
+    });
+    expect(scroller.dataset.scrolling).toBe('true');
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(scroller.dataset.scrolling).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});

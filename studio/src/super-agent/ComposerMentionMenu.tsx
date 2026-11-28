@@ -800,7 +800,7 @@ export const ComposerMentionMenu = forwardRef<
 
             <div
               ref={listRef}
-              className="om-sa-mention-list"
+              className="om-sa-mention-list om-scroll-reveal"
               data-scrolling={listScrolling || undefined}
               data-fade-bottom={listFadeBottom || undefined}
               onScroll={handleListScroll}

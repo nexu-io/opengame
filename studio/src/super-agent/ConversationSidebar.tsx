@@ -300,7 +300,7 @@ export function ConversationSidebar({
 
       <div
         ref={chatListRef}
-        className="om-sa-chat-list"
+        className="om-sa-chat-list om-scroll-reveal"
         data-scrolling={listScrolling || undefined}
         data-fade-bottom={listFadeBottom || undefined}
         onScroll={handleListScroll}

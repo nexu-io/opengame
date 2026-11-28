@@ -902,3 +902,40 @@
     scrollbar-color: color-mix(in srgb, var(--motion-text) 18%, transparent) transparent;
   }
 }
+
+/* Opt-in scroll-reveal scrollbar: hidden at rest, shown while data-scrolling="true". */
+@supports selector(::-webkit-scrollbar) {
+  :root[data-motion-ui] .om-scroll-reveal::-webkit-scrollbar-thumb,
+  :root[data-motion-ui] .om-scroll-reveal::-webkit-scrollbar-thumb:hover,
+  :root[data-motion-ui] .om-scroll-reveal::-webkit-scrollbar-thumb:active,
+  [data-motion-studio] .om-scroll-reveal::-webkit-scrollbar-thumb,
+  [data-motion-studio] .om-scroll-reveal::-webkit-scrollbar-thumb:hover,
+  [data-motion-studio] .om-scroll-reveal::-webkit-scrollbar-thumb:active {
+    background-color: transparent;
+  }
+
+  :root[data-motion-ui] .om-scroll-reveal[data-scrolling='true']::-webkit-scrollbar-thumb,
+  [data-motion-studio] .om-scroll-reveal[data-scrolling='true']::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--motion-text) 28%, transparent);
+  }
+
+  :root[data-motion-ui] .om-scroll-reveal[data-scrolling='true']::-webkit-scrollbar-thumb:hover,
+  :root[data-motion-ui] .om-scroll-reveal[data-scrolling='true']::-webkit-scrollbar-thumb:active,
+  [data-motion-studio] .om-scroll-reveal[data-scrolling='true']::-webkit-scrollbar-thumb:hover,
+  [data-motion-studio] .om-scroll-reveal[data-scrolling='true']::-webkit-scrollbar-thumb:active {
+    background-color: color-mix(in srgb, var(--motion-text) 44%, transparent);
+  }
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  :root[data-motion-ui] .om-scroll-reveal,
+  [data-motion-studio] .om-scroll-reveal {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+
+  :root[data-motion-ui] .om-scroll-reveal[data-scrolling='true'],
+  [data-motion-studio] .om-scroll-reveal[data-scrolling='true'] {
+    scrollbar-color: color-mix(in srgb, var(--motion-text) 28%, transparent) transparent;
+  }
+}
