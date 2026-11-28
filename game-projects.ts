@@ -171,8 +171,8 @@ function findDisallowedHostDiagnostics(relative: string, source: string, allowed
     // to a namespace-aware DOM call (bundled libraries such as Three.js create XHTML elements this way).
     if (xmlNamespaces.has(match[0])
       && /(?:\sxmlns(?::[a-z]+)?\s*=\s*["']|\b(?:create(?:Element|Attribute)NS|(?:get|set|has|remove)AttributeNS)\s*\(\s*["'])$/i.test(source.slice(0, match.index))) continue;
-    const host = new URL(match[0].startsWith('//') ? 'https:' + match[0] : match[0]).hostname;
-    if (!allowedHosts.includes(host)) diagnostics.push({ path: relative, message: `External network host is not allowed: ${host}` });
+    const url = URL.parse(match[0].startsWith('//') ? 'https:' + match[0] : match[0]);
+    if (url && !allowedHosts.includes(url.hostname)) diagnostics.push({ path: relative, message: `External network host is not allowed: ${url.hostname}` });
   }
   return diagnostics;
 }

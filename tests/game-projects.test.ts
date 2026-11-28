@@ -1416,6 +1416,21 @@ test('validation allows SVG namespace declarations and createElementNS while rej
   ]);
 }));
 
+test('game validation accepts sourceURL directives in script strings and still checks external hosts',()=>fixture(async(service)=>{
+  const {game}=await service.create(brief);
+  const script='const debugSuffix = "//# sourceURL=renderer.js";';
+  await service.write(game.id,[
+    {path:'index.html',content:'<!doctype html><script src="./renderer.js"></script>'},
+    {path:'renderer.js',content:script},
+  ]);
+  assert.equal((await service.validate(game.id)).passed,true);
+
+  await service.write(game.id,[{path:'renderer.js',content:script+'\nfetch("//example.invalid/resource");'}]);
+  assert.deepEqual((await service.validate(game.id)).diagnostics,[
+    {path:'renderer.js',message:'External network host is not allowed: example.invalid'},
+  ]);
+}));
+
 test('headless playtest loads workspace asset versions via GET, HEAD, Range and rejects invalid ids with 404',async t=>fixture(async(service,workspace)=>{
   if(!await browserExecutable().catch(()=>undefined)){t.skip('Local Chrome is unavailable');return;}
   const filename=path.join(workspace,'sprite.png');
