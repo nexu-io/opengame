@@ -79,5 +79,6 @@ export function buildGamePublishOpenInput(
     gameTitle: artifact.title,
     ...(orientation ? { orientation } : {}),
     link: options.includeLink === false ? undefined : resolveGamePublishLink(artifact),
+    artifact,
   };
 }

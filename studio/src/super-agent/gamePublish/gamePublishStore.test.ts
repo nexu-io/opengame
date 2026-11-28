@@ -112,6 +112,66 @@ describe('gamePublishStore', () => {
     expect(session.linkError).toBeUndefined();
   });
 
+  it('from a standalone preview (no conversation), WeChat starts a conversation that already holds the game', async () => {
+    gamePublishActions.open({ ...input, chatId: null, artifact: { id: 'game:abc', kind: 'game-project' as const, title: 'Coin Jar', projectId: 'abc12345' } });
+    gamePublishActions.setLinkToo(input.artifactId, false);
+    gamePublishActions.choose(input.artifactId, 'wechat');
+    await settle();
+    const payload = handoff.mock.calls[0][0];
+    expect(payload.initialArtifact).toMatchObject({ id: 'game:abc', kind: 'game-project', projectId: 'abc12345' });
+    expect(payload.title).toBe('Coin Jar');
+    gamePublishActions.bindChat(input.artifactId, 'chat-new');
+    expect(gamePublishSessionFor(input.artifactId)).toMatchObject({ chatId: 'chat-new', platformId: 'wechat' });
+  });
+
+  it('inside a conversation the WeChat handoff does not create a new one', async () => {
+    gamePublishActions.open({ ...input, artifact: { id: 'game:abc', kind: 'game-project' as const, title: 'Coin Jar', projectId: 'abc12345' } });
+    gamePublishActions.choose(input.artifactId, 'wechat');
+    await settle();
+    expect(handoff.mock.calls[0][0].initialArtifact).toBeUndefined();
+  });
+
+  it('reopening a chat-less run inside a conversation moves its cards there', async () => {
+    gamePublishActions.open({ ...input, chatId: null });
+    gamePublishActions.choose(input.artifactId, 'itch');
+    await settle();
+    const before = gamePublishThreadFor(`artifact:${input.artifactId}`);
+    expect(before.length).toBeGreaterThan(0);
+    gamePublishActions.open({ ...input, chatId: 'chat-b' });
+    expect(gamePublishThreadFor('chat-b')).toEqual(before);
+    expect(gamePublishSessionFor(input.artifactId)?.chatId).toBe('chat-b');
+  });
+
+  it('a run in progress keeps its conversation when opened from a standalone preview; a new WeChat run starts there', async () => {
+    gamePublishActions.open({ ...input, chatId: 'chat-a' });
+    gamePublishActions.setLinkToo(input.artifactId, false);
+    gamePublishActions.choose(input.artifactId, 'itch');
+    await settle();
+    gamePublishActions.close(input.artifactId);
+    gamePublishActions.open({ ...input, chatId: null, artifact: { id: 'game:abc', kind: 'game-project' as const, title: 'Coin Jar', projectId: 'abc12345' } });
+    expect(gamePublishSessionFor(input.artifactId)).toMatchObject({ chatId: 'chat-a', platformId: 'itch', view: 'step' });
+    handoff.mockReset();
+    gamePublishActions.choose(input.artifactId, 'wechat');
+    await settle();
+    expect(handoff.mock.calls[0][0].initialArtifact).toMatchObject({ id: 'game:abc' });
+    gamePublishActions.bindChat(input.artifactId, 'chat-new');
+    handoff.mockReset();
+    gamePublishActions.choose(input.artifactId, 'wechat');
+    await settle();
+    expect(handoff.mock.calls[0][0].initialArtifact).toBeUndefined();
+    expect(gamePublishSessionFor(input.artifactId)?.chatId).toBe('chat-new');
+  });
+
+  it('with OpenDesign kept, the first WeChat reply is the WeChat step; the link is one line at the end', async () => {
+    gamePublishActions.open(input);
+    gamePublishActions.choose(input.artifactId, 'wechat');
+    await settle();
+    const guide = handoff.mock.calls[0][0].hiddenInstructions as string;
+    expect(guide).toContain('start it with its current step');
+    expect(guide).toContain('never replaces or delays the platform step');
+    expect(guide).not.toContain('say only');
+  });
+
   it('WeChat goes to the Agent in this conversation and adds no cards of its own', async () => {
     gamePublishActions.open(input);
     // OpenDesign off, so only WeChat's own entries would show (the link logs its own publishing).

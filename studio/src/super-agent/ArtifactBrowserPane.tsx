@@ -2010,6 +2010,10 @@ export function ArtifactBrowserPane({
   const publishGameId = resolvePublishableGameId(activeArtifact, gameMeta?.source);
   const publishSession = useGamePublishSession(publishGameId ? activeArtifact?.id : null);
   const publishPanelOpen = Boolean(publishGameId && publishSession?.open);
+  // Publishing from a standalone preview starts a conversation that holds this game; keep the run with it.
+  useEffect(() => {
+    if (activeArtifact?.id && chatId && publishSession && !publishSession.chatId) gamePublishActions.bindChat(activeArtifact.id, chatId);
+  }, [activeArtifact?.id, chatId, publishSession]);
 
   const webState = activeArtifact?.kind === 'web' && webStateEntry?.artifactId === activeArtifact.id
     ? webStateEntry.state
