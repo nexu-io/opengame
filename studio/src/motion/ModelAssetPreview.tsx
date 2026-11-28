@@ -30,7 +30,7 @@ export function ModelAssetPreview({ active = true, ...props }: Props) {
       document.removeEventListener('visibilitychange', update);
     };
   }, []);
-  return <div ref={root} className="om-model-preview om-game-preview-inspector">{active && visible && <ModelStage key={props.src} {...props} />}</div>;
+  return <div ref={root} className="om-game-preview-inspector">{active && visible && <ModelStage key={props.src} {...props} />}</div>;
 }
 
 function ModelStage({ src, title, animation }: Props) {
@@ -169,7 +169,7 @@ function ModelStage({ src, title, animation }: Props) {
       {error ? <div className="om-empty" role="status"><span>{t(error)}</span><Button type="button" variant="ghost" onClick={() => { setError(''); setAttempt(n => n + 1); }}>{t('Retry')}</Button></div>
         : !clips && <Skeleton className="absolute inset-0" />}
     </div>
-    {clips && clips.length > 0 && <div className="om-model-footer om-inspector-footer">
+    {clips && clips.length > 0 && <div className="om-inspector-footer">
       <div className="om-inspector-options">
         {clips.length > 1 && <Select className="om-inspector-select" label={t('Animation')} value={selection.name} options={clipOptions} onCommit={name => setSelection({ name, requested: false })} modal={false} />}
         <Select className="om-inspector-select" label={t('Playback speed')} value={speed} options={speedOptions} onCommit={setSpeed} modal={false} />

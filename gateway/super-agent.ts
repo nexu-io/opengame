@@ -4729,7 +4729,7 @@ export class SuperAgentConversations {
         let primary: SuperAgentArtifact | undefined;
         for (const [idx, ref] of (value.job.libraryAssets as { assetId?: string; versionId?: string }[]).slice(0, 8).entries()) {
           if (!ref?.assetId || !ref?.versionId) continue;
-          const asset = await library.get(ref.assetId).catch(() => null);
+          const asset = await library.get(ref.assetId).catch((): null => null);
           if (!asset) continue;
           const version = assetVersion(asset, ref.versionId);
           if (!version) continue;
