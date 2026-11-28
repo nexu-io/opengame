@@ -1,9 +1,11 @@
 ---
 name: openmotion-game
-description: Preview existing game models, animation clips, sprite atlases, maps and sounds in Studio chat. Build, remix, validate and locally publish playable single-player browser games through the OpenMotion game tools, including a consistent art direction and real generated image, music and voice assets when media models are available.
+description: Find 2D sprites, tiles and UI art in asset catalogs or acquire 3D models from catalogs and local games. Preview existing game models, animation clips, sprite atlases, maps and sounds in Studio chat. Build, remix, validate and locally publish playable single-player browser games through the OpenMotion game tools, including a consistent art direction and real generated image, music and voice assets when media models are available.
 ---
 
 # OpenMotion Game Studio
+
+For requests to **find a 2D game asset or acquire a 3D model**, follow [model sourcing](references/game-model-sourcing.md) (`openmotion://workflow/game/sourcing`). For models already available in the conversation workspace, continue with preview below.
 
 ## Preview existing assets in chat
 
@@ -70,7 +72,7 @@ Ask **at most two short questions** only when missing: local-market publication 
 
 ## MCP Resources & Optional Post-Publish Trailer
 
-MCP-only hosts read `openmotion://workflow/game/<section>` (`start`, `brief`, `gates`, `controls`, `craft`, `lookup`, `design`, `style`, `genres`, `playable`, `flow`, `sprites`, `animation`, `procedural`, `textures`, `audio`, `review`, `provenance`, `wechat`) and `openmotion://workflow/media/*`.
+MCP-only hosts read `openmotion://workflow/game/<section>` (`start`, `brief`, `gates`, `controls`, `craft`, `lookup`, `sourcing`, `design`, `style`, `genres`, `playable`, `flow`, `sprites`, `animation`, `procedural`, `textures`, `audio`, `review`, `provenance`, `wechat`) and `openmotion://workflow/media/*`.
 
 After publishing, optionally offer `openmotion_game_trailer` (`{ id, action: "start" | "status" }`). Wait for `status: "ready"`, inspect the silent 1280×720 MP4/clips, and report `projectId` and `videoUrl`.
 
