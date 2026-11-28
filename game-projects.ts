@@ -554,10 +554,14 @@ export function gameCoverDimensions(bytes: Buffer, extension: string): { width: 
       if([0xc0,0xc1,0xc2,0xc3,0xc5,0xc6,0xc7,0xc9,0xca,0xcb,0xcd,0xce,0xcf].includes(marker)&&length>=7){height=bytes.readUInt16BE(i+3);width=bytes.readUInt16BE(i+5);break;}i+=length;
     }
   } else if(extension.toLowerCase()==='.svg') {
-    const svg=/<svg\b[^>]*>/i.exec(bytes.toString('utf8'))?.[0]??'';
-    width=Number(/\bwidth\s*=\s*["']([\d.]+)(?:px)?["']/i.exec(svg)?.[1]);
-    height=Number(/\bheight\s*=\s*["']([\d.]+)(?:px)?["']/i.exec(svg)?.[1]);
-    if(!width||!height){const box=/\bviewBox\s*=\s*["']([^"']+)["']/i.exec(svg)?.[1].trim().split(/[\s,]+/).map(Number);if(box?.length===4){width=box[2];height=box[3];}}
+    const svg=/<(?:[A-Za-z_][\w.-]*:)?svg(?=[\s/>])(?:[^"'<>]|"[^"]*"|'[^']*')*>/i.exec(bytes.toString('utf8'))?.[0]??'';
+    const attributes=new Map<string,string>();
+    // Consume complete quoted values so names such as stroke-width and text
+    // inside another attribute cannot masquerade as viewport dimensions.
+    for(const attribute of svg.matchAll(/\s+([^\s"'<>/=]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g))attributes.set(attribute[1].toLowerCase(),attribute[2]??attribute[3]);
+    width=Number(/^([\d.]+)(?:px)?$/i.exec(attributes.get('width')??'')?.[1]);
+    height=Number(/^([\d.]+)(?:px)?$/i.exec(attributes.get('height')??'')?.[1]);
+    if(!width||!height){const box=attributes.get('viewbox')?.trim().split(/[\s,]+/).map(Number);if(box?.length===4){width=box[2];height=box[3];}}
   }
   if(!Number.isFinite(width+height)||width<=0||height<=0)throw new GameError('Cannot read cover dimensions; use a PNG/JPEG/WebP/GIF/SVG image or openmotion_game_capture_cover');
   return {width,height};
