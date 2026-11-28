@@ -1764,7 +1764,18 @@ server.listen(port, '127.0.0.1', () => {
       }));
       return {recordedClips,room,durationMs:Math.round(elapsed),clients:output,scope:'Each run has its own temporary room server; the room name does not attach to live user rooms. Isolated server-owned headless Chrome; canvas/root screenshots only; offline requests; no user profile. Client visibility is forced for concurrent rendering; background suspension is not tested. FPS is requestAnimationFrame pacing, not GPU performance acceptance.'};
     } finally {
-      try {if(browser)await browser.close();} finally {closeRooms();server.closeAllConnections();if(server.listening)await new Promise<void>(resolve=>server.close(()=>resolve()));if(profile)await rm(profile,{recursive:true,force:true});this.browserBusy=false;}
+      try { if (browser) await browser.close(); }
+      finally {
+        try {
+          closeRooms();
+          server.closeAllConnections();
+          if (server.listening) await new Promise<void>(resolve => server.close(() => resolve()));
+          if (profile) await rm(profile, { recursive: true, force: true });
+        } finally {
+          // Release the active-run guard even when profile cleanup fails.
+          this.browserBusy = false;
+        }
+      }
     }
   }
 
