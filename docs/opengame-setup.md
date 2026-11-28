@@ -11,7 +11,9 @@ This guide installs the `nexu-io/opengame` checkout and connects its game tools 
 
 ## Install the main OpenGame Skill
 
-Install the main `opengame` Skill once through the official Skills CLI as the first setup step before cloning or configuring MCP (using the lightweight `skills` branch so Skills CLI skips cloning the full game template catalog while still attributing installs to `nexu-io/opengame`):
+The official `opengame` Skill is required before cloning the application, starting Studio or configuring MCP. If the selected agent already has `opengame` installed from `nexu-io/opengame` in the intended profile or project, reuse that installation and continue to [Install and build](#install-and-build). If a different source owns the same Skill name in that scope, stop and report the conflict before running the install command.
+
+For a fresh setup, install the Skill from the lightweight `skills` branch:
 
 ```sh
 npx --yes skills@1.9.0 add https://github.com/nexu-io/opengame/tree/skills --skill opengame --global --agent AGENT --copy --yes
@@ -19,9 +21,7 @@ npx --yes skills@1.9.0 add https://github.com/nexu-io/opengame/tree/skills --ski
 
 Use `codex` for Codex and `claude-code` for Claude Code. For DeepSeek Harness (DSH) or any host without a dedicated Skills CLI target, use `universal`. Select only the intended host; for custom or isolated profiles, omit `--global` and run inside that profile or project directory instead of the daily global profile.
 
-Reuse an existing official installation and skip this step if `opengame` is already installed from `nexu-io/opengame` (for example, when setup started from the `opengame` Skill itself). Preserve unrelated Skills, foreign same-name entries, and the CLI's telemetry opt-outs (`DISABLE_TELEMETRY`, `DO_NOT_TRACK`). Setting `OPENMOTION_SKIP_PUBLIC_SKILL=1` skips this optional step. Do not reinstall merely to generate another install event.
-
-A Skills CLI failure or timeout does not block Studio or MCP setup: report it briefly and continue below. Skills CLI installs instructions only; continue the local source installation and stdio MCP setup below in this same conversation.
+If installation fails or times out, stop setup and report the CLI error. Resume only after the official Skill is installed for the selected agent. Respect the CLI's telemetry opt-outs (`DISABLE_TELEMETRY`, `DO_NOT_TRACK`) throughout setup.
 
 ## Install and build
 

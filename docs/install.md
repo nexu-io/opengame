@@ -1,6 +1,8 @@
 # Install OpenMotion
 
 <!-- source-only:start -->
+> **Installing OpenGame?** Follow the [OpenGame setup guide](opengame-setup.md) to install `opengame` and connect Game Studio to your agent. The steps below install OpenMotion.
+
 For an Agent asked to install OpenMotion from this repository, use the source installation below. Commands run from the checkout root even though this guide lives under docs/. This is the default repository installation route. Only use npm installation when the user explicitly selects it; follow the [published application guide](#published-npm-application) instead of mixing source and package setup. npm remains required to install this checkout's locked dependencies and build Studio.
 <!-- source-only:end -->
 
