@@ -1474,6 +1474,307 @@ test('3d-asset capability gates honestly on AMR 3d_generations and executes Trip
     }
   }, false));
 
+test('3d-asset runs on the native Meshy API from MESHY_API_KEY: text preview+refine, image rig+animation, library lookup, resume and failure', () =>
+  fixture(async store => {
+    clearOpenDesign3dDiscoveryCache();
+    const api = service(store);
+    const gateway = gatewayFor(store);
+    const glbBytes = makeTinyGlb();
+    // Isolate from any ambient 3D provider setup: a Tripo key outranks Meshy and OPENMOTION_MESHY_ENABLED=0 disables it.
+    const isolatedEnvKeys = [
+      'MESHY_API_KEY', 'MESHY_API_KEY_FILE', 'MESHY_BASE_URL', 'MESHY_TASK_TIMEOUT_MS', 'OPENMOTION_MESHY_ENABLED',
+      'OPENMOTION_TRIPO_API_KEY', 'OPENMOTION_TRIPO_KEY_FILE', 'OPENMOTION_TRIPO_ENABLED', 'OPENMOTION_TRIPO_BASE_URL',
+    ] as const;
+    const previousEnv = Object.fromEntries(isolatedEnvKeys.map(key => [key, process.env[key]]));
+    for (const key of isolatedEnvKeys) delete process.env[key];
+    process.env.MESHY_API_KEY = 'msy_test_key';
+    process.env.MESHY_BASE_URL = 'https://meshy-mock.example.com';
+    const submitted: { path: string; body: any }[] = [];
+    const glbDownloads: { url: string; authorization: string | null }[] = [];
+    const libraryQueries: string[] = [];
+    let failNextImageTask = false;
+    let failNextPreview = false;
+    const failedPreviewIds = new Set<string>();
+    let taskCounter = 0;
+    const json = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+
+    gateway.options.pollMs = 10;
+    gateway.options.fetcher = (async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith('https://assets.meshy-mock.example.com/')) {
+        glbDownloads.push({ url, authorization: new Headers(init?.headers).get('authorization') });
+        return new Response(glbBytes, { status: 200, headers: { 'Content-Type': 'model/gltf-binary' } });
+      }
+      assert.ok(url.startsWith('https://meshy-mock.example.com/openapi/'), `unexpected request ${url}`);
+      assert.equal(new Headers(init?.headers).get('authorization'), 'Bearer msy_test_key');
+      const pathname = new URL(url).pathname;
+      if (pathname === '/openapi/v1/animations/library') {
+        const search = new URL(url).searchParams.get('search') ?? '';
+        libraryQueries.push(search);
+        if (search === 'hurt') return json([{ action_id: 178, name: 'Hit_Reaction', rig_type: 'biped' }]);
+        if (search === 'fall') return json([{ action_id: 8, name: 'Dead', rig_type: 'biped' }]);
+        return json([]);
+      }
+      if (init?.method === 'POST') {
+        const body = JSON.parse(String(init.body ?? '{}'));
+        submitted.push({ path: pathname, body });
+        taskCounter += 1;
+        const taskId = `${pathname.split('/').pop()}-${taskCounter}`;
+        if (body.mode === 'preview' && failNextPreview) {
+          failNextPreview = false;
+          failedPreviewIds.add(taskId);
+        }
+        return json({ result: taskId }, 202);
+      }
+      const id = pathname.split('/').pop()!;
+      if (failedPreviewIds.has(id)) {
+        return json({ id, status: 'FAILED', progress: 0, task_error: { type: 'server_error', message: 'Preview interrupted' } });
+      }
+      if (id.startsWith('image-to-3d') && failNextImageTask) {
+        return json({ id, status: 'FAILED', progress: 0, task_error: { type: 'invalid_input', code: 'image_too_complex', message: 'Image is too complex' } });
+      }
+      if (id.startsWith('rigging')) {
+        return json({ id, status: 'SUCCEEDED', progress: 100, result: { rigged_character_glb_url: `https://assets.meshy-mock.example.com/${id}/rigged.glb?Expires=1` } });
+      }
+      if (id.startsWith('animations')) {
+        return json({ id, status: 'SUCCEEDED', progress: 100, result: { animation_glb_url: `https://assets.meshy-mock.example.com/${id}/animation.glb?Expires=1` } });
+      }
+      return json({ id, status: 'SUCCEEDED', progress: 100, model_urls: { glb: `https://assets.meshy-mock.example.com/${id}/model.glb?Expires=1` } });
+    }) as typeof fetch;
+
+    try {
+      const list = await api.call('openmotion_capability_discover', { action: 'list', modality: '3d', refresh: true });
+      const cap = list.capabilities.find((c: any) => c.id === '3d-asset');
+      assert.equal(cap?.available, true);
+      assert.equal(cap?.recommendedModel, 'meshy:meshy-7.1');
+      const models = await api.call('openmotion_capability_discover', { action: 'models', modality: '3d', refresh: true });
+      assert.deepEqual(
+        models.catalogs[0].models.map((m: any) => m.id),
+        ['meshy:meshy-7.1', 'meshy:meshy-6', 'meshy:meshy-6-lite'],
+      );
+      await assert.rejects(
+        api.call('openmotion_capability_run', { action: 'run', capabilityId: '3d-asset', model: 'meshy:tripo-3.0', dryRun: true, prompt: 'Knight' }),
+        /CAPABILITY_MODEL_INCOMPATIBLE/,
+      );
+
+      // Text to 3D: preview (mesh) then refine (PBR texture), downloaded without forwarding the Meshy key.
+      const textRun = await api.call('openmotion_capability_run', {
+        action: 'run',
+        requestId: 'meshy-text-1',
+        capabilityId: '3d-asset',
+        model: 'meshy:meshy-7.1',
+        prompt: 'Low-poly treasure chest',
+        options: { quality: 'prop-low' },
+        parameters: { slim: false },
+      });
+      assert.equal(submitted.length, 2);
+      assert.equal(submitted[0].path, '/openapi/v2/text-to-3d');
+      assert.deepEqual(submitted[0].body, {
+        mode: 'preview',
+        prompt: 'Low-poly treasure chest',
+        ai_model: 'meshy-7.1',
+        should_remesh: true,
+        topology: 'triangle',
+        target_polycount: 5000,
+        target_formats: ['glb'],
+      });
+      assert.deepEqual(submitted[1].body, { mode: 'refine', preview_task_id: 'text-to-3d-1', enable_pbr: true, target_formats: ['glb'] });
+      assert.equal(textRun.result.provider, 'meshy');
+      assert.equal(textRun.result.operation, 'text_to_model');
+      assert.equal(textRun.result.taskId, 'text-to-3d-2');
+      assert.equal(textRun.version.mimeType, 'model/gltf-binary');
+      assert.equal(glbDownloads.length, 1);
+      assert.equal(glbDownloads[0].url, 'https://assets.meshy-mock.example.com/text-to-3d-2/model.glb?Expires=1');
+      assert.equal(glbDownloads[0].authorization, null);
+
+      // Image → Meshy rigging (Mixamo skeleton) → one merged animation task; unknown presets resolve via the library.
+      const refPng = await makePng(store.directory, 'meshy-hero.png', 'teal');
+      const importedRef = await api.call('openmotion_asset_manage', {
+        action: 'import',
+        requestId: 'import-meshy-ref-1',
+        sourcePath: refPng,
+        name: 'Meshy Hero Concept',
+      });
+      const reference = { assetId: importedRef.asset.id, versionId: importedRef.asset.currentVersionId };
+      const rigRun = await api.call('openmotion_capability_run', {
+        action: 'run',
+        requestId: 'meshy-hero-1',
+        capabilityId: '3d-asset',
+        model: 'meshy:meshy-7.1',
+        prompt: 'Stylized knight hero',
+        options: { operation: 'rig_retarget', rigPreset: 'mixamo-combat' },
+        references: [reference],
+        parameters: { slim: false },
+      });
+      const heroTasks = submitted.slice(2);
+      assert.deepEqual(heroTasks.map(task => task.path), ['/openapi/v1/image-to-3d', '/openapi/v1/rigging', '/openapi/v1/animations']);
+      assert.match(heroTasks[0].body.image_url, /^data:image\/png;base64,/);
+      assert.equal(heroTasks[0].body.ai_model, 'meshy-7.1');
+      assert.equal(heroTasks[0].body.should_texture, true);
+      assert.equal(heroTasks[0].body.enable_pbr, true);
+      assert.equal(heroTasks[0].body.target_polycount, 10000);
+      assert.deepEqual(heroTasks[1].body, { input_task_id: 'image-to-3d-3', animation_type: 'biped', skeleton_template: 'mixamo' });
+      assert.deepEqual(heroTasks[2].body, { rig_task_id: 'rigging-4', action_ids: [0, 14, 97, 178, 8] });
+      assert.deepEqual(libraryQueries, ['hurt', 'fall']);
+      assert.equal(rigRun.result.rigTaskId, 'rigging-4');
+      assert.equal(rigRun.result.baseTaskId, 'image-to-3d-3');
+      assert.deepEqual(rigRun.result.meshyAnimations, ['idle', 'run', 'slash', 'Hit_Reaction', 'Dead']);
+      assert.equal(rigRun.result.skins, 1);
+
+      // Replaying a completed requestId returns the stored result without new paid tasks.
+      const replay = await api.call('openmotion_capability_run', {
+        action: 'run',
+        requestId: 'meshy-hero-1',
+        capabilityId: '3d-asset',
+        model: 'meshy:meshy-7.1',
+        prompt: 'Stylized knight hero',
+        options: { operation: 'rig_retarget', rigPreset: 'mixamo-combat' },
+        references: [reference],
+        parameters: { slim: false },
+      });
+      assert.equal(replay.asset.id, rigRun.asset.id);
+      assert.equal(submitted.length, 5);
+
+      // 1-step retarget on an existing rig with explicit numeric action ids.
+      await api.call('openmotion_capability_run', {
+        action: 'run',
+        requestId: 'meshy-retarget-1',
+        capabilityId: '3d-asset',
+        model: 'meshy:meshy-7.1',
+        options: { operation: 'retarget' },
+        parameters: { original_model_task_id: 'rigging-4', action_ids: [92], slim: false },
+      });
+      assert.deepEqual(submitted.at(-1), { path: '/openapi/v1/animations', body: { rig_task_id: 'rigging-4', action_id: 92 } });
+
+      // Skeleton-only rig on an existing base mesh saves the rigged character GLB from a single rigging task.
+      const beforeRigOnly = submitted.length;
+      const rigOnlyRun = await api.call('openmotion_capability_run', {
+        action: 'run',
+        requestId: 'meshy-rig-only-1',
+        capabilityId: '3d-asset',
+        model: 'meshy:meshy-7.1',
+        options: { operation: 'rig' },
+        parameters: { original_model_task_id: 'image-to-3d-3', slim: false },
+      });
+      assert.deepEqual(submitted.slice(beforeRigOnly).map(task => task.path), ['/openapi/v1/rigging']);
+      assert.equal(rigOnlyRun.result.taskId, rigOnlyRun.result.rigTaskId);
+      assert.ok(rigOnlyRun.asset.id);
+      assert.match(glbDownloads.at(-1)!.url, /\/rigging-\d+\/rigged\.glb/);
+
+      // texture=false on text_to_model returns the untextured preview task, and faceLimit reports target_polycount.
+      const beforeUntextured = submitted.length;
+      const untexturedRun = await api.call('openmotion_capability_run', {
+        action: 'run',
+        requestId: 'meshy-untextured-1',
+        capabilityId: '3d-asset',
+        model: 'meshy:meshy-7.1',
+        prompt: 'Blockout crate',
+        options: { operation: 'text_to_model' },
+        parameters: { texture: false, target_polycount: 50000, slim: false },
+      });
+      const untexturedTasks = submitted.slice(beforeUntextured);
+      assert.deepEqual(untexturedTasks.map(task => task.body.mode), ['preview']);
+      assert.equal(untexturedTasks[0].body.target_polycount, 50000);
+      assert.equal(untexturedRun.result.faceLimit, 50000);
+      assert.match(glbDownloads.at(-1)!.url, /\/text-to-3d-\d+\/model\.glb/);
+
+      // Operations Meshy does not implement fail locally before any request.
+      const beforeUnsupported = submitted.length;
+      await assert.rejects(
+        api.call('openmotion_capability_run', {
+          action: 'run',
+          requestId: 'meshy-decimate-1',
+          capabilityId: '3d-asset',
+          model: 'meshy:meshy-7.1',
+          options: { operation: 'decimate' },
+          parameters: { original_model_task_id: 'image-to-3d-3' },
+        }),
+        /Unsupported 3d-asset operation for Meshy: decimate/,
+      );
+      assert.equal(submitted.length, beforeUnsupported);
+
+      // Rigging needs a textured mesh: texture=false with a rig operation fails before any paid base-mesh request.
+      await assert.rejects(
+        api.call('openmotion_capability_run', {
+          action: 'run',
+          requestId: 'meshy-rig-untextured-1',
+          capabilityId: '3d-asset',
+          model: 'meshy:meshy-7.1',
+          prompt: 'Knight in armor',
+          options: { operation: 'rig' },
+          parameters: { texture: false },
+        }),
+        /requires a textured mesh/,
+      );
+      assert.equal(submitted.length, beforeUnsupported);
+
+      // Animation names are resolved against the free library lookup before any paid base or rig task.
+      await assert.rejects(
+        api.call('openmotion_capability_run', {
+          action: 'run',
+          requestId: 'meshy-rig-unknown-clip-1',
+          capabilityId: '3d-asset',
+          model: 'meshy:meshy-7.1',
+          prompt: 'Knight in armor',
+          options: { operation: 'rig_retarget' },
+          parameters: { animations: ['moonwalk'] },
+        }),
+        /Meshy animation "moonwalk" was not found/,
+      );
+      assert.equal(submitted.length, beforeUnsupported);
+
+      // Blank or non-numeric action_ids entries are dropped instead of coercing to action 0.
+      await api.call('openmotion_capability_run', {
+        action: 'run',
+        requestId: 'meshy-retarget-blank-ids-1',
+        capabilityId: '3d-asset',
+        model: 'meshy:meshy-7.1',
+        options: { operation: 'retarget' },
+        parameters: { original_model_task_id: 'rigging-4', action_ids: [null, '', false, [], ' 92 '], slim: false },
+      });
+      assert.deepEqual(submitted.at(-1), { path: '/openapi/v1/animations', body: { rig_task_id: 'rigging-4', action_id: 92 } });
+
+      // A checkpoint holding only the preview task id still guards against changed inputs.
+      failNextPreview = true;
+      const previewGuardRun = {
+        action: 'run',
+        requestId: 'meshy-preview-guard-1',
+        capabilityId: '3d-asset',
+        model: 'meshy:meshy-7.1',
+        prompt: 'Wooden barrel',
+        options: { operation: 'text_to_model' },
+      };
+      await assert.rejects(api.call('openmotion_capability_run', previewGuardRun), /Preview interrupted/);
+      const beforeGuardRetry = submitted.length;
+      await assert.rejects(
+        api.call('openmotion_capability_run', { ...previewGuardRun, prompt: 'Iron anvil' }),
+        /REQUEST_ID_CONFLICT: requestId "meshy-preview-guard-1" already has a saved 3D checkpoint for different inputs/,
+      );
+      assert.equal(submitted.length, beforeGuardRetry);
+
+      // Remote failures surface Meshy's task_error message.
+      failNextImageTask = true;
+      await assert.rejects(
+        api.call('openmotion_capability_run', {
+          action: 'run',
+          requestId: 'meshy-fail-1',
+          capabilityId: '3d-asset',
+          model: 'meshy:meshy-6',
+          prompt: 'Complex statue',
+          options: { operation: 'image_to_model' },
+          references: [reference],
+        }),
+        /Meshy image-to-3d task image-to-3d-\d+ failed: Image is too complex/,
+      );
+    } finally {
+      for (const key of isolatedEnvKeys) {
+        if (previousEnv[key] === undefined) delete process.env[key]; else process.env[key] = previousEnv[key];
+      }
+      clearOpenDesign3dDiscoveryCache();
+    }
+  }, false));
+
 test('3d-world capability gates honestly on AMR world_generations and follows World Labs Atlas v2 contract (atlasTextToImage PNG, validation guardrails, and GLB mesh selection)', () =>
   fixture(async store => {
     clearOpenDesign3dDiscoveryCache();

@@ -29,6 +29,8 @@ rig.update(dt, optionalAimOverlayOrNull);                // persistent Quaternio
 4. **Real bone sockets & reach-safe overlays:** Mount handheld weapons onto real `RightHand` / `LeftHand` bones via `rig.attachToBone(...)` and let the hand bone drive weapon swing orientation naturally (avoid overwriting weapon world quaternions every frame). Reserve manual IK (`rightHand`/`leftHand`) for light aim/reach overlays inside `rig.metrics.*.maxReach` — drive full-body swings, hit reactions, and defeat falls with real clips (`playOnce(..., { holdEnd: true })` for defeat) rather than stacking extreme spine/root pitch bends.
 5. **Report kinematics telemetry & run a motion burst in playtest:** Expose `kinematics: { hero: heroRig.getTelemetry(), boss: bossRig.getTelemetry() }` inside `window.__omGame.getStats()` (checked automatically by `openmotion_game_playtest`: `walkZeroFlips <= 1`, `maxBoneRadPerSec <= 22`, `maxYawRadPerSec <= 18`, `overExtendedIkCount / frames <= 0.35`) and capture a 3–4 frame `{ type: "burst", count: 4, intervalMs: 100, label: "strike" }` sequence during real movement/combat into the contact sheet.
 
+**Meshy provider:** when discovery returns `meshy:*` models (`MESHY_API_KEY`), the same `operation` and `rigPreset` values apply: rigging uses the Mixamo skeleton by default and clips come from the Meshy animation library (`parameters.action_ids` for exact clips). Task-chain edits (`decimate`, `texture`, `segment`, …) are Tripo-only. Read `openmotion://workflow/media/meshy` for Meshy parameters and limits.
+
 ## 2. Screen-Dominance 3D Asset Budget
 
 Check live capability discovery (`openmotion_capability_discover` `modality:"3d"`) first, then allocate 3D budget strictly by **Screen-Dominance × Gameplay-Focus**:

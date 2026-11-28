@@ -327,12 +327,15 @@ test('capability-center handbook documents live sound-effects, 3d-asset (.glb), 
   assert.match(asset3d.prompt, /capabilityId="3d-asset"/);
   assert.match(asset3d.prompt, /mediaUrl, result\.boneNames and result\.rigTaskId/);
   assert.match(asset3d.prompt, /reuse the identical requestId only if the client call itself timed out/);
+  assert.match(asset3d.description, /MESHY_API_KEY.*meshy:meshy-7\.1, meshy:meshy-6 and meshy:meshy-6-lite.*not task-chain edits such as decimate, texture or segment/);
+  assert.match(asset3d.prompt, /model="meshy:meshy-7\.1"/);
 
   const faq = mcpFaq.find(([question]) => question === 'Can I generate 3D meshes (.glb), 3D worlds and sound effects via MCP?');
   assert.ok(faq);
   assert.match(faq![1], /tripo-3\.0/);
   assert.match(faq![1], /worldlabs-atlas/);
   assert.match(faq![1], /elevenlabs-sound-v3/);
+  assert.match(faq![1], /MESHY_API_KEY.*meshy:meshy-7\.1/);
   assert.match(faq![1], /requestId/);
 });
 

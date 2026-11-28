@@ -11,6 +11,7 @@ Call `action: "reference"` with the selected provider ID from `inspect`, or open
 - [WaveSpeedAI](providers/wavespeed.md)
 - [OpenDesign Cloud](providers/opendesign.md)
 - [OpenDesign account](providers/account.md)
+- [Meshy 3D](providers/meshy.md) (`3d-asset` only)
 - [Registered compatible APIs](providers/compatible.md)
 - [Local Codex images](providers/codex.md)
 

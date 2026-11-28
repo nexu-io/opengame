@@ -99,7 +99,7 @@ MCP 工具说明和领域执行位于 `mcp-tools.ts`；`mcp.ts` 保留初始化�
 | openmotion-video / workflows/template-to-video.md | template | start、unchanged、firstuse、recipes、adaptation（共 5 项） |
 | openmotion-video / workflows/recreate.md | recreate | start、rebuild、reconstruction、rendering、rendercode、verification |
 | openmotion-video / workflows/video-to-template.md | video-to-template | start、measure、rebuild、project、verification、sources |
-| openmotion-media（多模态原子能力与共享素材契约） | media | start、materials、planning、setup、jobs、inspection、account、compatible、fal、opendesign、atlascloud、wavespeed、codex（共 13 项） |
+| openmotion-media（多模态原子能力与共享素材契约） | media | start、materials、planning、setup、jobs、inspection、account、compatible、fal、opendesign、atlascloud、wavespeed、meshy、codex（共 14 项） |
 | openmotion-design | design | start、scenarios、iterate、export、systems（共 5 项） |
 | openmotion-game | game | start、provenance、brief、gates、controls、craft、lookup、genres、playable、flow、design、style、sprites、animation、procedural、audio、textures、review、wechat（共 19 项） |
 

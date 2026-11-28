@@ -757,7 +757,7 @@ export async function capabilityRun(
               throw new Error(
                 scriptId === 'opendesign-world'
                   ? 'CAPABILITY_UNAVAILABLE: No active 3D world model is currently exposed on your configured OpenDesign account or Cloud gateway'
-                  : 'CAPABILITY_UNAVAILABLE: No active 3D model is currently exposed on your configured OpenDesign account or Cloud gateway',
+                  : 'CAPABILITY_UNAVAILABLE: No active 3D model is currently exposed on your configured OpenDesign account, Cloud gateway or MESHY_API_KEY',
               );
             }
             const matchedModel = requestedModelId
