@@ -384,7 +384,11 @@ export class HostedGameTemplates {
   }
 
   async directory(id: string, installed: string) {
-    const { games } = await (this.index ??= this.loadIndex());
+    const { games } = await (this.index ??= this.loadIndex().catch(error => {
+      // A transient read or incomplete update must not poison every later retry.
+      this.index = undefined;
+      throw error;
+    }));
     if (!Object.hasOwn(games, id)) {
       this.sourceCheckout ??= access(path.join(path.dirname(installed), '.gitattributes')).then(() => true, error => {
         if (error.code === 'ENOENT') return false;
