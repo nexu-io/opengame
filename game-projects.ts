@@ -2097,6 +2097,10 @@ export function attachGameRooms(server: Server, workspace: string) {
   const rooms = new Map<string,Room>(), sockets = new Set<Duplex>();
   let closed = false;
   const upgrade = async (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+    if (closed) { socket.destroy(); return; }
+    // Shutdown must also own sockets whose asynchronous game/source lookup is pending.
+    sockets.add(socket);
+    socket.once('close', () => sockets.delete(socket));
     socket.on('error', () => socket.destroy());
     const url = new URL(req.url ?? '/', 'http://localhost'), match = /^\/(?:api|motion-api)\/games\/([^/]+)\/rooms\/([^/]+)$/.exec(url.pathname);
     if (!match) { socket.destroy(); return; }
@@ -2110,10 +2114,11 @@ export function attachGameRooms(server: Server, workspace: string) {
       const wsKey = req.headers['sec-websocket-key'];
       if (req.method !== 'GET' || req.headers.upgrade?.toLowerCase() !== 'websocket' || req.headers['sec-websocket-version'] !== '13' || typeof wsKey !== 'string' || Buffer.from(wsKey,'base64').length !== 16) throw new GameError('Invalid WebSocket handshake');
       const service = gameProjectsFor(workspace), game = await service.get(id);
+      if (closed || socket.destroyed) return;
       if (!game.multiplayer) throw new GameError('Not a multiplayer game');
       // Await source before the final map lookup, so simultaneous upgrades share one room.
       const source = (await service.read(id,'logic.js')).content;
-      if (socket.destroyed) return;
+      if (closed || socket.destroyed) return;
       let room = rooms.get(key);
       if (!room) { if (rooms.size >= 100) throw new GameError('Too many active rooms'); const runtime = new GameRuntime(source,key); room = { runtime, clients:new Set(), started:false, ended:false, tick:0, queue:[], maxPlayers:runtime.meta.maxPlayers, identities:new Map() }; rooms.set(key,room); }
       if (room.clients.size >= room.maxPlayers + 8) throw new GameError('Too many pending room connections');
@@ -2179,7 +2184,7 @@ export function attachGameRooms(server: Server, workspace: string) {
         }
         broadcastRoster();
       }), {id:randomUUID(),name:'Player',joined:false,token:''});
-      active.clients.add(client); sockets.add(socket);
+      active.clients.add(client);
       if(head.length) socket.emit('data',head);
     } catch { if(!socket.destroyed) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'); }
   };
