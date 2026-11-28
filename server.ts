@@ -20,6 +20,7 @@ import { webPublishTargetKinds, type WebPublishMode, type WebPublishTargetKind }
 import { createAutomationHost } from './gateway/automation-host.ts';
 import { MCP_HTTP_PATH } from './shared/mcp-http.ts';
 import { superAgentConversations } from './gateway/super-agent.ts';
+import { searchModels } from './gateway/model-catalog.ts';
 import { collectWorkspaceResources } from './gateway/super-agent-resources.ts';
 import { pipeline } from 'node:stream/promises';
 import { listTaskWorkspaceEntries, openTaskWorkspaceFile, resolveBrowsableRoots, workspaceFileMetadata, workspaceFileRange } from './gateway/super-agent-workspace.ts';
@@ -879,6 +880,18 @@ export async function handler(req: IncomingMessage, res: ServerResponse, store =
         const mapped = mapWebPublishError(error);
         return json(res, mapped.status, { error: { code: mapped.code, message: mapped.message } });
       }
+    }
+    if (motionRequest && url.pathname.startsWith('/api/model-catalog/')) {
+      if (req.method === 'GET' && url.pathname === '/api/model-catalog/search') return json(res, 200, await searchModels(url.searchParams.get('q'), url.searchParams.get('dimension'), url.searchParams.get('cursor')));
+      if (req.method === 'POST' && ['/api/model-catalog/open', '/api/model-catalog/acquire'].includes(url.pathname)) {
+        const data = await input(req, 8192);
+        const conversations = superAgentConversations(store, context.tracking);
+        const { artifact } = url.pathname === '/api/model-catalog/open'
+          ? await conversations.openModelCatalog(data.conversationId, data.query, data.dimension)
+          : await conversations.acquireModel(data.conversationId, data.id);
+        return json(res, 200, { artifact });
+      }
+      return json(res, 405, { error: 'Unsupported model catalog operation' });
     }
     if (motionRequest && url.pathname.startsWith('/api/super-agent')) {
       const superAgent = superAgentConversations(store, context.tracking);

@@ -13,11 +13,15 @@ const object = <T extends Record<string, unknown>>(properties: T, required: stri
 const reference = object({ assetId: uuid, versionId: uuid }, ['assetId', 'versionId']);
 const animation = { type: 'string', minLength: 1, maxLength: 512 };
 const workspacePath = { type: 'string', minLength: 1, maxLength: 2048 };
+const catalogId = { type: 'string', minLength: 1, maxLength: 256 };
+const catalogQuery = { type: 'string', maxLength: 200 };
+const catalogDimension = { enum: ['2d', '3d'] };
+const catalogCursor = { type: 'string', minLength: 36, maxLength: 36, description: 'Pass the previous nextCursor with the same query and dimension. A null nextCursor ends the results.' };
 
 export const capabilityDiscoverActions = ['list', 'describe', 'quote', 'providers', 'models'] as const;
 export const capabilityRunActions = ['run'] as const;
 export const jobManageActions = ['list', 'status', 'cancel', 'retry_save', 'resume'] as const;
-export const assetManageActions = ['list', 'get', 'read', 'import', 'update', 'import_to_project', 'brand_kit', 'present_asset'] as const;
+export const assetManageActions = ['list', 'get', 'read', 'import', 'update', 'import_to_project', 'brand_kit', 'present_asset', 'browse_models', 'search_models', 'acquire_model'] as const;
 
 export const capabilityDiscoverTool = {
   name: 'openmotion_capability_discover',
@@ -126,11 +130,15 @@ export const assetManageTool = {
   name: 'openmotion_asset_manage',
   title: 'OpenMotion · Asset Manage',
   description:
+    'browse_models opens the free game asset catalog in a Studio conversation. For browse_models or search_models use dimension=2d for sprites, tiles and UI art or dimension=3d (default) for models. An empty query browses featured assets for that dimension. acquire_model takes the selected downloadable id and conversationId and presents a local preview. For a source-only item or failed download, follow the provider handoff in openmotion://workflow/game/sourcing using the result’s sourceUrl. ' +
     'Manage workspace assets, immutable versions, capability provenance and Brand Kits. present_asset adds a reopenable preview to an explicitly selected Studio conversationId. Supply pinned library assetId and versionId, or a relative path to a supported image, audio, video, model or sprite atlas in that conversation’s workspace. For GLB files, optionally pass an exact embedded animation name. list/get inspect assets, versions, capabilityId/capabilityOptions and parent/reference provenance; read returns bounded image previews, video frames or 16 kHz audio clips for a pinned assetId+versionId, or composites 1–12 pinned image items into one contact sheet PNG (optional maxEdge 128–1024); import copies a real local file (max 500 MB); update renames, trashes/restores or switches currentVersionId while retaining history; import_to_project copies a pinned version into a target project without altering its timeline; brand_kit manages style-only Brand Kits.',
   inputSchema: {
     ...object(
       {
         action: { enum: [...assetManageActions] },
+        id: catalogId,
+        dimension: catalogDimension,
+        cursor: catalogCursor,
         conversationId: uuid,
         animation,
         path: workspacePath,
@@ -173,8 +181,11 @@ export const assetManageTool = {
         required,
         additionalProperties: true,
       })),
-      object({ action: { enum: ['present_asset'] }, conversationId: uuid, assetId: uuid, versionId: uuid, animation }, ['action', 'conversationId', 'assetId', 'versionId']),
-      object({ action: { enum: ['present_asset'] }, conversationId: uuid, path: workspacePath, animation }, ['action', 'conversationId', 'path']),
+      object({ action: { enum: ['present_asset'] }, conversationId: uuid, requestId, assetId: uuid, versionId: uuid, animation }, ['action', 'conversationId', 'assetId', 'versionId']),
+      object({ action: { enum: ['present_asset'] }, conversationId: uuid, requestId, path: workspacePath, animation }, ['action', 'conversationId', 'path']),
+      object({ action: { enum: ['browse_models'] }, conversationId: uuid, requestId, query: catalogQuery, dimension: catalogDimension }, ['action', 'conversationId']),
+      object({ action: { enum: ['search_models'] }, conversationId: uuid, requestId, query: catalogQuery, dimension: catalogDimension, cursor: catalogCursor }, ['action', 'query']),
+      object({ action: { enum: ['acquire_model'] }, conversationId: uuid, requestId, id: catalogId }, ['action', 'conversationId', 'id']),
       {
         type: 'object',
         properties: { action: { enum: ['read'] } },
@@ -183,7 +194,7 @@ export const assetManageTool = {
       },
     ],
   },
-  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
 };
 
 export const capabilityMetaTools = [

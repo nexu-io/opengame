@@ -23,7 +23,7 @@ const knownSuperAgentIntents = new Set(['chat', 'coding', 'design', 'research', 
 const knownSuperAgentApprovalKinds = new Set(['generation', 'command', 'file', 'tool']);
 const knownFeedbackArtifactKinds = new Set([
   'game-project', 'design-project', 'motion-project', 'motion-export',
-  'asset-image', 'asset-video', 'asset-audio', 'brand-kit', 'web', 'file',
+  'asset-image', 'asset-video', 'asset-audio', 'brand-kit', 'web', 'file', 'model-catalog',
 ]);
 function superAgentRuntimeKind(runtimeId?: string): 'local-direct' | 'local-bridge' | 'remote-service' {
   if (isBridgeRuntimeId(runtimeId)) return 'local-bridge';
@@ -95,6 +95,7 @@ import { executeRemoteServiceRun } from './agent-service-adapter.ts';
 import { AssetAgentRpc } from './asset-chat.ts';
 import { AssetLibrary, assetHash, atomicAssetJson } from './asset-library.ts';
 import { resolveAssetPresentation, type AssetPresentationSource } from './asset-presentation.ts';
+import { acquireCatalogFile, catalogDimension, catalogQuery } from './model-catalog.ts';
 import { withProcessLock } from '../shared/process-lock.ts';
 import { readBrandCatalog } from './brand-catalog.ts';
 import { brandKitsFor } from './brand-kits.ts';
@@ -599,6 +600,7 @@ const ALLOWED_ARTIFACT_KINDS = new Set<SuperAgentArtifact['kind']>([
   'brand-kit',
   'game-project',
   'workspace-file',
+  'model-catalog',
   'web',
 ]);
 
@@ -875,6 +877,7 @@ function buildValidatedArtifact(input: Partial<SuperAgentArtifact>, now = Date.n
   return {
     id: typeof input.id === 'string' && input.id ? input.id : randomUUID(),
     kind: input.kind,
+    ...(input.kind === 'model-catalog' ? { catalogQuery: catalogQuery(input.catalogQuery) || undefined, catalogDimension: catalogDimension(input.catalogDimension) } : {}),
     title: typeof input.title === 'string' && input.title.trim()
       ? input.title.trim().slice(0, 160)
       : input.kind === 'web' && validatedUrl
@@ -1518,10 +1521,30 @@ export class SuperAgentConversations {
   }
 
   async presentAsset(conversationId: string, input: AssetPresentationSource, title?: string) {
+    return this.presentConversationArtifact(conversationId, chat => resolveAssetPresentation(this.store, chat, input), title);
+  }
+
+  async openModelCatalog(conversationId: string, query?: unknown, dimension?: unknown) {
+    const normalized = catalogQuery(query);
+    return this.presentConversationArtifact(conversationId, async () => ({
+      id: 'model-catalog', kind: 'model-catalog', title: 'Game asset catalog', catalogQuery: normalized || undefined, catalogDimension: catalogDimension(dimension),
+    }));
+  }
+
+  async acquireModel(conversationId: string, id: unknown) {
+    const chat = await this.get(conversationId);
+    const path = await acquireCatalogFile(this.store, chat, id);
+    return this.presentConversationArtifact(conversationId, current => {
+      if (current.workingDir !== chat.workingDir) throw new Error('Conversation workspace changed during download');
+      return resolveAssetPresentation(this.store, current, { path });
+    });
+  }
+
+  private async presentConversationArtifact(conversationId: string, resolve: (chat: SuperAgentChat) => Promise<Omit<SuperAgentArtifact, 'createdAt' | 'updatedAt'>>, title?: string) {
     const file = await this.file(conversationId);
     return withProcessLock(`${file}.presentation.lock`, async () => {
       const snapshot = await this.readChat(conversationId, false);
-      const draft = await resolveAssetPresentation(this.store, snapshot, input);
+      const draft = await resolve(snapshot);
       const { id } = draft;
       const live = this.active.get(conversationId);
       const chat = live?.chat ?? snapshot;
@@ -3157,6 +3180,8 @@ export class SuperAgentConversations {
         upsertChatArtifact(active.chat, {
           id: typeof ev.artifact.id === 'string' && ev.artifact.id ? ev.artifact.id : randomUUID(),
           kind: ev.artifact.kind,
+          ...(ev.artifact.kind === 'model-catalog' ? { catalogDimension: ev.artifact.catalogDimension === '2d' ? '2d' : '3d' } : {}),
+          ...(ev.artifact.kind === 'model-catalog' && typeof ev.artifact.catalogQuery === 'string' ? { catalogQuery: ev.artifact.catalogQuery.slice(0, 200) } : {}),
           title: typeof ev.artifact.title === 'string' && ev.artifact.title.trim()
             ? ev.artifact.title.trim().slice(0, 160)
             : 'Artifact',
@@ -4288,10 +4313,12 @@ export class SuperAgentConversations {
     const phase1Def = exposedPhase1Tools.find(tool => tool.name === normalizedTool);
     if (!phase1Def) throw new Error(`Unknown tool: ${toolName}`);
     const args = { ...rawArgs };
-    if (normalizedTool === 'openmotion_asset_manage' && args.action === 'present_asset') {
+    if (normalizedTool === 'openmotion_asset_manage' && ['present_asset', 'browse_models', 'acquire_model'].includes(String(args.action))) {
       if (args.conversationId !== undefined && args.conversationId !== active.chat.id) throw new Error('Presentation must target the current conversation');
       args.conversationId = active.chat.id;
       validateInput(phase1Def.inputSchema, args);
+      if (args.action === 'browse_models') return this.openModelCatalog(active.chat.id, args.query, args.dimension);
+      if (args.action === 'acquire_model') return this.acquireModel(active.chat.id, args.id);
       return this.presentAsset(active.chat.id, args as unknown as AssetPresentationSource);
     }
     if (normalizedTool === 'openmotion_design_comments' && active.attachedDesignComments.length) {
@@ -4552,7 +4579,7 @@ export class SuperAgentConversations {
     const now = Date.now();
     const name = toolName.replace(/^mcp_+openmotion_+/, '');
 
-    if ((name === 'openmotion_present_artifact' || (name === 'openmotion_asset_manage' && args.action === 'present_asset')) && value.artifact?.id) {
+    if ((name === 'openmotion_present_artifact' || (name === 'openmotion_asset_manage' && ['present_asset', 'browse_models', 'acquire_model'].includes(String(args.action)))) && value.artifact?.id) {
       return value.artifact as SuperAgentArtifact;
     }
 
@@ -5443,7 +5470,7 @@ export class SuperAgentConversations {
       const hasArtifact = Boolean(rawArtifactKind) || Boolean(chat?.artifacts.length);
       const safeArtifactKind = hasArtifact
         ? ((rawArtifactKind && knownFeedbackArtifactKinds.has(rawArtifactKind) ? rawArtifactKind : 'other') as
-          'game-project' | 'design-project' | 'motion-project' | 'motion-export' | 'asset-image' | 'asset-video' | 'asset-audio' | 'brand-kit' | 'web' | 'file' | 'other')
+          'game-project' | 'design-project' | 'motion-project' | 'motion-export' | 'asset-image' | 'asset-video' | 'asset-audio' | 'brand-kit' | 'web' | 'file' | 'model-catalog' | 'other')
         : undefined;
 
       const sortedReasons = [...reasons].sort();

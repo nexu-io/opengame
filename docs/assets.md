@@ -38,6 +38,20 @@ Discover available providers and models through `openmotion_media_use` before ge
 
 The browser upload endpoint is `POST /motion-api/assets/upload?requestId=...` with binary body and URI-encoded `X-File-Name`. Media `GET`/`HEAD` at `/motion-api/assets/<assetId>/versions/<versionId>/file` supports single byte ranges and attachment downloads. These are local installation routes behind the existing loopback and same-origin boundary, not public remote endpoints. Browser imports use selected Files; external MCP imports require paths readable on the host.
 
+## Finding free game assets
+
+Ask an Agent connected to Studio to open a model search in the conversation's right pane. The `openmotion_asset_manage` action `browse_models` takes the target `conversationId` and an optional `query`, such as `wooden chair`. An Agent can also call `search_models` to inspect candidates before opening the catalog. Results come from the [3D Asset Server](https://github.com/arielshad/3d-asset-server). Check the original source and item license when choosing a model.
+
+Pass `dimension: "2d"` to search for sprites, tiles and UI art, or `dimension: "3d"` for models. Existing calls default to 3D. Studio searches free listings from the aggregator's indexed providers and displays results with a supported source page and thumbnail. Examples include Poly Haven, BlenderKit and OpenGameArt. Clearing a search returns to a selection drawn from several topics. Use the action on each listing to see whether it supports direct acquisition or links to the provider for download. Each model's own license governs reuse.
+
+Scroll toward the bottom of the catalog to load more matching assets. MCP clients pass the returned `nextCursor` as `cursor` with the same query and dimension when calling `search_models` again. A null cursor marks the end of the results.
+
+Use `acquire_model` with the selected result ID and target conversation to save a supported download and present it in the file viewer. Network access is required for catalog search and download. If a listing only offers a source page, open that page to check the available formats and download options. To obtain an original model from a local game installation, follow `openmotion://workflow/game/sourcing`.
+
+For a source-only result or a failed import, select **Ask Agent to download**. Studio adds the asset title, source and download instructions to the current conversation draft. Edit the request and press Send when ready. The source link also opens the publisher's listing directly. For a Kenney or itch.io pack, take the original archive from the publisher's downloads and preserve its textures, atlas metadata and license. If the provider requires sign-in or license acceptance, complete that step on its site and give the Agent the downloaded file. The Agent can then verify and reopen it with `present_asset` in the same conversation.
+
+Direct model imports include compatible Poly Haven bundles and verified, self-contained GLBs from PolyFork, 3DAssets.dev, Grab3D and BlenderKit. Availability is per item. For 2D, the catalog can import verified single-file OpenGameArt PNG originals. A saved bundle includes the source page, license and available author information in `provenance.json`.
+
 ## Presenting an asset in Studio
 
 An agent connected to the same workspace can show a file or a saved library version in a particular Studio conversation. Call `openmotion_asset_manage` with `action: "present_asset"` and the target `conversationId`. Pass either a workspace-relative `path` or the pair `assetId` and `versionId`. For an animated GLB, pass the exact embedded clip name in `animation`. For example, a conversation with `assets/knight.glb` in its working directory can present that path with `animation: "Idle"` if the model contains an `Idle` clip.

@@ -21,6 +21,10 @@ test('wrapper serves the locally built Motion editor and hides local source/runt
   assert(png, 'The bundle contains the Kimi brand fallback');
   const image = await request('/editor-assets/' + png);
   assert.equal(image.status, 200); assert.equal(image.headers.get('content-type'), 'image/png');
+  const decoder = (await readdir(new URL('../studio/build/editor-assets/', import.meta.url))).find(file => /^draco_decoder-.*\.wasm$/.test(file));
+  assert.ok(decoder, 'The model preview includes its Draco decoder');
+  const wasm = await request('/editor-assets/' + decoder);
+  assert.equal(wasm.status, 200); assert.equal(wasm.headers.get('content-type'), 'application/wasm');
   assert.equal((await request('/api/studio')).status, 503);
 }));
 test('HTTP source writes use the same revision contract and reject stale saves', () => fixture(async store => {

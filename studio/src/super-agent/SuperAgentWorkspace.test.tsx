@@ -3,10 +3,10 @@ import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { GameCard } from '../../../shared/game-contract';
-import type { SuperAgentChat, SuperAgentChatSummary, SuperAgentResourceCatalog } from '../../../shared/super-agent';
+import type { SuperAgentArtifact, SuperAgentChat, SuperAgentChatSummary, SuperAgentResourceCatalog } from '../../../shared/super-agent';
 import { NearScreenIntersectionObserver } from '../hooks/intersectionObserverTestUtils';
 import { I18nProvider } from '../i18n/I18n';
-import { translate } from '../i18n/messages';
+import { ensureLocaleLoaded, translate } from '../i18n/messages';
 import { ApplicationHeader } from '../motion/ApplicationChrome';
 import { communityGames } from '../motion/game/gameCatalog';
 import { WorkspaceChromeContext } from '../motion/WorkspaceChromeContext';
@@ -3308,6 +3308,70 @@ it('supports unified Phase 2 Game preview console drawer ("Fix with Agent"), ele
   expect(turns[1].attachments?.[0]?.annotation?.mode).toBe('draw');
   expect(turns[1].attachments?.[0]?.annotation?.strokeCount).toBe(1);
   expect(turns[1].attachments?.[0]?.annotation?.strokeBounds).toBeTruthy();
+});
+
+it.each([
+  { title: '3D model catalog', catalogDimension: undefined, suffix: '', filePath: 'fern.glb' },
+  { title: 'Game asset catalog', catalogDimension: '2d' as const, suffix: '&dimension=2d', filePath: 'fern.png' },
+])('opens an Agent catalog named $title and returns from the acquired $filePath', async ({ title, catalogDimension, suffix, filePath }) => {
+  await ensureLocaleLoaded('zh-CN');
+  const chatId = 'efefefef-aaaa-bbbb-cccc-222222222222';
+  const catalog: SuperAgentArtifact = { id: 'model-catalog', kind: 'model-catalog', title, catalogDimension, catalogQuery: 'fern', presentedAt: 4000, createdAt: 4000, updatedAt: 4000 };
+  const sourceItem = { id: 'kenney:nature-kit', title: 'Nature Kit', provider: 'kenney', sourceUrl: 'https://kenney.nl/assets/nature-kit', downloadable: Boolean(catalogDimension) };
+  const chat: SuperAgentChat = { ...sampleChat, id: chatId, approvals: [], artifacts: [], messages: [sampleChat.messages[0]], activeArtifactId: undefined };
+  const original = globalThis.fetch;
+  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (path === `${SUPER_AGENT_API}/chats/${chatId}`) return Response.json({ conversation: chat });
+    if (path === `/motion-api/model-catalog/search?q=fern${suffix}`) return Response.json({ models: [{ id: 'fern1', title: 'Fern', provider: 'Library', downloadable: true }, sourceItem] });
+    if (path === '/motion-api/model-catalog/acquire' && String(init?.body).includes(sourceItem.id)) return Response.json({}, { status: 503 });
+    if (path === '/motion-api/model-catalog/acquire') return Response.json({ artifact: { id: 'model-file', kind: 'workspace-file', title: filePath, filePath, createdAt: 5000, updatedAt: 5000 } });
+    return original(input, init);
+  });
+  globalThis.fetch = fetcher;
+  const props = { active: true, chatId, onChatIdChange: vi.fn(), onOpenDesignProject: vi.fn(), onOpenMotionProject: vi.fn(),
+    onOpenAsset: vi.fn(), onOpenBrandKit: vi.fn(), onOpenAgentSettings: vi.fn(), onOpenMcp: vi.fn() };
+  await act(async () => root.render(<I18nProvider initialLocale="zh-CN"><SuperAgentWorkspace {...props} /></I18nProvider>));
+  await flush();
+  await act(async () => {
+    for (const fn of MockEventSource.instances.at(-1)!.listeners.get('chat') ?? []) {
+      fn({ data: JSON.stringify({ ...chat, activeArtifactId: catalog.id, artifacts: [catalog], updatedAt: 4000,
+        messages: [...chat.messages, { id: `presentation:${catalog.id}`, role: 'assistant', status: 'completed', text: '', createdAt: 4000, artifactIds: [catalog.id] }] }) } as MessageEvent);
+    }
+  });
+  await flush();
+  expect(container.querySelector('.om-sa-presented-assets .om-sa-link')?.textContent).toBe('游戏素材库');
+  expect(container.innerHTML).not.toContain(title);
+  const item = container.querySelectorAll('.om-model-grid li')[1];
+  const editor = getComposerEditor();
+  if (catalogDimension) {
+    await typeInComposer(editor, 'Keep this draft.');
+    await act(async () => item.querySelector<HTMLButtonElement>('.om-model-actions button')!.click());
+  }
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="最大化查看器"]')!.click());
+  expect(container.querySelector('[data-viewer-expanded]')).toBeTruthy();
+  const ask = [...item.querySelectorAll('button')].find(button => button.textContent === '让 Agent 下载')!;
+  const requestsBeforeAsk = fetcher.mock.calls.length;
+  await act(async () => ask.click());
+  expect(getComposerEditor()).toBe(editor);
+  expect(editor.getAttribute('contenteditable')).toBe('true');
+  expect(document.activeElement).toBe(editor);
+  expect(editor.textContent).toContain(sourceItem.sourceUrl);
+  expect(editor.textContent).toContain(chatId);
+  if (catalogDimension) expect(editor.textContent).toMatch(/^Keep this draft\./);
+  const inserted = editor.textContent;
+  await act(async () => ask.click());
+  expect(editor.textContent).toBe(inserted);
+  await typeInComposer(editor, ' My edit.');
+  expect(editor.textContent).toMatch(/ My edit\.$/);
+  expect(fetcher.mock.calls.slice(requestsBeforeAsk).some(([, init]) => init?.method === 'POST')).toBe(false);
+  await act(async () => container.querySelector<HTMLButtonElement>('.om-model-actions button')!.click());
+  expect(fetcher).toHaveBeenCalledWith('/motion-api/model-catalog/acquire', expect.objectContaining({ method: 'POST', body: JSON.stringify({ conversationId: chatId, id: 'fern1' }) }));
+  expect(container.querySelector('.om-model-catalog')).toBeNull();
+  expect(container.querySelector('.om-sa-viewer-tabs')?.textContent).toContain(filePath);
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="返回素材库"]')!.click());
+  expect(container.querySelector<HTMLInputElement>('.om-model-catalog input')?.value).toBe('fern');
+  expect(container.querySelector('.om-model-dimensions [aria-pressed="true"]')?.textContent).toBe(catalogDimension ? '2D' : '3D');
 });
 
 it('opens only explicit media presentations for the selected chat and keeps its live card available after dismissal', async () => {

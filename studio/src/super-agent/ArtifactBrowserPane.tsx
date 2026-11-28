@@ -2,6 +2,7 @@ import { Button } from 'open-design-ui/button';
 import { IconButton } from 'open-design-ui/icon-button';
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { ModelAssetPreview } from '../motion/ModelAssetPreview';
+import { ModelCatalogView, type CatalogDimension } from './ModelCatalogView';
 import { GameAssetPreview } from '../motion/gameAssetPreview';
 import { detectGameAssetPreview } from '../../../shared/game-asset-preview';
 import { isMediaArtifact } from './assetPresentation';
@@ -119,6 +120,7 @@ function artifactTabIcon(kind: SuperAgentArtifactKind, filePath?: string, mimeTy
     case 'asset-image':
       return 'image-line';
     case 'asset-3d':
+    case 'model-catalog':
       return 'stack-line';
     case 'asset-video':
       return 'film-line';
@@ -136,6 +138,8 @@ function artifactTabIcon(kind: SuperAgentArtifactKind, filePath?: string, mimeTy
       return 'file-line';
   }
 }
+
+const INTERNAL_ARTIFACT_ADDRESS = /^(?:design|motion|game|export|asset|brand|catalog):\/\//i;
 
 function normalizeBrowserAddress(raw: string): string | null {
   const trimmed = raw.trim();
@@ -1895,6 +1899,8 @@ export function ArtifactBrowserPane({
   onOpenWebUrl,
   onOpenFilePath,
   onOpenArtifact,
+  onModelCatalogAction,
+  onAskAgentToDownload,
   onOpenResource,
   onToggleExpand,
   onClosePane,
@@ -1929,6 +1935,8 @@ export function ArtifactBrowserPane({
   onOpenWebUrl: (url: string) => void;
   onOpenFilePath?: (filePath: string, label?: string, rootKey?: string) => void;
   onOpenArtifact: (artifactId: string) => void;
+  onModelCatalogAction?: (action: { query?: string } | { id: string }) => Promise<void>;
+  onAskAgentToDownload?: (conversationId: string, prompt: string) => void;
   onOpenResource: (item: SuperAgentResourceAttachment) => void;
   onToggleExpand: () => void;
   onClosePane: () => void;
@@ -1965,6 +1973,8 @@ export function ArtifactBrowserPane({
   const [addressDraft, setAddressDraft] = useState('');
   const [addressEditing, setAddressEditing] = useState(false);
   const [newTabQuery, setNewTabQuery] = useState('');
+  const [openingCatalog, setOpeningCatalog] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState<{ key: string; query: string; dimension: CatalogDimension } | null>(null);
   const [newTabFilter, setNewTabFilter] = useState<'all' | 'web-apps' | 'motion' | 'media' | 'brand-kit' | 'browser'>('all');
   const [pendingWebUrl, setPendingWebUrl] = useState<string | null>(null);
   const [annotateActive, setAnnotateActive] = useState(false);
@@ -2003,6 +2013,13 @@ export function ArtifactBrowserPane({
     ? null
     : openTabs.find(item => item.id === activeTabId) ?? openTabs.at(-1) ?? null;
   const activeGameProjectId = activeArtifact?.kind === 'game-project' ? activeArtifact.projectId : undefined;
+  const catalogKey = JSON.stringify([chatId, activeArtifact?.id, activeArtifact?.presentedAt, activeArtifact?.catalogQuery, activeArtifact?.catalogDimension]);
+  const currentCatalog = catalogSearch?.key === catalogKey ? catalogSearch : {
+    query: activeArtifact?.catalogQuery ?? '', dimension: activeArtifact?.catalogDimension ?? '3d',
+  };
+  const catalogAddress = activeArtifact?.kind === 'model-catalog' ? artifactCanonicalAddress({ ...activeArtifact, catalogQuery: currentCatalog.query, catalogDimension: currentCatalog.dimension }) : '';
+  const returnCatalog = (activeArtifact?.kind === 'asset-3d' || (activeArtifact?.kind === 'workspace-file' && ['glb', 'model', 'image'].includes(detectGameAssetPreview(activeArtifact.filePath ?? '', '') ?? '')))
+    ? openTabs.find(tab => tab.kind === 'model-catalog') : undefined;
   const bundledMatch = activeGameProjectId ? bundledGames.find(game => game.id === activeGameProjectId) : undefined;
   const gameMeta = gameMetaEntry && gameMetaEntry.artifactId === activeArtifact?.id ? gameMetaEntry : null;
   const isGameTrial = isTrialGameArtifact(activeArtifact, gameMeta?.source);
@@ -2018,6 +2035,10 @@ export function ArtifactBrowserPane({
     if (!activeArtifact?.id) return;
     setWebStateEntry({ artifactId: activeArtifact.id, state });
   }, [activeArtifact?.id]);
+
+  useEffect(() => {
+    if (catalogAddress) setAddressDraft(catalogAddress);
+  }, [catalogAddress]);
 
   const prevArtifactIdRef = useRef<string | undefined>(activeArtifact?.id);
 
@@ -2061,7 +2082,7 @@ export function ArtifactBrowserPane({
     if (!['web', 'design-project', 'game-project'].includes(activeArtifact.kind)) {
       setConsoleOpen(false);
     }
-    setAddressDraft(artifactAddressDisplay(activeArtifact));
+    if (activeArtifact.kind !== 'model-catalog') setAddressDraft(artifactAddressDisplay(activeArtifact));
     const keepingCodeTarget = Boolean(pendingCodeFile && pendingCodeFile.artifactId === activeArtifact.id);
     if (activeArtifact.kind === 'design-project') {
       setViewMode(keepingCodeTarget ? 'code' : 'preview');
@@ -2484,7 +2505,7 @@ export function ArtifactBrowserPane({
           <div ref={tabStripRef} className="om-sa-viewer-tabs" role="tablist" aria-label={t('Viewer tabs')}>
             {openTabs.map(tab => {
               const isActive = !showNewTab && activeArtifact?.id === tab.id;
-              const tabTitle = tab.kind === 'web' ? (webTabTitles[tab.id] || tab.title) : [tab.title, tab.animation].filter(Boolean).join(' · ');
+              const tabTitle = tab.kind === 'model-catalog' ? t('Game asset catalog') : tab.kind === 'web' ? (webTabTitles[tab.id] || tab.title) : [tab.title, tab.animation].filter(Boolean).join(' · ');
               return (
                 <div key={tab.id} className="om-sa-viewer-tab" data-active={isActive || undefined}>
                   <Button
@@ -2577,6 +2598,10 @@ export function ArtifactBrowserPane({
 
       <div className="om-sa-viewer-toolbar">
         <div className="om-sa-nav-btns">
+          {returnCatalog && <Tooltip label={t('Back to asset catalog')}>
+            <IconButton variant="ghost" className="motion-icon-button" aria-label={t('Back to asset catalog')}
+              onClick={() => onSelectTab(returnCatalog.id)} icon={<RemixIcon name="arrow-left-line" size={15} />} />
+          </Tooltip>}
           {(activeArtifact?.kind === 'web' || showNewTab) && (
             <>
               <Tooltip label={t('Back')}>
@@ -2619,8 +2644,8 @@ export function ArtifactBrowserPane({
             onSubmit={event => {
               event.preventDefault();
               const trimmed = addressDraft.trim();
-              const activeDisplay = activeArtifact ? artifactAddressDisplay(activeArtifact) : '';
-              if (!trimmed || (activeArtifact?.kind !== 'web' && trimmed === activeDisplay) || /^(?:design|motion|game|export|asset|brand):\/\//i.test(trimmed)) return;
+              const activeDisplay = catalogAddress || (activeArtifact ? artifactAddressDisplay(activeArtifact) : '');
+              if (!trimmed || (activeArtifact?.kind !== 'web' && trimmed === activeDisplay) || INTERNAL_ARTIFACT_ADDRESS.test(trimmed)) return;
               const normalized = normalizeBrowserAddress(trimmed);
               setAddressEditing(false);
               addressInputRef.current?.blur();
@@ -2644,8 +2669,8 @@ export function ArtifactBrowserPane({
 
           {addressEditing
             && addressDraft.trim()
-            && !(activeArtifact && activeArtifact.kind !== 'web' && addressDraft.trim() === artifactAddressDisplay(activeArtifact))
-            && !/^(?:design|motion|game|export|asset|brand):\/\//i.test(addressDraft.trim())
+            && !(activeArtifact && activeArtifact.kind !== 'web' && addressDraft.trim() === (catalogAddress || artifactAddressDisplay(activeArtifact)))
+            && !INTERNAL_ARTIFACT_ADDRESS.test(addressDraft.trim())
             && (() => {
             const trimmed = addressDraft.trim();
             const normalized = normalizeBrowserAddress(trimmed);
@@ -3495,6 +3520,16 @@ export function ArtifactBrowserPane({
               )}
 
               <div className="om-sa-newtab-shortcuts" role="group" aria-label={t('Artifact types')}>
+                {onModelCatalogAction && <Button type="button" variant="plain" className="om-sa-shortcut-item" disabled={openingCatalog}
+                  onClick={async () => {
+                    setOpeningCatalog(true);
+                    try { await onModelCatalogAction(newTabQuery.trim() ? { query: newTabQuery.trim() } : {}); }
+                    catch { onNotify?.(t('Could not open asset catalog'), 'error'); }
+                    finally { setOpeningCatalog(false); }
+                  }}>
+                  <span className="om-sa-shortcut-icon"><RemixIcon name="stack-line" size={18} /></span>
+                  <span className="om-sa-shortcut-label">{t('Game asset catalog')}</span>
+                </Button>}
                 {shortcutTypes.map(item => {
                   const isSelected = newTabFilter === item.id;
                   return (
@@ -3581,6 +3616,13 @@ export function ArtifactBrowserPane({
             <Skeleton style={{ width: '48%', height: 24 }} />
             <Skeleton style={{ width: '100%', height: 220 }} />
           </div>
+        ) : activeArtifact.kind === 'model-catalog' && onModelCatalogAction ? (
+          <ModelCatalogView key={catalogKey} reloadKey={reloadKey} conversationId={chatId ?? undefined}
+            onAskAgent={onAskAgentToDownload}
+            query={currentCatalog.query} dimension={currentCatalog.dimension}
+            onQuery={query => setCatalogSearch({ key: catalogKey, query, dimension: currentCatalog.dimension })}
+            onDimension={dimension => setCatalogSearch({ key: catalogKey, dimension, query: '' })}
+            acquire={id => onModelCatalogAction({ id })} notify={onNotify} />
         ) : activeArtifact.kind === 'design-project' && activeArtifact.projectId ? (
           <Suspense
             fallback={

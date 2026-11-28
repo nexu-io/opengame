@@ -76,7 +76,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function renderViewer(artifacts: SuperAgentArtifact[], initialTabId = artifacts[0].id) {
+async function renderViewer(artifacts: SuperAgentArtifact[], initialTabId = artifacts[0].id, onModelCatalogAction = vi.fn(async (_action: { query?: string } | { id: string }) => {}), onOpenWebUrl = vi.fn((_url: string) => {})) {
   const noop = () => {};
   function Harness() {
     const [activeTabId, setActiveTabId] = useState(initialTabId);
@@ -91,8 +91,9 @@ async function renderViewer(artifacts: SuperAgentArtifact[], initialTabId = arti
         onSelectTab={setActiveTabId}
         onCloseTab={noop}
         onNewTab={() => setActiveTabId(NEW_VIEWER_TAB_ID)}
-        onOpenWebUrl={noop}
+        onOpenWebUrl={onOpenWebUrl}
         onOpenArtifact={setActiveTabId}
+        onModelCatalogAction={onModelCatalogAction}
         onOpenResource={noop}
         onToggleExpand={noop}
         onClosePane={noop}
@@ -113,6 +114,154 @@ async function renderViewer(artifacts: SuperAgentArtifact[], initialTabId = arti
     await Promise.resolve();
   });
 }
+
+it('keeps edited catalog addresses out of web suggestions and web navigation', async () => {
+  const catalog: SuperAgentArtifact = { id: 'catalog', kind: 'model-catalog', title: 'Catalog', createdAt: 1, updatedAt: 1 };
+  const navigate = vi.fn((_url: string) => {});
+  await renderViewer([catalog], catalog.id, undefined, navigate);
+  const input = container.querySelector<HTMLInputElement>('.om-sa-address-form input')!;
+  const type = async (text: string) => act(async () => {
+    input.focus();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const submit = () => act(async () => { input.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  await type('catalog://sprites?q=dungeon');
+  expect(container.querySelector('.om-sa-address-suggest')).toBeNull();
+  await submit();
+  expect(navigate).not.toHaveBeenCalled();
+  await type('oak trees');
+  expect(container.querySelector('.om-sa-address-suggest')).not.toBeNull();
+  await submit();
+  expect(navigate).toHaveBeenCalledTimes(1);
+});
+
+it('opens the catalog from a new tab and renders an Agent search with source-only and downloadable results', async () => {
+  const catalog: SuperAgentArtifact = { id: 'catalog', kind: 'model-catalog', title: 'Free 3D models', catalogQuery: 'oak tree', createdAt: 1, updatedAt: 1 };
+  const action = vi.fn(async (_action: { query?: string } | { id: string }) => {});
+  let failSearch = true;
+  vi.mocked(fetch).mockImplementation(async input => {
+    if (!String(input).includes('model-catalog/search?q=oak%20tree')) return Response.json({ games: [] });
+    if (failSearch) return Response.json({}, { status: 503 });
+    return Response.json({ models: [
+      { id: 'oak', title: 'Oak tree', provider: 'Library', license: 'CC0', downloadable: true },
+      { id: 'trees', title: 'Tree collection', provider: 'Archive', sourceUrl: 'https://example.org/trees', downloadable: false },
+    ] });
+  });
+  await renderViewer([catalog], NEW_VIEWER_TAB_ID, action);
+  await act(async () => container.querySelector<HTMLButtonElement>('.om-sa-shortcut-item')!.click());
+  expect(action).toHaveBeenCalledWith({});
+  await act(async () => container.querySelector<HTMLButtonElement>('.om-sa-newtab-card')!.click());
+  expect(container.textContent).toContain('Could not load assets');
+  failSearch = false;
+  const findButton = (label: string) => [...container.querySelectorAll('button')].find(b => b.textContent === label)!;
+  await act(async () => findButton('Retry').click());
+  expect(container.querySelector<HTMLInputElement>('.om-model-catalog input')?.value).toBe('oak tree');
+  expect(container.querySelector('.om-model-credit a')?.getAttribute('href')).toBe('https://example.org/trees');
+  expect(findButton('Ask Agent to download').disabled).toBe(true);
+  expect(container.textContent).toContain('License not specified');
+  expect(container.querySelectorAll('.om-model-grid button')).toHaveLength(2);
+  await act(async () => findButton('Add to workspace').click());
+  expect(action).toHaveBeenCalledWith({ id: 'oak' });
+});
+
+it('clears Agent and category searches to discovery and restores the latest search after viewing a model', async () => {
+  const catalog: SuperAgentArtifact = { id: 'catalog', kind: 'model-catalog', title: 'Free 3D models', catalogQuery: 'wooden chair', createdAt: 1, updatedAt: 1 };
+  const model: SuperAgentArtifact = { id: 'preview', kind: 'asset-3d', title: 'Model preview', url: '/sample.glb', createdAt: 2, updatedAt: 2 };
+  const queries: string[] = [];
+  let resolveHome: () => void = () => {};
+  vi.mocked(fetch).mockImplementation(async input => {
+    const url = new URL(String(input), 'https://example.org');
+    if (!url.pathname.endsWith('/model-catalog/search')) return Response.json({ games: [] });
+    const query = url.searchParams.get('q')!;
+    queries.push(query);
+    if (query === '') await new Promise<void>(resolve => { resolveHome = resolve; });
+    return Response.json({ models: [{ id: 'item', title: query || 'Mixed shelf model', provider: 'Library', downloadable: false }] });
+  });
+  await renderViewer([catalog, model]);
+  const input = () => container.querySelector<HTMLInputElement>('.om-model-catalog input')!;
+  const type = async (value: string) => act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input(), value);
+    input().dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const button = (label: string) => [...container.querySelectorAll('button')].find(b => b.textContent === label || b.getAttribute('aria-label') === label)!;
+  const click = async (label: string) => act(async () => button(label).click());
+  expect(input().value).toBe('wooden chair');
+  await type('');
+  await click('Search');
+  expect(queries.at(-1)).toBe('');
+  expect(container.querySelector('.om-model-grid li:not([aria-hidden])')).toBeNull();
+  expect(button('Discover').getAttribute('aria-pressed')).toBe('true');
+  await act(async () => resolveHome());
+  expect(container.textContent).toContain('Mixed shelf model');
+  await click('Animals');
+  expect(button('Animals').getAttribute('aria-pressed')).toBe('true');
+  await click('Clear search');
+  await act(async () => resolveHome());
+  expect(input().value).toBe('');
+  expect(button('Discover').getAttribute('aria-pressed')).toBe('true');
+  await type('stone bridge');
+  await click('Search');
+  await click('Model preview');
+  await click('Back to asset catalog');
+  expect(input().value).toBe('stone bridge');
+  expect(queries).toEqual(['wooden chair', '', 'animal', '', 'stone bridge', 'stone bridge']);
+});
+
+it('restores 2D topics across preview tabs and distinguishes source pages, preview images and original files', async () => {
+  const catalog: SuperAgentArtifact = { id: 'catalog', kind: 'model-catalog', title: 'Game asset catalog', catalogQuery: 'icon', catalogDimension: '2d', createdAt: 1, updatedAt: 1 };
+  const file: SuperAgentArtifact = { id: 'png-file', kind: 'workspace-file', title: 'run.png', filePath: 'run.png', createdAt: 2, updatedAt: 2 };
+  const sprite = { id: 'sprite', title: 'Run cycle', provider: 'OpenGameArt', thumbnailUrl: 'https://opengameart.org/preview.png', sourceUrl: 'https://opengameart.org/content/run', license: 'CC-BY', downloadable: true };
+  const requests: string[] = [];
+  vi.mocked(fetch).mockImplementation(async input => {
+    const url = new URL(String(input), 'https://example.org');
+    if (!url.pathname.endsWith('/model-catalog/search')) return Response.json({ games: [] });
+    requests.push(url.search);
+    return Response.json({ models: [sprite, { ...sprite, id: 'pack', title: 'Sprite pack', sourceUrl: 'https://artist.itch.io/pack', downloadable: false }] });
+  });
+  const action = vi.fn(async () => {});
+  await renderViewer([catalog, file], catalog.id, action);
+  const button = (label: string) => [...container.querySelectorAll('button')].find(b => b.textContent === label || b.getAttribute('aria-label') === label)!;
+  const click = (label: string) => act(async () => button(label).click());
+  expect(requests.at(-1)).toBe('?q=icon&dimension=2d');
+  expect(button('UI icons').getAttribute('aria-pressed')).toBe('true');
+  expect(container.querySelector('.om-model-grid li a')?.getAttribute('href')).toBe(sprite.sourceUrl);
+  expect(container.querySelector('.om-model-grid li:nth-child(2)')?.textContent).toContain('itch.io');
+  expect(container.querySelector('.om-model-grid li:nth-child(2)')?.textContent).not.toContain('Add to workspace');
+  const frame = container.querySelector('.om-model-thumbnail')!;
+  const image = frame.querySelector('img')!;
+  let finishDecode!: () => void;
+  Object.defineProperty(image, 'decode', { value: () => new Promise<void>(resolve => { finishDecode = resolve; }) });
+  await act(async () => { image.dispatchEvent(new Event('load')); });
+  expect(frame.querySelector('.om-model-image-placeholder')).toBeTruthy();
+  await act(async () => finishDecode());
+  expect(frame.querySelector('.om-model-image-placeholder')).toBeNull();
+  expect(image.dataset.ready).toBe('true');
+  const secondFrame = container.querySelector('.om-model-grid li:nth-child(2) .om-model-thumbnail')!;
+  await act(async () => { secondFrame.querySelector('img')!.dispatchEvent(new Event('error')); });
+  expect(secondFrame.textContent).toContain('Preview unavailable');
+  expect(secondFrame.querySelector('.om-model-image-placeholder')).toBeNull();
+  await click('Preview image');
+  expect(document.querySelector('.om-sa-lightbox-stage img')?.getAttribute('src')).toBe(sprite.thumbnailUrl);
+  await act(async () => document.querySelector<HTMLButtonElement>('.om-sa-lightbox-head button')!.click());
+  expect(action).not.toHaveBeenCalled();
+  await click('Add to workspace');
+  expect(action).toHaveBeenCalledWith({ id: sprite.id });
+  await click('3D');
+  expect(requests.at(-1)).toBe('?q=');
+  expect(button('Animation')).toBeTruthy();
+  await click('2D');
+  await click('Animation frames');
+  await click('run.png');
+  await click('Back to asset catalog');
+  expect(requests.at(-1)).toBe('?q=sprite%20animation&dimension=2d');
+  expect(button('2D').getAttribute('aria-pressed')).toBe('true');
+  expect(button('Animation frames').getAttribute('aria-pressed')).toBe('true');
+  expect(container.querySelector<HTMLInputElement>('.om-sa-address-form input')?.value).toBe('catalog://sprites?q=sprite%20animation');
+  await click('Clear search');
+  expect(requests.at(-1)).toBe('?q=&dimension=2d');
+  expect(button('Discover').getAttribute('aria-pressed')).toBe('true');
+});
 
 it('reads workspace model bytes from the authorized preview URL and changes the clip on the same stage', async () => {
   const previewUrl = '/motion-api/super-agent/file-content?rootKey=game&path=assets%2Fhero.glb&raw=1';

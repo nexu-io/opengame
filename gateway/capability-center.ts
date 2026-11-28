@@ -1601,9 +1601,16 @@ export async function assetManage(
   if (args.action === 'brand_kit') {
     return brandKitOperation(brandKitsFor((store.workspaceStore ?? store).directory), args.brandKit, origin ?? '');
   }
-  if (args.action === 'present_asset') {
+  if (args.action === 'search_models') {
+    const { searchModels } = await import('./model-catalog.ts');
+    return searchModels(args.query, args.dimension, args.cursor);
+  }
+  if (['present_asset', 'browse_models', 'acquire_model'].includes(args.action)) {
     const { superAgentConversations } = await import('./super-agent.ts');
-    return superAgentConversations(store).presentAsset(args.conversationId, args);
+    const conversations = superAgentConversations(store, tracking);
+    if (args.action === 'browse_models') return conversations.openModelCatalog(args.conversationId, args.query, args.dimension);
+    if (args.action === 'acquire_model') return conversations.acquireModel(args.conversationId, args.id);
+    return conversations.presentAsset(args.conversationId, args);
   }
   if (['list', 'get', 'read', 'import', 'update', 'import_to_project'].includes(args.action)) {
     return assetOperation(store, args, importProject, tracking);

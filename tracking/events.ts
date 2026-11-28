@@ -96,7 +96,7 @@ export const superAgentFeedbackReasons = [
 ] as const;
 const superAgentFeedbackArtifactKinds = [
   'game-project', 'design-project', 'motion-project', 'motion-export',
-  'asset-image', 'asset-video', 'asset-audio', 'brand-kit', 'web', 'file', 'other',
+  'asset-image', 'asset-video', 'asset-audio', 'brand-kit', 'web', 'file', 'model-catalog', 'other',
 ] as const;
 const scenarioStepStatuses = ['todo', 'in-progress', 'done', 'skipped'] as const;
 // Studio project ids are UUIDs except the built-in local project, whose id is the literal `project`.

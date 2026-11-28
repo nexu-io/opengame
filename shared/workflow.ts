@@ -114,6 +114,7 @@ export const workflowRegistry = {
       controls: 'skills/openmotion-game/references/game-3c-modules.md',
       craft: 'skills/openmotion-game/references/game-feel-craft.md',
       lookup: 'skills/openmotion-game/references/game-lookup.md',
+      sourcing: 'skills/openmotion-game/references/game-model-sourcing.md',
       genres: 'skills/openmotion-game/references/game-genres.md',
       playable: 'skills/openmotion-game/references/game-playable-ad.md',
       flow: 'skills/openmotion-game/references/game-flow.md',

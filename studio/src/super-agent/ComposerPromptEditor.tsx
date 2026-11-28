@@ -22,6 +22,7 @@ import {
   COPY_COMMAND,
   CUT_COMMAND,
   FOCUS_COMMAND,
+  HISTORY_PUSH_TAG,
   KEY_ARROW_DOWN_COMMAND,
   KEY_ARROW_UP_COMMAND,
   KEY_BACKSPACE_COMMAND,
@@ -70,6 +71,7 @@ export type ComposerPromptEditorHandle = {
   clearTrigger: () => void;
   getSnapshot: () => ComposerSnapshot;
   setPlainText: (text: string) => void;
+  appendPrompt: (prompt: string) => void;
   setStructuredContent: (
     text: string,
     segments?: SuperAgentPromptSegment[],
@@ -675,6 +677,21 @@ export const ComposerPromptEditor = forwardRef<
         const editor = editorRef.current;
         if (!editor) return { text: '', segments: [], mentions: [] };
         return serializeLexicalEditorState(editor.getEditorState());
+      },
+      appendPrompt(prompt: string) {
+        const editor = editorRef.current;
+        if (!editor || !editor.isEditable()) return;
+        editor.getRootElement()?.focus();
+        const { text } = serializeLexicalEditorState(editor.getEditorState());
+        editor.update(() => {
+          const root = $getRoot();
+          if (!text.includes(prompt)) {
+            if (text) root.append($createParagraphNode());
+            else root.clear();
+            appendLinesToParagraphs(root, prompt);
+          }
+          root.selectEnd();
+        }, { discrete: true, tag: HISTORY_PUSH_TAG });
       },
       setPlainText(text: string) {
         const editor = editorRef.current;

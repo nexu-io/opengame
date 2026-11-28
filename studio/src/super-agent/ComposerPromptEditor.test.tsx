@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { act, createRef } from 'react';
+import { $getRoot, $getSelection, $isRangeSelection, getNearestEditorFromDOMNode, UNDO_COMMAND } from 'lexical';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SuperAgentResourceAttachment } from '../../../shared/super-agent';
@@ -81,6 +82,27 @@ function renderEditor(props: Partial<React.ComponentProps<typeof ComposerPromptE
 }
 
 describe('ComposerPromptEditor', () => {
+  it('appends an undoable catalog prompt after an inline attachment with the caret at the end', async () => {
+    const { ref, editable } = renderEditor();
+    const file: SuperAgentResourceAttachment = { id: 'hero', kind: 'file', title: 'hero.png', filePath: 'hero.png' };
+    await act(async () => ref.current!.insertMention(file));
+    const original = ref.current!.getSnapshot();
+    const prompt = 'Download this model.\nKeep its textures.';
+    await act(async () => ref.current!.appendPrompt(prompt));
+    expect(ref.current!.getSnapshot().text).toBe(`${original.text}\n\n${prompt}`);
+    expect(ref.current!.getSnapshot().mentions).toEqual([file]);
+    const editor = getNearestEditorFromDOMNode(editable)!;
+    editor.getEditorState().read(() => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) throw new Error('Expected a text caret');
+      expect(selection.isCollapsed()).toBe(true);
+      expect(selection.anchor.key).toBe($getRoot().getLastDescendant()?.getKey());
+      expect(selection.anchor.offset).toBe('Keep its textures.'.length);
+    });
+    await act(async () => { editor.dispatchCommand(UNDO_COMMAND, undefined); });
+    expect(ref.current!.getSnapshot()).toEqual(original);
+  });
+
   it('sets placeholder & disabled attributes cleanly and serializes plain text', async () => {
     const { ref, editable } = renderEditor({ disabled: true });
     expect(editable.getAttribute('aria-label')).toBe('Message Super Agent');
