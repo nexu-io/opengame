@@ -10480,6 +10480,16 @@
   color: var(--motion-on-action);
 }
 
+/* The copy is being created, so the tile keeps its hover affordance but cannot be clicked twice. */
+.om-sa-game-tile-remix[data-busy] svg {
+  animation: om-sa-spin 0.9s linear infinite;
+}
+
+.om-sa-game-tile-remix:disabled {
+  cursor: progress;
+  opacity: 0.8;
+}
+
 :where(.om-sa-game-tile) :is(.om-sa-game-tile-deploy, .om-sa-game-tile-remix) {
   background: color-mix(in srgb, var(--motion-neutral-n11) 75%, transparent);
 }

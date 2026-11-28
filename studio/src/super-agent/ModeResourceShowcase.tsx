@@ -959,6 +959,7 @@ export function ModeResourceShowcase({
   onToggleAttachment,
   onPlayGame,
   onDeployGame,
+  onRemixGame,
   composer,
   onApplyTemplate,
   onFocusComposer,
@@ -975,6 +976,8 @@ export function ModeResourceShowcase({
   onToggleAttachment: (item: SuperAgentResourceAttachment) => boolean | void;
   onPlayGame?: (game: GameCard) => void;
   onDeployGame?: (game: GameCard) => void;
+  /** Copy a template into the user's own games straight from the tile. */
+  onRemixGame?: (game: GameCard) => void | Promise<void>;
   composer: ReactNode;
   onApplyTemplate: () => void;
   onFocusComposer?: () => void;
@@ -1006,6 +1009,8 @@ export function ModeResourceShowcase({
   // The hero waits for the full catalog so its curated cards don't flash fallback covers first.
   const [gameCatalogSettled, setGameCatalogSettled] = useState(false);
   const [loadingKind, setLoadingKind] = useState<string | null>(null);
+  // Template tile whose "Remix" click is still creating the copy.
+  const [remixingGameId, setRemixingGameId] = useState<string | null>(null);
 
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [activeSkillCategory, setActiveSkillCategory] = useState<SkillCategory | 'all'>('all');
@@ -1629,6 +1634,13 @@ export function ModeResourceShowcase({
     if (onPlayGame) onPlayGame(game);
     else selectGameForAgent(game);
   };
+  // Remixing a template used to only queue it for the composer; the tile now copies it
+  // into the user's own games right away, which is what makes this a workbench.
+  const remixShowcaseGame = (game: GameCard) => {
+    if (!onRemixGame || remixingGameId) return;
+    setRemixingGameId(game.id);
+    void Promise.resolve(onRemixGame(game)).finally(() => setRemixingGameId(null));
+  };
   const isImageMode = mode.id === 'image' || (mode.id === 'design' && modeOptions?.designFormat === 'image');
   const showPromptCue = isImageMode || isVideoMode;
   function applyCardPrompt(card: CuratedShowcaseCard) {
@@ -2134,6 +2146,9 @@ export function ModeResourceShowcase({
                   ? Boolean(mineAttachment && selectedKeys.has(resourceKey(mineAttachment)))
                   : modeOptions?.gameTemplate?.id === game.id;
                 const isPlaying = playingGameId === game.id;
+                // A template the workspace can copy is a real remix target. Community cards are games
+                // living on their creator's site, so they keep the composer-brief path instead.
+                const copiesIntoWorkspace = !isMine && !game.external && Boolean(onRemixGame);
                 const status = isMine ? GAME_STATUS_LABELS[game.status] : undefined;
                 const isTopEarning = isTopEarningGame(game);
 
@@ -2211,14 +2226,25 @@ export function ModeResourceShowcase({
                             type="button"
                             className="om-sa-game-tile-remix"
                             data-composer-source
-                            data-selected={isSelected || undefined}
-                            aria-pressed={isSelected}
+                            data-selected={!copiesIntoWorkspace && isSelected ? true : undefined}
+                            data-busy={remixingGameId === game.id || undefined}
+                            aria-pressed={!copiesIntoWorkspace ? isSelected : undefined}
+                            disabled={remixingGameId === game.id}
                             title={`${t(isMine ? 'Attach' : 'Remix')}: ${title}`}
                             aria-label={`${t(isMine ? 'Attach' : 'Remix')}: ${title}`}
-                            onClick={() => selectGameForAgent(game)}
+                            onClick={() => (copiesIntoWorkspace ? remixShowcaseGame(game) : selectGameForAgent(game))}
                           >
-                            <RemixIcon name={isSelected ? 'check-line' : isMine ? 'add-line' : 'sparkling-line'} size={12} />
-                            <span>{isSelected ? t('Selected') : isMine ? t('Attach') : t('Remix')}</span>
+                            <RemixIcon
+                              name={remixingGameId === game.id
+                                ? 'loader-4-line'
+                                : isMine ? (isSelected ? 'check-line' : 'add-line') : 'sparkling-line'}
+                              size={12}
+                            />
+                            <span>
+                              {remixingGameId === game.id
+                                ? t('Remix')
+                                : isMine ? (isSelected ? t('Selected') : t('Attach')) : t('Remix')}
+                            </span>
                           </Button>
                         )}
                       </div>

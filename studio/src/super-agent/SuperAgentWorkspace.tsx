@@ -1568,6 +1568,16 @@ export function SuperAgentWorkspace({
     return fullArtifact.id;
   }, [activeChat, activeTabId, applyChatSnapshot, locale, previewArtifacts, showToast, t, viewerOpen]);
 
+  const handleRemixGame = useCallback(async (game: GameCard) => {
+    try {
+      const created = await gameApi.remix(game.id);
+      showToast(t('Remixed into your games: {title}', { title: localizedGameTitle(created.game, locale) }), 'info', 'feedback');
+      await handlePlayGame(created.game);
+    } catch {
+      showToast(t('Could not remix template'), 'error');
+    }
+  }, [handlePlayGame, locale, showToast, t]);
+
   const handleDeployGame = useCallback(async (game: GameCard) => {
     const openedArtifactId = await handlePlayGame(game);
     if (openedArtifactId) {
@@ -2325,6 +2335,7 @@ export function SuperAgentWorkspace({
             onChangeRequestedMode={onChangeRequestedMode}
             onPlayGame={game => void handlePlayGame(game)}
             onDeployGame={game => void handleDeployGame(game)}
+            onRemixGame={game => handleRemixGame(game)}
             onRetryLoad={() => setChatRetry(value => value + 1)}
             onOpenSidebar={() => setSidebarOpen(true)}
             onToggleViewer={() => {
