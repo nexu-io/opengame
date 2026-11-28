@@ -93,12 +93,15 @@ export async function apiJson(fetcher: Fetcher, url: string, init: RequestInit =
   const body = await readCappedText(response, maxBytes);
   try { return JSON.parse(body); } catch { throw new Error('Provider returned invalid JSON'); }
 }
+export function responseLimitMessage(maximum: number): string {
+  return `Provider response exceeds ${maximum / 1024 / 1024} MB`;
+}
 // Stop reading as soon as the peer exceeds the cap instead of buffering the whole body first.
 export async function readCappedBytes(response: Response, maximum: number): Promise<Buffer> {
   const declared = Number(response.headers.get('content-length') || 0);
   if (Number.isFinite(declared) && declared > maximum) {
     await response.body?.cancel().catch(() => {});
-    throw new Error(`Provider response exceeds ${maximum / 1024 / 1024} MB`);
+    throw new Error(responseLimitMessage(maximum));
   }
   if (!response.body) return Buffer.alloc(0);
   const reader = response.body.getReader(), chunks: Uint8Array[] = [];
@@ -109,7 +112,7 @@ export async function readCappedBytes(response: Response, maximum: number): Prom
       if (done) break;
       if (!value) continue;
       size += value.byteLength;
-      if (size > maximum) throw new Error(`Provider response exceeds ${maximum / 1024 / 1024} MB`);
+      if (size > maximum) throw new Error(responseLimitMessage(maximum));
       chunks.push(value);
     }
   } finally { await reader.cancel().catch(() => {}); }
@@ -246,7 +249,7 @@ export async function publicProviderFetch(raw: Parameters<Fetcher>[0], init: Req
         else done(null, addresses[0].address, addresses[0].family);
       } }, res => {
       const chunks: Buffer[] = []; let size = 0;
-      res.on('data', (chunk: Buffer) => { size += chunk.length; if (size > maxBytes) res.destroy(new Error(`Provider response exceeds ${maxBytes / 1024 / 1024} MB`)); else chunks.push(chunk); });
+      res.on('data', (chunk: Buffer) => { size += chunk.length; if (size > maxBytes) res.destroy(new Error(responseLimitMessage(maxBytes))); else chunks.push(chunk); });
       res.on('error', reject);
       res.on('end', () => {
         const status = res.statusCode ?? 502;

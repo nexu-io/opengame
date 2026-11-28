@@ -1,13 +1,21 @@
 import { readFile, stat } from 'node:fs/promises';
 import { normalizeTranscript } from '../shared/transcript.ts';
 import { connectionBaseUrl } from './connections.ts';
-import { ProviderError, publicProviderFetch, type Fetcher } from './network.ts';
+import { ProviderError, publicProviderFetch, readCappedText, responseLimitMessage, type Fetcher } from './network.ts';
 
 export const TRANSCRIPTION_CHUNK_SECONDS = 600;
 const TRANSCRIPTION_TIMEOUT_MS = 10 * 60_000;
+export const MAX_TRANSCRIPTION_RESPONSE_BYTES = 4_000_000;
 // Non-streaming ASR can be silent for longer than the ordinary provider idle limit.
-const transcriptionFetch: Fetcher = (url, init) => publicProviderFetch(url, init, TRANSCRIPTION_TIMEOUT_MS);
+const transcriptionFetch: Fetcher = (url, init) => publicProviderFetch(url, init, TRANSCRIPTION_TIMEOUT_MS, MAX_TRANSCRIPTION_RESPONSE_BYTES);
 const formats = ['json', 'verbose_json', 'diarized_json'];
+function rethrowTranscriptionError(error: unknown): never {
+  // Both capped paths use the shared limit message; preserve every other transport error.
+  if (error instanceof Error && error.message === responseLimitMessage(MAX_TRANSCRIPTION_RESPONSE_BYTES)) {
+    throw new Error(`Transcription response exceeds ${MAX_TRANSCRIPTION_RESPONSE_BYTES / 1_000_000} MB`, { cause: error });
+  }
+  throw error;
+}
 /** Explicit, bounded options; neither credentials nor arbitrary destinations enter a job. */
 export function transcriptionParameters(modelId: string, defaults: Record<string, unknown> = {}, overrides: Record<string, unknown> = {}) {
   const input = { ...defaults, ...overrides };
@@ -50,10 +58,9 @@ export async function transcribeAudio(input: { file: string; modelId: string; ba
   const response = await fetcher(connectionBaseUrl(input.baseUrl) + '/audio/transcriptions', {
     method: 'POST', headers: { Authorization: `Bearer ${input.key}`, 'Content-Type': encoded.headers.get('content-type')! },
     body: new Uint8Array(await encoded.arrayBuffer()), redirect: 'error', signal: AbortSignal.any([input.signal, AbortSignal.timeout(TRANSCRIPTION_TIMEOUT_MS)]),
-  });
+  }).catch(rethrowTranscriptionError);
   if (!response.ok) throw new ProviderError(`Transcription provider HTTP ${response.status}${[401, 403].includes(response.status) ? ': check credentials and model access in Settings' : ''}`, response.status);
-  const text = await response.text();
-  if (text.length > 4_000_000) throw new Error('Transcription response exceeds 4 MB');
+  const text = await readCappedText(response, MAX_TRANSCRIPTION_RESPONSE_BYTES).catch(rethrowTranscriptionError);
   let body; try { body = JSON.parse(text); } catch { throw new Error('Transcription provider returned invalid JSON'); }
   return normalizeTranscript(body, input.offset, input.duration);
 }
