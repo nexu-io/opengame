@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="package.json"><img src="docs/readme/badges/node.svg" alt="Node.js 22.18+"></a>
+  <a href="docs/opengame-setup.md#prerequisites"><img src="docs/readme/badges/node.svg" alt="Node.js 26.11.1"></a>
   <a href="LICENSE"><img src="docs/readme/badges/license.zh-CN.svg" alt="Apache 2.0 许可证"></a>
   <a href="https://github.com/nexu-io/open-design"><img src="docs/readme/badges/built-by-opendesign.zh-CN.svg" alt="OpenDesign 出品"></a>
 </p>
@@ -62,7 +62,7 @@ npx skills add https://github.com/nexu-io/opengame/tree/skills --skill opengame
 
 ### 3. 从源码在本地启动 OpenGame Studio
 
-环境要求：**Git**、**Git LFS**、**npm**、**Node.js 22.18+**（CI 锁定 Node.js 26.11.1）。启动后即可浏览模板目录，首次试玩或 Remix 时只下载所选模板的素材。Tidebreaker 可直接离线试玩。
+环境要求：**Git**、**Git LFS**、**npm**、**Node.js 26.11.1**（与 CI 版本一致）。启动后即可浏览模板目录，首次试玩或 Remix 时只下载所选模板的素材。Tidebreaker 可直接离线试玩。
 
 ```sh
 git -c filter.lfs.process= -c filter.lfs.smudge= -c filter.lfs.required=false clone --depth 1 --single-branch --branch main https://github.com/nexu-io/opengame.git

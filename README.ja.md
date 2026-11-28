@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="package.json"><img src="docs/readme/badges/node.svg" alt="Node.js 22.18+"></a>
+  <a href="docs/opengame-setup.md#prerequisites"><img src="docs/readme/badges/node.svg" alt="Node.js 26.11.1"></a>
   <a href="LICENSE"><img src="docs/readme/badges/license.ja.svg" alt="Apache 2.0 ライセンス"></a>
   <a href="https://github.com/nexu-io/open-design"><img src="docs/readme/badges/built-by-opendesign.ja.svg" alt="OpenDesign 開発"></a>
 </p>
@@ -62,7 +62,7 @@ npx skills add https://github.com/nexu-io/opengame/tree/skills --skill opengame
 
 ### 3. ソースからローカルで OpenGame Studio を起動
 
-必要環境：**Git**、**Git LFS**、**npm**、**Node.js 22.18+**（CI では Node.js 26.11.1 に固定）。起動後すぐにカタログを閲覧でき、初めてプレイまたは Remix する際に選んだテンプレートの素材を取得します。Tidebreaker はオフラインで遊べます。
+必要環境：**Git**、**Git LFS**、**npm**、**Node.js 26.11.1**（CI と同じバージョン）。起動後すぐにカタログを閲覧でき、初めてプレイまたは Remix する際に選んだテンプレートの素材を取得します。Tidebreaker はオフラインで遊べます。
 
 ```sh
 git -c filter.lfs.process= -c filter.lfs.smudge= -c filter.lfs.required=false clone --depth 1 --single-branch --branch main https://github.com/nexu-io/opengame.git
