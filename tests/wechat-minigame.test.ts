@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, stat, readdir, rm, symlink } from 'node:fs/promises';
+import fs, { mkdtemp, mkdir, writeFile, readFile, stat, readdir, rm, symlink } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { WechatMinigame } from '../gateway/wechat-minigame.ts';
@@ -310,6 +311,88 @@ test('credentials validate, save atomically with private permissions, list and d
   assert.equal(errorCode(await request(service, 'DELETE', '/credentials/invalid')), 'INVALID_APPID');
   assert.deepEqual((await request(service, 'DELETE', `/credentials/${appid}`)).data, { appid, hasKey: false });
   assert.deepEqual((await request(service, 'GET', '/credentials')).data, { saved: [] });
+}));
+
+for (const kind of ['preview', 'upload', 'ip-check']) {
+  test(`credential replacement and deletion cannot disrupt an active ${kind}`, { timeout: 5000 }, () => fixture(async workspace => {
+    const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+    let usedOriginalKey = false;
+    const run = async (options: any) => {
+      entered.resolve();
+      await release.promise;
+      usedOriginalKey = await readFile(options.project.options.privateKeyPath, 'utf8') === key;
+      if (options.qrcodeOutputDest) await writeFile(options.qrcodeOutputDest, 'png');
+    };
+    const service = await configured(workspace, fakeCi({ preview: run, upload: run }));
+    const second = serviceFor(workspace);
+    const pending = request(service, 'POST', `/${kind}`, { appid, gameId: 'demo', version: '1.0.0', desc: '' });
+    await entered.promise;
+    let replaced: Awaited<ReturnType<typeof request>>, removed: Awaited<ReturnType<typeof request>>;
+    try {
+      replaced = await request(second, 'PUT', '/credentials', { appid, privateKey: key + '\n' });
+      removed = await request(second, 'DELETE', `/credentials/${appid}`);
+      assert.equal((await request(second, 'GET', `/credentials/${appid}`)).status, 200);
+    } finally { release.resolve(); }
+    assert.equal((await pending).status, 200, 'the active SDK operation must retain a readable credential');
+    assert.equal(usedOriginalKey, true);
+    for (const result of [replaced, removed]) {
+      assert.equal(result.status, 409);
+      assert.equal(errorCode(result), 'BUSY');
+      noKey(result);
+    }
+    assert.equal((await request(second, 'PUT', '/credentials', { appid, privateKey: key + '\n' })).status, 200);
+    assert.equal((await request(second, 'DELETE', `/credentials/${appid}`)).status, 200);
+  }));
+}
+
+test('a pending credential save excludes publishing and deletion for that AppID only', { timeout: 5000 }, t => fixture(async workspace => {
+  let previews = 0;
+  const service = await configured(workspace, fakeCi({ preview: async (options: any) => { previews++; await writeFile(options.qrcodeOutputDest, 'png'); } }));
+  const second = serviceFor(workspace);
+  const keyPath = path.join(service.keyDirectory, `private.${appid}.key`);
+  const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+  const rename = fs.rename;
+  t.mock.method(fs, 'rename', async (...args: Parameters<typeof fs.rename>) => {
+    if (String(args[1]) === keyPath) { entered.resolve(); await release.promise; }
+    return rename(...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const pending = request(service, 'PUT', '/credentials', { appid, privateKey: key + '\n' });
+  await entered.promise;
+  try {
+    const preview = await request(service, 'POST', '/preview', { appid, gameId: 'demo' });
+    assert.equal(preview.status, 409);
+    assert.equal(errorCode(preview), 'BUSY');
+    assert.equal(previews, 0);
+    assert.equal((await request(second, 'DELETE', `/credentials/${appid}`)).status, 409);
+    assert.equal((await request(second, 'GET', `/credentials/${appid}`)).status, 200);
+    assert.equal((await request(second, 'PUT', '/credentials', { appid: 'wxfedcba9876543210', privateKey: key })).status, 200);
+  } finally { release.resolve(); await pending; }
+  assert.equal((await request(service, 'POST', '/preview', { appid, gameId: 'demo' })).status, 200);
+  assert.equal(previews, 1);
+}));
+
+test('credential write and removal failures release the AppID lock', t => fixture(async workspace => {
+  const service = await configured(workspace);
+  const keyPath = path.join(service.keyDirectory, `private.${appid}.key`);
+  for (const operation of ['save', 'delete']) {
+    const method = operation === 'save' ? 'rename' : 'rm';
+    const original = fs[method];
+    t.mock.method(fs, method, async (...args: any[]) => {
+      if (String(args[operation === 'save' ? 1 : 0]) === keyPath) throw Object.assign(new Error('Controlled credential I/O failure'), { code: 'EIO' });
+      return (original as Function)(...args);
+    });
+    syncBuiltinESMExports();
+    try {
+      const failed = operation === 'save'
+        ? await request(service, 'PUT', '/credentials', { appid, privateKey: key + '\n' })
+        : await request(service, 'DELETE', `/credentials/${appid}`);
+      assert.equal(failed.status, 500);
+    } finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+    assert.equal((await request(service, 'PUT', '/credentials', { appid, privateKey: key })).status, 200);
+  }
+  assert.equal((await request(service, 'DELETE', `/credentials/${appid}`)).status, 200);
 }));
 
 test('project lookup uses the game store, skips hidden/dependency files and caps inventory', () => fixture(async workspace => {

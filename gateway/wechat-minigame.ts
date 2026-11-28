@@ -317,21 +317,29 @@ export class WechatMinigame {
     return { gameId, projectDir, exists: Boolean(root), files, totalBytes, mainPackageLimitBytes: 4194304,
       hasGameJs: await hasFile('game.js'), hasGameJson: await hasFile('game.json'), hasProjectConfig: await hasFile('project.config.json') };
   }
+  private async changeCredentials<T>(appid: string, operation: () => Promise<T>): Promise<T> {
+    if (busy.has(appid)) throw new PublishError(409, 'BUSY', 'A WeChat operation is already running for this appid');
+    busy.add(appid);
+    try { return await operation(); }
+    finally { busy.delete(appid); }
+  }
   private async save(body: any) {
     const appid = appId(body?.appid);
     const key = body?.privateKey;
     if (typeof key !== 'string' || !key.includes('-----BEGIN') || !key.includes('PRIVATE KEY-----')) throw new PublishError(400, 'INVALID_KEY', 'A PEM private key is required');
     if (Buffer.byteLength(JSON.stringify(body)) > 16 * 1024) throw new PublishError(400, 'INVALID_KEY', 'Credentials exceed 16 KB');
-    await mkdir(this.keyDirectory, { recursive: true, mode: 0o700 });
-    if ((await lstat(this.keyDirectory)).isSymbolicLink()) throw new Error('Invalid credential directory');
-    await chmod(this.keyDirectory, 0o700);
-    const target = this.keyPath(appid), temp = path.join(this.keyDirectory, `.${randomUUID()}.tmp`);
-    try {
-      await writeFile(temp, key, { flag: 'wx', mode: 0o600 });
-      await chmod(temp, 0o600);
-      await rename(temp, target);
-      return { appid, hasKey: true, savedAt: (await this.keyInfo(appid))!.mtime.toISOString() };
-    } finally { await rm(temp, { force: true }); }
+    return this.changeCredentials(appid, async () => {
+      await mkdir(this.keyDirectory, { recursive: true, mode: 0o700 });
+      if ((await lstat(this.keyDirectory)).isSymbolicLink()) throw new Error('Invalid credential directory');
+      await chmod(this.keyDirectory, 0o700);
+      const target = this.keyPath(appid), temp = path.join(this.keyDirectory, `.${randomUUID()}.tmp`);
+      try {
+        await writeFile(temp, key, { flag: 'wx', mode: 0o600 });
+        await chmod(temp, 0o600);
+        await rename(temp, target);
+        return { appid, hasKey: true, savedAt: (await this.keyInfo(appid))!.mtime.toISOString() };
+      } finally { await rm(temp, { force: true }); }
+    });
   }
   /** SDK subprocess failures, noisy logs and unhandled rejections cannot reach the daemon. */
   private runWorker(job: WechatCiJob): Promise<unknown> {
@@ -393,7 +401,7 @@ export class WechatMinigame {
       if (typeof body?.version !== 'string' || !/^\d+\.\d+\.\d+$/.test(body.version)) throw new PublishError(400, 'INVALID_VERSION', 'Version must have the form 1.0.0');
       if (typeof body?.desc !== 'string' || body.desc.length > 200) throw new PublishError(400, 'INVALID_DESC', 'Description must be at most 200 characters');
     }
-    if (busy.has(appid)) throw new PublishError(409, 'BUSY', 'A WeChat preview or upload is already running for this appid');
+    if (busy.has(appid)) throw new PublishError(409, 'BUSY', 'A WeChat operation is already running for this appid');
     busy.add(appid);
     let temp: string | undefined;
     try {
@@ -436,7 +444,7 @@ export class WechatMinigame {
    */
   private async ipCheck(body: any) {
     const appid = appId(body?.appid);
-    if (busy.has(appid)) throw new PublishError(409, 'BUSY', 'A WeChat preview or upload is already running for this appid');
+    if (busy.has(appid)) throw new PublishError(409, 'BUSY', 'A WeChat operation is already running for this appid');
     busy.add(appid);
     let temp: string | undefined;
     try {
@@ -505,7 +513,9 @@ export class WechatMinigame {
       } else if (suffix === '/credentials' && method === 'PUT') data = await this.save(body);
       else if (/^\/credentials\/[^/]+$/.test(suffix) && ['GET', 'DELETE'].includes(method)) {
         const appid = appId(decodeURIComponent(suffix.slice('/credentials/'.length)));
-        if (method === 'DELETE') { await rm(this.keyPath(appid), { force: true }); data = { appid, hasKey: false }; }
+        if (method === 'DELETE') data = await this.changeCredentials(appid, async () => {
+          await rm(this.keyPath(appid), { force: true }); return { appid, hasKey: false };
+        });
         else { const entry = await this.keyInfo(appid); data = { appid, hasKey: Boolean(entry), savedAt: entry?.mtime.toISOString() ?? null }; }
       } else if (method === 'POST' && suffix === '/ip-check') data = await this.ipCheck(body);
       else if (method === 'POST' && (suffix === '/preview' || suffix === '/upload')) data = await this.publish(suffix.slice(1) as 'preview' | 'upload', body);
