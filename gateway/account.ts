@@ -4,7 +4,7 @@ import { chmod, copyFile, mkdir, open, rename, rm, stat } from 'node:fs/promises
 import { setTimeout as delay } from 'node:timers/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import type { AccountAttempt, AccountErrorCode, AccountSummary, DirectoryModel } from '../shared/provider-directory.ts';
+import type { AccountAttempt, AccountErrorCode, AccountSummary, DirectoryModel, ReferralRewardsProgress } from '../shared/provider-directory.ts';
 import type { GenerationJob, Model } from '../shared/gateway.ts';
 import {
   attributedEntryId,
@@ -692,6 +692,24 @@ export class OpenDesignAccount {
       error: this.error, errorCode: this.errorCode, consoleUrl,
       // An explicit connector path is used as is, so installing into the private directory would not help it.
       ...(!this.connecting && this.errorCode === 'connector_unavailable' && !this.explicitBinary() ? { connectorInstall: { command: manualInstallCommand(connectorRuntime(this.directory)) } } : {}) };
+  }
+  async referralRewards(): Promise<ReferralRewardsProgress | null> {
+    try {
+      if ((await this.summary()).state !== 'signed-in') return null;
+      const access = await this.mediaAccess();
+      if (!access) return null;
+      const data = await apiJson(this.options.fetcher ?? fetch, access.baseUrl + '/api/v1/referrals/me', {
+        headers: { Authorization: 'Bearer ' + access.key, Accept: 'application/json' },
+      }, { timeoutMs: 8_000, maxBytes: 32 * 1024 }) as Partial<ReferralRewardsProgress> | null;
+      const { invitedCount, inviteTarget, resetCardsAvailable } = data ?? {};
+      const isCount = (value: unknown): value is number =>
+        typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+      if (!isCount(invitedCount) || !isCount(inviteTarget) || inviteTarget === 0 || !isCount(resetCardsAvailable)) return null;
+      if ((await this.mediaAccess())?.key !== access.key) return null;
+      return { invitedCount, inviteTarget, resetCardsAvailable };
+    } catch {
+      return null;
+    }
   }
   private async billingSummary(profile: Profile) {
     // Other connector environments retain their own endpoint and credential handling.

@@ -1415,6 +1415,10 @@ export async function handler(req: IncomingMessage, res: ServerResponse, store =
         const body = await input(req); await setDefaultModel(gateway, body.kind, body.model); return json(res, 200, { ok: true });
       }
       if (url.pathname === '/api/settings/account' && req.method === 'GET') return json(res, 200, await gateway.account.summary(url.searchParams.get('refresh') === 'true'));
+      if (url.pathname === '/api/settings/account/referral' && req.method === 'GET') {
+        res.setHeader('Cache-Control', 'no-store');
+        return json(res, 200, await gateway.account.referralRewards());
+      }
       if (url.pathname === '/api/settings/account/login' && req.method === 'POST') {
         const attribution = await accountAttribution(req);
         const rawHeader = req.headers['x-tracking-context'];

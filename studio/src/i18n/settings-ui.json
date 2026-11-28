@@ -1,5 +1,7 @@
 {
   "zh-CN": {
+    "Share OpenDesign · Earn reset cards": "分享 OpenDesign · 赢取重置卡",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "已成功邀请 {invited}/{target} 位好友 · 可用 {cards} 张重置卡",
     "Go back": "返回",
     "Account": "账户",
     "Account menu": "账户菜单",
@@ -404,6 +406,8 @@
     "The sign-in component installation timed out. Check your connection and select Retry.": "登录组件安装超时。请检查网络连接后重试。"
   },
   "ja": {
+    "Share OpenDesign · Earn reset cards": "OpenDesign を共有 · リセットカードを獲得",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "{invited}/{target} 名が参加 · リセットカード {cards} 枚利用可能",
     "Go back": "戻る",
     "Local Agents": "ローカル Agent",
     "Default Agent & models": "既定の Agent とモデル",
@@ -577,6 +581,8 @@
     "The sign-in component installation timed out. Check your connection and select Retry.": "ログイン用コンポーネントのインストールがタイムアウトしました。接続を確認して再試行してください。"
   },
   "ko": {
+    "Share OpenDesign · Earn reset cards": "OpenDesign 공유 · 리셋 카드 받기",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "팀원 {invited}/{target}명 합류 · 리셋 카드 {cards}장 보유",
     "Go back": "뒤로",
     "What's new": "새로운 소식",
     "Feedback": "피드백",
@@ -645,6 +651,8 @@
     "The sign-in component installation timed out. Check your connection and select Retry.": "로그인 구성 요소 설치 시간이 초과되었습니다. 연결을 확인하고 다시 시도하세요."
   },
   "de": {
+    "Share OpenDesign · Earn reset cards": "OpenDesign teilen · Reset-Karten verdienen",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "{invited}/{target} Kollegen beigetreten · {cards} Reset-Karten bereit",
     "Go back": "Zurück",
     "What's new": "Neuigkeiten",
     "Feedback": "Feedback",
@@ -713,6 +721,8 @@
     "The sign-in component installation timed out. Check your connection and select Retry.": "Die Installation der Anmeldekomponente dauerte zu lange. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut."
   },
   "fr": {
+    "Share OpenDesign · Earn reset cards": "Partager OpenDesign · Gagner des cartes",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "{invited}/{target} collègues inscrits · {cards} cartes prêtes",
     "Go back": "Retour",
     "What's new": "Nouveautés",
     "Feedback": "Commentaires",
@@ -781,6 +791,8 @@
     "The sign-in component installation timed out. Check your connection and select Retry.": "Le délai d’installation du composant de connexion a expiré. Vérifiez votre connexion et réessayez."
   },
   "ru": {
+    "Share OpenDesign · Earn reset cards": "Делитесь OpenDesign · Получайте карты сброса",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "Присоединились {invited}/{target} · доступно карт: {cards}",
     "Go back": "Назад",
     "What's new": "Что нового",
     "Feedback": "Обратная связь",
@@ -849,6 +861,8 @@
     "The sign-in component installation timed out. Check your connection and select Retry.": "Время установки компонента входа истекло. Проверьте подключение и повторите попытку."
   },
   "es": {
+    "Share OpenDesign · Earn reset cards": "Comparte OpenDesign · Gana tarjetas de reinicio",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "{invited}/{target} unidos · {cards} tarjetas listas",
     "Go back": "Volver",
     "What's new": "Novedades",
     "Feedback": "Comentarios",
@@ -917,6 +931,8 @@
     "The sign-in component installation timed out. Check your connection and select Retry.": "La instalación del componente de acceso agotó el tiempo de espera. Comprueba la conexión y vuelve a intentarlo."
   },
   "pt-BR": {
+    "Share OpenDesign · Earn reset cards": "Compartilhe OpenDesign · Ganhe cartões",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "{invited}/{target} entraram · {cards} cartões prontos",
     "Go back": "Voltar",
     "What's new": "Novidades",
     "Feedback": "Feedback",
@@ -985,6 +1001,8 @@
     "The sign-in component installation timed out. Check your connection and select Retry.": "A instalação do componente de login excedeu o tempo limite. Verifique a conexão e tente novamente."
   },
   "it": {
+    "Share OpenDesign · Earn reset cards": "Condividi OpenDesign · Guadagna carte reset",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "{invited}/{target} colleghi uniti · {cards} carte pronte",
     "Go back": "Indietro",
     "What's new": "Novità",
     "Feedback": "Feedback",
@@ -1053,6 +1071,8 @@
     "The sign-in component installation timed out. Check your connection and select Retry.": "Installazione del componente di accesso scaduta. Controlla la connessione e riprova."
   },
   "tr": {
+    "Share OpenDesign · Earn reset cards": "OpenDesign Paylaş · Sıfırlama kartı kazan",
+    "{invited}/{target} teammates joined · {cards} reset cards ready": "{invited}/{target} arkadaş katıldı · {cards} sıfırlama kartı hazır",
     "Go back": "Geri",
     "What's new": "Yenilikler",
     "Feedback": "Geri bildirim",

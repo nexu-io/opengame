@@ -51,6 +51,11 @@ export type AccountAttempt = {
   /** Confirms credentials an interrupted attempt had already saved; the connector shows no activation link for it. */
   resumed?: boolean;
 };
+export type ReferralRewardsProgress = {
+  invitedCount: number;
+  inviteTarget: number;
+  resetCardsAvailable: number;
+};
 export type AccountSummary = {
   state: 'signed-out' | 'authorizing' | 'signed-in' | 'reauth-required' | 'unavailable';
   user?: { name?: string; email?: string }; authorizationUrl?: string; userCode?: string;
