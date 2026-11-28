@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from 'open-design-ui/button';
 import { IconButton } from 'open-design-ui/icon-button';
+import { LOCAL_DIRECT_RUNTIME_ID } from '../../../shared/agent-runtimes';
 import {
   describeSuperAgentApproval,
   gameValidationPassed,
@@ -411,12 +412,17 @@ function stripRedundantDeliverableInlineLinks(text: string, deliverables: SuperA
   );
 }
 
-function formatConsumerChatError(rawError: string, t: Translate): { summary: string; detail?: string } {
+function formatConsumerChatError(chat: SuperAgentChat, rawError: string, t: Translate): { summary: string; detail?: string; codexThreadHref?: string } {
   const trimmed = rawError.trim();
-  if (/thread\s+[0-9a-f-]+\s+already has an active writer/i.test(trimmed)) {
+  const writerThread = /\bthread\s+([\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12})\s+already has an active writer\b/i.exec(trimmed)?.[1];
+  if (writerThread) {
+    const isLocalCodexThread = chat.engine === 'codex'
+      && (!chat.runtimeId || chat.runtimeId === LOCAL_DIRECT_RUNTIME_ID)
+      && writerThread.toLowerCase() === chat.threadId?.toLowerCase();
     return {
-      summary: t('The previous step is still wrapping up in the background. Click Continue in a moment to resume.'),
+      summary: t('Another Codex process has this chat open for writing.'),
       detail: trimmed,
+      codexThreadHref: isLocalCodexThread ? `codex://threads/${writerThread}` : undefined,
     };
   }
   if (/ECONNREFUSED|Failed to fetch|NetworkError/i.test(trimmed)) {
@@ -2536,7 +2542,7 @@ export function ExecutionTimeline({
       )}
 
       {chat.error && (() => {
-        const formattedErr = formatConsumerChatError(chat.error, t);
+        const formattedErr = formatConsumerChatError(chat, chat.error, t);
         return (
           <div className="om-sa-error-card" role="alert">
             <span className="om-sa-error-icon" aria-hidden="true">
@@ -2546,7 +2552,12 @@ export function ExecutionTimeline({
               <strong>{t('Conversation paused')}</strong>
               <p className="om-muted" title={formattedErr.detail}>{formattedErr.summary}</p>
             </div>
-            {onContinue && (
+            {formattedErr.codexThreadHref ? (
+              <a className="om-sa-continue-btn" href={formattedErr.codexThreadHref}>
+                <RemixIcon name="external-link-line" size={14} />
+                <span>{t('Open original chat in Codex')}</span>
+              </a>
+            ) : onContinue && (
               <Button
                 variant="plain"
                 className="om-sa-continue-btn"
