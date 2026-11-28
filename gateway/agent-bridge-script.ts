@@ -795,8 +795,10 @@ async function runMain() {
         ];
         let msgId = randomUUID();
         const toolInputs = new Map();
+        const command = await agentInvocation(bin, cliArgs);
+        runController.signal.throwIfAborted();
         await new Promise((resolve, reject) => {
-          const child = spawn(bin, cliArgs, { cwd: execCwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+          const child = spawn(command.bin, command.args, { cwd: execCwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
           let buf = '', stderr = '', settled = false, processing = Promise.resolve();
           const fail = err => { if (!settled) { settled = true; reject(err); } };
           const onAbort = () => { child.kill('SIGTERM'); fail(new Error('Agent conversation stopped')); };

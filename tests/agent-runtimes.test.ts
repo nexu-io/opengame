@@ -63,6 +63,19 @@ test('standalone bridge script passes node --check, embeds all 29 Agents, and in
   for (const agent of localAgents) {
     assert.ok(script.includes(JSON.stringify(agent.id)), `Missing agent ID in bridge script: ${agent.id}`);
   }
+  // The standalone script is what Windows hosts download; its Claude branch must
+  // resolve npm .cmd shims before spawn, matching gateway/super-agent.ts and
+  // gateway/agent-bridge.ts. Keep this parity check so the paths cannot drift.
+  const claudeBranch = script.slice(
+    script.indexOf("dispatch.engine === 'claude'"),
+    script.indexOf('await sendEvent(dispatch.runId, { type: \'turn.completed\' })'),
+  );
+  const resolved = claudeBranch.indexOf('const command = await agentInvocation(bin, cliArgs);');
+  assert.ok(resolved > 0, 'Claude branch must resolve npm shims through agentInvocation()');
+  assert.ok(claudeBranch.indexOf('signal.throwIfAborted();', resolved) > resolved,
+    'Claude branch must re-check abort after the async shim resolution');
+  assert.match(claudeBranch, /spawn\(command\.bin, command\.args,/);
+  assert.doesNotMatch(claudeBranch, /spawn\(bin, cliArgs,/);
 
   const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'openmotion-bridge-syntax-'));
   try {

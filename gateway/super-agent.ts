@@ -1,5 +1,6 @@
 import { gameAssetInstructions } from '../shared/game-contract.ts';
 import { spawn } from 'node:child_process';
+import { agentInvocation } from './agent-discovery.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
@@ -1133,8 +1134,10 @@ const defaultClaudeRunner: ClaudeTurnRunner = async ({
     ...(reasoning && reasoning !== 'default' ? ['--effort', reasoning] : []),
     ...(threadId ? ['--resume', threadId] : []),
   ];
+  const command = await agentInvocation(bin, args);
+  signal.throwIfAborted();
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(bin, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    const child = spawn(command.bin, command.args, { cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     let buffer = '';
     let stderr = '';
     let settled = false;
