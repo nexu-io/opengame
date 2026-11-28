@@ -26,6 +26,7 @@ Read the selected installed domain Skill, or its full MCP resource through `reso
 | User intent | Domain Skill | MCP resource |
 | --- | --- | --- |
 | Motion video creation, editing, template adaptation, reference recreation, or reusable template packaging | openmotion-video | `openmotion://workflow/video/start` (or direct route: `director`, `production`, `template`, `recreate`, `video-to-template` `/start`) |
+| Find sprites and 3D models in asset catalogs, or extract a model from a local game | openmotion-game | `openmotion://workflow/game/sourcing` |
 | Build or remix a playable browser game, or preview existing game assets in a Studio conversation | openmotion-game | `openmotion://workflow/game/start` |
 | Interactive HTML prototypes, 16:9 slide decks, documents or WebGL deliverables in Design Studio | openmotion-design | `openmotion://workflow/design/start` |
 | Atomic capabilities (`remove-background`, `relight`, `camera-control`, `asr-transcribe`) or standalone image/video/audio generation | openmotion-media | `openmotion://workflow/media/start` |

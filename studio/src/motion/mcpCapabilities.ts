@@ -48,6 +48,11 @@ export const animeOpeningScenario = {
 };
 
 export const mcpScenarios = [animeOpeningScenario, {
+  id: 'browse-game-models', icon: 'search-line', title: 'Browse free game assets',
+  description: 'Search the 2D sprite and UI catalog or switch to 3D models. Check the source and license before use.',
+  tools: ['openmotion_asset_manage'],
+  prompt: 'Use openmotion_asset_manage with browse_models, my conversationId, dimension=2d and query=tileset to show me dungeon tiles. For a 3D prop, use dimension=3d. Open the source page for items that need a provider download.',
+}, {
   id: 'present-game-asset', icon: 'box-3-line', title: 'Preview a game asset',
   description: 'Open a workspace file or a saved asset version in the conversation viewer.',
   tools: ['openmotion_asset_manage'],

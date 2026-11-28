@@ -262,7 +262,9 @@ async function invokeRpc(message: any, store: WorkspaceStore, registry: ReturnTy
       const name = publicToolName(message.params?.name);
       const exposed = effectiveRegistry.tools.find(tool => tool.name === name);
       if (!exposed) throw new Error('MCP_TOOL_NOT_EXPOSED: ' + String(message.params?.name));
-      const actionAnnotations = gameToolAnnotations(name, message.params?.arguments);
+      const actionAnnotations = name === 'openmotion_asset_manage' && message.params?.arguments?.action === 'search_models'
+        ? { readOnlyHint: true, openWorldHint: true }
+        : gameToolAnnotations(name, message.params?.arguments);
       options?.authorizeToolCall?.(actionAnnotations ? { ...exposed, annotations: actionAnnotations } : exposed, message.params?.arguments ?? {});
       if (name === templatePresentationName && clientState?.presentation) {
         validateInput(exposed.inputSchema, message.params.arguments ?? {});

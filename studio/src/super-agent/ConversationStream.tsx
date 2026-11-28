@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import { Button } from 'open-design-ui/button';
 import { IconButton } from 'open-design-ui/icon-button';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import type { AgentRuntimeInfo } from '../../../shared/agent-runtimes';
 import { designRoutes, findDesignScenario, isDesignScenario } from '../../../shared/design-project';
 import { designClient } from '../design/designClient';
@@ -220,6 +220,7 @@ async function collectDroppedFiles(dataTransfer: DataTransfer | null): Promise<F
 }
 
 export function ConversationStream({
+  catalogComposerRef,
   active = true,
   chat,
   homeVisit = 0,
@@ -288,6 +289,7 @@ export function ConversationStream({
   onError,
 }: {
   active?: boolean;
+  catalogComposerRef?: Ref<(conversationId: string, prompt: string) => void>;
   chat: SuperAgentChat | null;
   conversations?: SuperAgentChatSummary[];
   activeArtifacts?: SuperAgentArtifact[];
@@ -633,6 +635,11 @@ export function ConversationStream({
   const [editingQueuedId, setEditingQueuedId] = useState<string | null>(null);
   const pendingApprovals = chat?.approvals ?? [];
   const hasPendingApproval = pendingApprovals.length > 0;
+  useImperativeHandle(catalogComposerRef, () => (conversationId, prompt) => {
+    if (chat?.id !== conversationId || loading || hasPendingApproval) return;
+    focusModeComposer();
+    composerRef.current?.appendPrompt(prompt);
+  }, [chat?.id, loading, hasPendingApproval, focusModeComposer]);
   const approvalKey = pendingApprovals.map(item => item.id).join(',');
   const busy = chat?.state === 'running' || chat?.state === 'waiting';
   const isRunning = chat?.state === 'running' && !hasPendingApproval;

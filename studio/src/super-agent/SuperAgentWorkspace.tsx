@@ -1,10 +1,12 @@
 import { Dialog } from '@base-ui/react/dialog';
+import { flushSync } from 'react-dom';
 import { Button } from 'open-design-ui/button';
 import { IconButton } from 'open-design-ui/icon-button';
 import { Suspense, useCallback, useEffect, useEffectEvent, useId, useMemo, useRef, useState } from 'react';
 import { LOCAL_DIRECT_RUNTIME_ID, type AgentRuntimeInfo } from '../../../shared/agent-runtimes';
 import { pickPreferredLocalAgent } from '../../../shared/local-agents';
 import { assetMediaUrl } from '../../../shared/asset-library';
+import { motionApi } from '../motion/useWorkspace';
 import { detectGameAssetPreview } from '../../../shared/game-asset-preview';
 import { assetKindForModality, isMediaArtifact, mediaArtifactAttachment, presentedAssetIds } from './assetPresentation';
 import type { SuperAgentHandoffPayload } from '../../../shared/capability-hub';
@@ -374,6 +376,7 @@ export function SuperAgentWorkspace({
   const lastActivationRefreshRef = useRef(0);
   const [activeChat, setActiveChat] = useState<SuperAgentChat | null>(initialCachedChat);
   const routedChatIdRef = useRef(chatId);
+  const catalogComposerRef = useRef<((conversationId: string, prompt: string) => void) | null>(null);
   routedChatIdRef.current = chatId;
   const [loadingChat, setLoadingChat] = useState(() => Boolean(active && chatId && !initialCachedChat));
   const [loadFailed, setLoadFailed] = useState(false);
@@ -434,8 +437,15 @@ export function SuperAgentWorkspace({
   activeTabIdRef.current = activeTabId;
   const [previewArtifacts, setPreviewArtifacts] = useState<SuperAgentArtifact[]>([]);
   const previewArtifactIdsRef = useRef<Set<string>>(new Set());
-  const chatArtifacts = useMemo(() => presentChatArtifacts(activeChat?.artifacts ?? []), [activeChat?.artifacts]);
-  const presentedChat = useMemo(() => activeChat && chatArtifacts.replaced.size
+  const chatArtifacts = useMemo(() => {
+    const result = presentChatArtifacts(activeChat?.artifacts ?? []);
+    if (result.artifacts.some(item => item.kind === 'model-catalog')) {
+      result.artifacts = result.artifacts.map(item => item.kind === 'model-catalog' && ['3D model catalog', 'Game asset catalog', 'Free 3D models'].includes(item.title)
+        ? { ...item, title: t('Game asset catalog') } : item);
+    }
+    return result;
+  }, [activeChat?.artifacts, t]);
+  const presentedChat = useMemo(() => activeChat && chatArtifacts.artifacts !== activeChat.artifacts
     ? { ...activeChat, artifacts: chatArtifacts.artifacts }
     : activeChat, [activeChat, chatArtifacts]);
   const viewerArtifacts = useMemo(() => {
@@ -1283,6 +1293,23 @@ export function SuperAgentWorkspace({
         })
         .catch(() => { /* local tab already focused */ });
     }
+  };
+
+  const openModelCatalogItem = async (action: { query?: string } | { id: string }) => {
+    const conversation = await ensureChatCreated();
+    const endpoint = 'id' in action ? 'acquire' : 'open';
+    const { artifact } = await motionApi<{ artifact: SuperAgentArtifact }>(`/model-catalog/${endpoint}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversationId: conversation.id, ...action }),
+    });
+    if (routedChatIdRef.current !== conversation.id) return;
+    setActiveChat(current => current?.id === conversation.id ? {
+      ...current, activeArtifactId: artifact.id,
+      artifacts: [...current.artifacts.filter(item => item.id !== artifact.id), artifact],
+    } : current);
+    setOpenTabIds(ids => ids.includes(artifact.id) ? ids : [...ids, artifact.id]);
+    setActiveTabId(artifact.id);
+    setViewerOpen(true);
   };
 
   const openLocalPreviewArtifact = useCallback((artifact: SuperAgentArtifact) => {
@@ -2327,9 +2354,9 @@ export function SuperAgentWorkspace({
         </Dialog.Root>
       )}
 
-      {!(viewerOpen && viewerExpanded) && (
-        <div className="om-sa-center-slot">
+        <div className="om-sa-center-slot" style={viewerOpen && viewerExpanded ? { display: 'none' } : undefined}>
           <ConversationStream
+            catalogComposerRef={catalogComposerRef}
             active={active}
             chat={presentedChat}
             homeVisit={homeVisit}
@@ -2407,7 +2434,6 @@ export function SuperAgentWorkspace({
             onError={message => showToast(message)}
           />
         </div>
-      )}
 
       {viewerOpen && !viewerExpanded && !narrow && (
         <div
@@ -2506,6 +2532,12 @@ export function SuperAgentWorkspace({
               onOpenWebUrl={url => void handleOpenWebUrl(url)}
               onOpenFilePath={handleOpenFilePath}
               onOpenArtifact={id => void handleOpenArtifactId(id)}
+              onModelCatalogAction={openModelCatalogItem}
+              onAskAgentToDownload={loadingChat || activeChat?.approvals?.length || activeChat?.id !== chatId ? undefined : (id, prompt) => {
+                if (id !== routedChatIdRef.current) return;
+                if (viewerExpanded) flushSync(() => setViewerExpanded(false));
+                catalogComposerRef.current?.(id, prompt);
+              }}
               onOpenResource={item => void handleOpenResource(item)}
               onToggleExpand={() => setViewerExpanded(v => !v)}
               onClosePane={() => {

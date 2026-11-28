@@ -1,0 +1,59 @@
+.om-model-catalog {
+  display: grid;
+  align-content: start;
+  gap: var(--motion-space-16);
+  padding: var(--motion-space-16);
+  color: var(--motion-text);
+  min-width: 0;
+}
+.om-model-catalog h2 { margin: 0; font-size: var(--motion-text-heading); }
+.om-model-intro { display: flex; gap: var(--motion-space-12); align-items: flex-start; }
+.om-model-mark { display: grid; place-items: center; flex: none; padding: var(--motion-space-10); border-radius: var(--motion-radius-lg); background: var(--motion-accent-soft); color: var(--motion-accent); }
+.om-model-shelf-title { margin: var(--motion-space-4) 0 0; font-size: var(--motion-text-body); color: var(--motion-strong); overflow-wrap: anywhere; }
+.om-model-sources { margin: var(--motion-space-4) 0 0; color: var(--motion-muted); font-size: var(--motion-text-sm); }
+.om-model-categories { display: flex; flex-wrap: wrap; gap: var(--motion-space-4); }
+.om-model-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--motion-space-8); }
+.om-model-dimensions { justify-self: start; min-width: calc(var(--motion-control) * 4); }
+.om-model-thumbnail .om-model-preview-button { position: absolute; right: var(--motion-space-8); bottom: var(--motion-space-8); background: var(--motion-panel); }
+.om-model-source-link { display: inline-flex; align-items: center; gap: var(--motion-space-4); color: var(--motion-text); font-size: var(--motion-text-sm); text-decoration: underline; text-underline-offset: 0.15em; }
+.om-model-catalog .om-field { flex: 1; min-width: 0; }
+.om-model-catalog input[type="search"] { flex: 1; min-width: 0; }
+.om-model-catalog input::-webkit-search-cancel-button { appearance: none; }
+.om-model-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--motion-space-16);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.om-model-grid li { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; background: var(--motion-panel); border-radius: var(--motion-radius-lg); overflow: hidden; }
+.om-model-details { display: flex; flex: 1; flex-direction: column; align-items: start; gap: var(--motion-space-4); padding: var(--motion-space-10); }
+.om-model-details > :last-child { margin-top: auto; }
+.om-model-details .om-model-credit { padding-bottom: var(--motion-space-8); }
+.om-model-thumbnail { position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 10; color: var(--motion-muted); border-radius: var(--motion-radius-lg); overflow: hidden; }
+.om-model-thumbnail img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; box-sizing: border-box; padding: var(--motion-space-12); object-fit: contain; }
+.om-model-grid li .om-model-thumbnail { border-radius: 0; }
+.om-model-thumbnail .om-model-image-placeholder { position: absolute; inset: 0; border-radius: 0; }
+.om-model-thumbnail img[data-ready="false"] { opacity: 0; }
+.om-model-image-fallback { display: grid; justify-items: center; gap: var(--motion-space-4); font-size: var(--motion-text-sm); }
+.om-model-placeholder-title, .om-model-placeholder .om-model-credit { display: flex; align-items: center; min-height: 1lh; box-sizing: content-box; }
+.om-model-placeholder-title { margin-top: var(--motion-space-4); width: 76%; font-size: var(--motion-text-body); }
+.om-model-placeholder .om-model-credit { width: 58%; }
+.om-model-placeholder-title > span, .om-model-placeholder .om-model-credit > span { width: 100%; height: .7em; }
+.om-model-placeholder-action { height: var(--motion-control-sm); width: min(8em, 90%); }
+@container sa-viewer (min-width: 321px) {
+  .om-model-grid[data-discovery] > :first-child { grid-column: span 2; display: grid; grid-template-columns: 3fr 2fr; align-items: stretch; }
+  .om-model-grid[data-discovery] > :first-child .om-model-details { justify-content: center; padding: var(--motion-space-16); }
+  .om-model-grid[data-discovery] > :first-child .om-model-details > :last-child { margin-top: var(--motion-space-8); }
+}
+@container sa-viewer (min-width: 640px) {
+  .om-model-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+}
+@container sa-viewer (max-width: 320px) {
+  .om-model-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.om-model-grid strong { margin-top: var(--motion-space-4); font-size: var(--motion-text-body); }
+.om-model-credit, .om-model-grid small { color: var(--motion-muted); font-size: var(--motion-text-sm); }
+.om-model-credit a { color: var(--motion-text); text-decoration: underline; text-underline-offset: 0.15em; }
+.om-model-credit svg { display: inline; vertical-align: middle; }

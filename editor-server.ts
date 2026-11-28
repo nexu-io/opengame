@@ -31,11 +31,12 @@ const mime: Record<string, string> = {
   '.map': 'application/json',
   '.ttf': 'font/ttf',
   '.woff2': 'font/woff2',
+  '.wasm': 'application/wasm',
   '.txt': 'text/plain',
   '.md': 'text/plain; charset=utf-8',
 };
 
-const HASHED_ASSET_RE = /^\/editor-assets\/.+-[A-Za-z0-9_-]{6,}\.(?:js|css|woff2?|ttf|svg|png|jpg|webp|json)$/;
+const HASHED_ASSET_RE = /^\/editor-assets\/.+-[A-Za-z0-9_-]{6,}\.(?:js|css|woff2?|ttf|svg|png|jpg|webp|json|wasm)$/;
 const COMPRESSIBLE_EXTS = new Set(['.html', '.js', '.css', '.svg', '.json', '.txt', '.md']);
 const COMPRESS_MIN_BYTES = 1024;
 const COMPRESSED_MAX_SOURCE_BYTES = 8 * 1024 * 1024;

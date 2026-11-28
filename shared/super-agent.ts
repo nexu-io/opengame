@@ -186,12 +186,15 @@ export type SuperAgentArtifactKind =
   | 'brand-kit'
   | 'game-project'
   | 'workspace-file'
+  | 'model-catalog'
   | 'web';
 
 export type SuperAgentArtifact = {
   id: string;
   kind: SuperAgentArtifactKind;
   title: string;
+  catalogQuery?: string;
+  catalogDimension?: '2d' | '3d';
   subtitle?: string;
   playableAd?: boolean;
   projectId?: string;
@@ -616,6 +619,8 @@ export function artifactCanonicalAddress(artifact: SuperAgentArtifact): string {
       return `brand://${artifact.kitId ?? artifact.id}`;
     case 'workspace-file':
       return `file://${artifact.filePath ?? artifact.title}`;
+    case 'model-catalog':
+      return `catalog://${artifact.catalogDimension === '2d' ? 'sprites' : 'models'}${artifact.catalogQuery ? `?q=${encodeURIComponent(artifact.catalogQuery)}` : ''}`;
     case 'web':
       return artifact.url || 'about:blank';
   }
@@ -766,6 +771,9 @@ export function formatSuperAgentToolLabel(tool: string, args?: Record<string, un
       return 'Listed generation jobs';
     case 'openmotion_asset_manage':
       if (action === 'present_asset') return 'Presented workspace asset';
+      if (action === 'browse_models') return 'Opened game asset catalog';
+      if (action === 'search_models') return 'Searched game assets';
+      if (action === 'acquire_model') return 'Downloaded game asset';
       if (action === 'read') return 'Inspected media asset';
       if (action === 'import') return 'Imported workspace asset';
       if (action === 'import_to_project') return 'Adopted asset into Motion project';

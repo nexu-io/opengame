@@ -61,6 +61,8 @@ The game service serializes mutations within its service instance, restricts wri
 
 ## Media supply
 
+A game Agent can open the [free 2D and 3D game asset catalog](assets.md#finding-free-game-assets) in the conversation viewer and acquire a supported listing into the workspace. For models inside an installed game, the [model sourcing workflow](../skills/openmotion-game/references/game-model-sourcing.md) selects a host tool according to the archive format and available exporter.
+
 Agents can present a pinned library asset or a file in a conversation's workspace through `openmotion_asset_manage` with `action: "present_asset"`. The conversation retains the presentation and Studio opens it in the artifact pane when that conversation is active. Model animation, media playback and sprite inspection run in the browser. [Asset presentation](assets.md#presenting-an-asset-in-studio)
 
 The Model Gateway separates model discovery from execution. Built-in presets provide initial choices; configured provider catalogs can supply additional models. Image, video, music, speech and sound-effect results enter the asset workflow and can be referenced by game files.
