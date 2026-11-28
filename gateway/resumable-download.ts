@@ -33,10 +33,19 @@ export async function resumableDownload(directory: string, resolve: () => Promis
       let bytes = 0, hash = createHash('sha256');
       if (checkpoint?.assetId === asset.assetId && checkpoint.size === asset.size && checkpoint.mime === asset.mime
         && Number.isSafeInteger(checkpoint.bytes) && checkpoint.bytes > 0 && checkpoint.bytes <= asset.size && (await file.stat()).size >= checkpoint.bytes) {
-        const prefix = Buffer.alloc(checkpoint.bytes);
-        const read = await file.read(prefix, 0, prefix.length, 0);
-        if (read.bytesRead === prefix.length && createHash('sha256').update(prefix).digest('hex') === checkpoint.sha256) {
-          bytes = prefix.length; hash.update(prefix);
+        const buffer = Buffer.alloc(Math.min(checkpoint.bytes, 64 * 1024));
+        const prefixHash = createHash('sha256');
+        let verifiedBytes = 0;
+        while (verifiedBytes < checkpoint.bytes) {
+          signal.throwIfAborted();
+          const { bytesRead } = await file.read(buffer, 0, Math.min(buffer.length, checkpoint.bytes - verifiedBytes), verifiedBytes);
+          if (!bytesRead) break;
+          prefixHash.update(buffer.subarray(0, bytesRead));
+          verifiedBytes += bytesRead;
+        }
+        signal.throwIfAborted();
+        if (verifiedBytes === checkpoint.bytes && prefixHash.copy().digest('hex') === checkpoint.sha256) {
+          bytes = verifiedBytes; hash = prefixHash;
         }
       }
       await file.truncate(bytes);
