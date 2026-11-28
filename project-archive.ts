@@ -182,7 +182,7 @@ async function exportProjects(store: WorkspaceStore, input: ProjectArchiveInput,
     const archiveId = randomUUID(), archivePath = path.join(root, 'files', archiveId + '.zip');
     await mkdir(path.dirname(archivePath), { recursive: true, mode: 0o700 });
     await writeFile(archivePath, bytes, { mode: 0o600, flag: 'wx' });
-    const filename = projects.length === 1 ? projects[0].title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '-').slice(0, 80) + '.zip' : 'OpenMotion-projects.zip';
+    const filename = projects.length === 1 ? Array.from(projects[0].title.toWellFormed().replace(/[<>:"/\\|?*\x00-\x1f]/g, '-')).slice(0, 80).join('') + '.zip' : 'OpenMotion-projects.zip';
     await atomicJson(path.join(root, 'files', archiveId + '.json'), { filename });
     const result = { archiveId, archivePath, filename, bytes: bytes.length, sha256: hash(bytes), skippedProjectIds, projects: Object.keys(revisions).map(id => ({ projectId: id, revision: revisions[id] })), downloadUrl: '/motion-api/project-archives/' + archiveId + '/file' };
     await atomicJson(receiptPath, { inputHash, result, validationVersion: exportValidationVersion }); return result;

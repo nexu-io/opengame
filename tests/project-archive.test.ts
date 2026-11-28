@@ -9,7 +9,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { crc32, deflateRawSync } from 'node:zlib';
 import { fixture } from './fixtures.ts';
 import { transport } from './http.ts';
-import { projectArchive, importProjects } from '../project-archive.ts';
+import { projectArchive, importProjects, duplicateProject } from '../project-archive.ts';
 import { readProjectZip } from '../shared/project-zip.ts';
 import { firstFoldedDuplicate, portableNameProblem } from '../shared/project-name.ts';
 import { zip } from '../scripts/zip.mjs';
@@ -102,6 +102,19 @@ test('ZIP roundtrip preserves source, assets, fonts and edits as independent pro
   const bundle = await importProjects(store, 'bundle-import', await readFile(all.archivePath));
   assert.equal(bundle.projects.length, 2);
   assert.equal(store.projectCatalog().activeId, before.activeId);
+}, false));
+
+test('archive download names preserve Unicode code points at the filename limit', () => fixture(async store => {
+  const title = 'a'.repeat(79) + '🎮';
+  const { projects: [project] } = await importProjects(store, 'unicode-source', native(title + '/'), pluginRoot);
+  const exported = await projectArchive(store, { action: 'export', requestId: 'unicode-export', projectIds: [project.projectId] }, pluginRoot);
+  assert.ok('archivePath' in exported);
+  assert.equal(exported.filename, title + '.zip');
+  const http = transport(store, { runtimeRoot: pluginRoot });
+  const response = await http(exported.downloadUrl);
+  assert.equal(response.status, 200);
+  assert.ok(response.headers.get('content-disposition')?.includes(encodeURIComponent(title + '.zip')));
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), await readFile(exported.archivePath));
 }, false));
 
 test('native HyperFrames composition folders may omit a marker config and receive defaults', () => fixture(async store => {
@@ -319,3 +332,20 @@ test('archive import rejects a source that would block without a writer', { skip
     assert.ok(Date.now() - started < 5000, 'a FIFO source must be rejected without waiting for a writer');
   } finally { await rm(directory, { recursive: true, force: true }); }
 }));
+
+test('archive download repairs a copied title that already contains an unpaired surrogate', () => fixture(async store => {
+  const { projects: [source] } = await importProjects(store, 'emoji-original', native('🎮'.repeat(47) + '/'), pluginRoot);
+  const copy = await duplicateProject(store, { projectId: source.projectId, requestId: 'emoji-copy' }, pluginRoot);
+  assert.ok(copy.title.endsWith(' (copy)'));
+  const exported = await projectArchive(store, { action: 'export', projectIds: [copy.projectId], requestId: 'emoji-copy-export' }, pluginRoot);
+  assert.ok('archivePath' in exported);
+  const http = transport(store, { runtimeRoot: pluginRoot });
+  const response = await http(exported.downloadUrl);
+  assert.equal(response.status, 200);
+  assert.equal(exported.filename, copy.title.toWellFormed() + '.zip');
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)$/)?.[1];
+  assert.ok(encoded);
+  assert.equal(decodeURIComponent(encoded), exported.filename);
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), await readFile(exported.archivePath));
+}, false));
