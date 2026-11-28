@@ -5,6 +5,26 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validateExportExpectation } from './shared/export-spec.ts';
 
+export async function readNewLogTail(file: string, offset: number, maxChars = 600): Promise<string> {
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    handle = await open(file, 'r');
+    const { size } = await handle.stat();
+    if (size <= offset) return '';
+    const start = Math.max(offset, size - Math.max(maxChars * 4, 4096));
+    const buffer = Buffer.alloc(size - start);
+    await handle.read(buffer, 0, buffer.length, start);
+    const lines = buffer.toString('utf8').split(/\r?\n/).map(line => line.trimEnd()).filter(Boolean);
+    const filtered = lines.filter(line => !/^\(node:\d+\) ExperimentalWarning:/.test(line) && !/^\(Use `node --trace-warnings\b/.test(line));
+    const selected = (filtered.length ? filtered : lines).join('\n').trim();
+    return selected.length > maxChars ? selected.slice(-maxChars) : selected;
+  } catch {
+    return '';
+  } finally {
+    await handle?.close();
+  }
+}
+
 export const HYPERFRAMES_VERSION = '0.9.7';
 // Omitting registry uses the pinned CLI's official catalog, just like a native project.
 export const nativeProjectConfig = {
@@ -168,6 +188,7 @@ export async function startStudio(runtimeRoot: string, projectDirectory: string,
   // Repeated project switches can otherwise increment a 4174 start into 4190.
   const studioPort = Math.max(20_000, port);
   const log = await open(logFile, 'a', 0o600);
+  const logOffset = (await log.stat()).size;
   const args = workspaceDirectory ? ['--experimental-strip-types', path.join(pluginRoot, 'shared/workspace-studio.ts'), runtimeRoot, workspaceDirectory, projectDirectory, String(studioPort)]
     : [cliPath(runtimeRoot), 'preview', projectDirectory, '--port', String(studioPort), '--foreground', '--force-new', '--no-open', '--json'];
   const child = spawn(process.execPath, args, {
@@ -187,11 +208,15 @@ export async function startStudio(runtimeRoot: string, projectDirectory: string,
   };
   try {
     const url = await new Promise<string>((resolve, reject) => {
-      let buffer = '', lastOutput = '';
-      const timer = setTimeout(() => reject(new Error('Hyperframes Studio 启动超时，请查看 studio.log；最近输出：' + (lastOutput || '(尚无 stdout)'))), 60_000);
-      const fail = (error: Error) => { clearTimeout(timer); reject(error); };
+      let buffer = '', lastOutput = '', settled = false;
+      const timer = setTimeout(() => fail(new Error('Hyperframes Studio 启动超时，请查看 studio.log；最近输出：' + (lastOutput || '(尚无 stdout)'))), 60_000);
+      const fail = (error: Error) => { if (settled) return; settled = true; clearTimeout(timer); reject(error); };
       child.once('error', fail);
-      child.once('exit', code => fail(new Error(`Hyperframes Studio 已退出 (${code})，请查看 studio.log`)));
+      child.once('exit', code => {
+        void readNewLogTail(logFile, logOffset).then(detail => {
+          fail(new Error(`Hyperframes Studio 已退出 (${code})，请查看 studio.log` + (detail ? `；最近输出：${detail}` : '')));
+        });
+      });
       child.stdout.on('data', data => {
         buffer += data;
         let newline;

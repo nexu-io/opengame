@@ -1,15 +1,33 @@
-import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { WorkspaceStore } from './workspace.ts';
 import { ensureEditor, editorRequest, readEditor, sharedEditorEnabled } from './editor-runtime.ts';
-import { supportsPhase1Tool } from './shared/phase1-tools.ts';
+import { readNewLogTail, stopCommands } from './hyperframes.ts';
+import { phase1McpCapabilities, supportsPhase1Tool } from './shared/phase1-tools.ts';
 import { withProcessLock } from './shared/process-lock.ts';
 
 const pluginRoot = fileURLToPath(new URL('./', import.meta.url));
 export const VERSION: string = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
+export const MIN_NODE_VERSION = '22.18.0';
+const [MIN_NODE_MAJOR, MIN_NODE_MINOR, MIN_NODE_PATCH] = MIN_NODE_VERSION.split('.').map(Number);
+
+export function isSupportedNodeVersion(version = process.versions.node): boolean {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)/.exec(version.trim());
+  if (!match) return false;
+  const [, major, minor, patch] = match.map(Number);
+  if (major !== MIN_NODE_MAJOR) return major > MIN_NODE_MAJOR;
+  if (minor !== MIN_NODE_MINOR) return minor > MIN_NODE_MINOR;
+  return patch >= MIN_NODE_PATCH;
+}
+
+export function assertSupportedNodeVersion(version = process.versions.node): void {
+  if (isSupportedNodeVersion(version)) return;
+  const normalized = version.trim().replace(/^v/, '') || 'unknown';
+  throw new Error(`Unsupported Node.js version v${normalized}. OpenGame requires Node.js >= ${MIN_NODE_VERSION} (recommended: 26.11.1).`);
+}
 export type Health = { service: string; protocol: number; version: string; dataDirectory: string; ffmpeg: boolean; ready: boolean; editorReady?: boolean; studioUrl?: string; hyperframesCli?: string; authoringGuide?: string; mcp?: { protocol: number; tools: string[] } };
 export type Probe = { kind: 'free' | 'busy'; health?: never } | { kind: 'motion'; health: Health };
 export type Started = { pid?: number; alive: () => boolean; error: () => string; stop: () => void };
@@ -38,12 +56,13 @@ export async function probe(port: number): Promise<Probe> {
 }
 
 async function launch(port: number, directory: string, log: string, background = false): Promise<Started> {
+  assertSupportedNodeVersion();
   const file = await open(log, 'a', 0o600);
   let child;
   let message = '', closed = false;
   try {
     child = spawn(process.execPath, ['--experimental-strip-types', path.join(pluginRoot, 'server.ts')], {
-      cwd: pluginRoot, detached: true, stdio: ['ignore', file.fd, file.fd],
+      cwd: pluginRoot, detached: true, windowsHide: true, stdio: ['ignore', file.fd, file.fd],
       env: { ...process.env, PORT: String(port), MOTION_DATA_DIR: directory, MOTION_HEADLESS: background ? '1' : '0' },
     });
     child.on('error', error => { message = error.message; closed = true; });
@@ -145,10 +164,14 @@ export async function openPreview(store = new WorkspaceStore(), environment: Pre
     }
     if (available === null) throw new Error('本地预览端口均已占用；未停止或替换任何已有服务。');
     const log = path.join(store.directory, 'preview.log');
+    const logOffset = await stat(log).then(info => info.size, () => 0);
     const child = await environment.launch(available, store.directory, log, !options.editor);
     try {
       for (let i = 0; i < environment.attempts; i++) {
-        if (!child.alive()) throw new Error(child.error() || 'Motion 预览进程已退出');
+        if (!child.alive()) {
+          const detail = child.error() || await readNewLogTail(log, logOffset);
+          throw new Error(detail ? `Motion 预览进程已退出：${detail}` : 'Motion 预览进程已退出');
+        }
         const result = await environment.probe(available);
         if (matches(result)) return await ready(available, (result as { health: Health }).health, false, child.pid);
         await environment.wait();
@@ -161,7 +184,75 @@ export async function openPreview(store = new WorkspaceStore(), environment: Pre
   }, 360_000);
 }
 
+export async function openForegroundPreview(store = new WorkspaceStore()) {
+  assertSupportedNodeVersion();
+  if (sharedEditorEnabled) {
+    console.log(JSON.stringify(await openPreview(store), null, 2));
+    return;
+  }
+  await mkdir(store.directory, { recursive: true });
+  const lockPath = path.join(store.directory, 'preview-start.lock');
+  const outcome = await withProcessLock(lockPath, async () => {
+    const firstPort = initialPort(), registration = await readPreviewRegistration(store), previous = registration.port;
+    const candidates = [...new Set([...(previous ? [previous] : []), ...Array.from({ length: 10 }, (_, i) => firstPort + i)])];
+    let available: number | null = null;
+    for (const port of candidates) {
+      const result = await probe(port);
+      if (result.kind === 'motion' && result.health.service === 'motion-preview' && result.health.protocol === 2 && result.health.ready
+        && result.health.version === VERSION && path.resolve(result.health.dataDirectory) === store.directory) {
+        return { kind: 'reused' as const, payload: await openPreview(store) };
+      }
+      if (result.kind === 'free' && available === null) available = port;
+    }
+    if (available === null) throw new Error('本地预览端口均已占用；未停止或替换任何已有服务。');
+    const { startServer } = await import('./server.ts');
+    const running = await startServer(store, available);
+    const file = path.join(store.directory, 'preview.json'), temporary = file + '.' + crypto.randomUUID() + '.tmp';
+    try {
+      await writeFile(temporary, JSON.stringify({ port: available, pid: process.pid, version: VERSION }), { mode: 0o600 });
+      await rename(temporary, file);
+    } finally {
+      await rm(temporary, { force: true });
+    }
+    return {
+      kind: 'started' as const,
+      running,
+      payload: {
+        ...(await running.info()),
+        reused: false,
+        foreground: true,
+        mcp: phase1McpCapabilities,
+      },
+    };
+  }, 360_000);
+  console.log(JSON.stringify(outcome.payload, null, 2));
+  if (outcome.kind !== 'started') return;
+  let stopping = false;
+  const stop = async () => {
+    if (stopping) return;
+    stopping = true;
+    stopCommands();
+    await outcome.running.close();
+    process.exit(0);
+  };
+  process.once('SIGTERM', () => void stop());
+  process.once('SIGINT', () => void stop());
+}
+
+async function main() {
+  try {
+    assertSupportedNodeVersion();
+    if (process.argv.includes('--foreground') && !sharedEditorEnabled) {
+      await openForegroundPreview();
+    } else {
+      console.log(JSON.stringify(await openPreview(), null, 2));
+    }
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  }
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try { console.log(JSON.stringify(await openPreview(), null, 2)); }
-  catch (error) { console.error(error instanceof Error ? error.message : error); process.exitCode = 1; }
+  void main();
 }

@@ -40,7 +40,7 @@ import { WorkspaceStore, Conflict, createBlankProject, validateProjectTitle, int
 import type { ExportJob } from './workspace.ts';
 import { cliPath, ensureRuntime, execute, HYPERFRAMES_VERSION, inspectProject, pluginRoot, runHyperframes, startStudio, stopCommands } from './hyperframes.ts';
 import type { Studio } from './hyperframes.ts';
-import { VERSION } from './preview.ts';
+import { assertSupportedNodeVersion, VERSION } from './preview.ts';
 import { templates } from './template-library.ts';
 import { templateRecipe } from './template-catalog.ts';
 import { templateCatalogFor } from './prism-templates.ts';
@@ -1947,6 +1947,7 @@ export async function startServer(store = sharedStore, port = Number(process.env
 }
 if (isMain(import.meta.url)) {
   try {
+    assertSupportedNodeVersion();
     if (sharedEditorEnabled) {
       const editor = await ensureEditor(sharedStore.directory);
       console.log(JSON.stringify(await editorRequest(editor, '/editor-api/preview', {}), null, 2));

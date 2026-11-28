@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { ensureService, openPreview, previewUrl, probe, VERSION } from '../preview.ts';
+import { assertSupportedNodeVersion, ensureService, isSupportedNodeVersion, openPreview, previewUrl, probe, VERSION } from '../preview.ts';
 import type { Probe, PreviewRuntime } from '../preview.ts';
 import { WorkspaceStore } from '../workspace.ts';
 import { pluginRoot } from '../hyperframes.ts';
@@ -148,4 +148,40 @@ test('stale registration and a child that never becomes ready cannot claim succe
   const failed = runtime(store);
   failed.environment.launch = async p => ({ alive: () => true, error: () => '', stop: () => { failed.stops.push(p); } });
   await assert.rejects(openPreview(store, failed.environment), /启动超时/); assert.equal(failed.stops.length, 1);
+}));
+
+test('isSupportedNodeVersion and assertSupportedNodeVersion enforce Node.js >= 22.18.0', () => {
+  for (const supported of ['22.18.0', 'v22.18.0', '22.22.0', '24.15.0', '26.11.1']) {
+    assert.equal(isSupportedNodeVersion(supported), true);
+    assert.doesNotThrow(() => assertSupportedNodeVersion(supported));
+  }
+  for (const unsupported of ['20.19.0', '22.14.0', 'v22.17.9', 'invalid', '']) {
+    assert.equal(isSupportedNodeVersion(unsupported), false);
+    assert.throws(() => assertSupportedNodeVersion(unsupported), /Node\.js >= 22\.18\.0/);
+  }
+});
+
+test('early preview exit surfaces non-warning lines written to preview.log', () => fixture(async store => {
+  const log = path.join(store.directory, 'preview.log');
+  await writeFile(log, 'previous run line\n');
+  const mock = runtime(store);
+  mock.environment.launch = async (port, directory, logPath) => {
+    assert.equal(logPath, log);
+    await writeFile(log, [
+      'previous run line',
+      '(node:100) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time',
+      '(Use `node --trace-warnings ...` to show where the warning was created)',
+      'Error: Hyperframes Studio 已退出 (1)，请查看 studio.log',
+    ].join('\n'));
+    return { alive: () => false, error: () => '', stop: () => { mock.stops.push(port); } };
+  };
+  await assert.rejects(
+    openPreview(store, mock.environment),
+    error => {
+      assert.match((error as Error).message, /Motion 预览进程已退出：Error: Hyperframes Studio 已退出 \(1\)/);
+      assert.doesNotMatch((error as Error).message, /previous run line/);
+      assert.doesNotMatch((error as Error).message, /ExperimentalWarning/);
+      return true;
+    },
+  );
 }));

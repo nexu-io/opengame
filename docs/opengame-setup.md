@@ -124,6 +124,8 @@ Configure only the providers you intend to use. Available models are discovered 
 | A template cannot be edited | Use **Remix** to create an owned draft first. |
 | Play works but automated capture fails | Check Chrome/Chromium availability and loopback access; ordinary play and server-side capture have different requirements. |
 | A shared link still shows the previous version | Publish a new static snapshot through the sharing flow. |
+| `SyntaxError: ... 'node:module' does not provide an export named 'registerHooks'` or unsupported Node.js error | Upgrade to Node.js `>= 22.18.0` (CI uses `26.11.1`); older Node 22 releases such as `22.14.0` do not provide `module.registerHooks`. |
+| `npm start` prints `previewUrl` with `ready: true`, but opening the URL fails with `ERR_CONNECTION_REFUSED` on Windows or agent shells | Some Windows and agent task runners terminate detached child processes when a command exits; run `npm start -- --foreground` as a background/daemon task instead. |
 
 If you or your agent reproduce a bug in setup, template downloads or Studio, we welcome a fix via pull request against `main` in [nexu-io/opengame](https://github.com/nexu-io/opengame). Include the steps to reproduce and how you verified the fix. See the [contribution guide](../CONTRIBUTING.md).
 
