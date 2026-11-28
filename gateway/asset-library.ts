@@ -62,8 +62,13 @@ export class AssetLibrary {
       || input.sort && !['newest', 'oldest', 'name'].includes(input.sort) || input.query && (typeof input.query !== 'string' || input.query.length > 200)) throw new Error('Invalid asset filter');
     const names = await readdir(await this.file('records')).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return []; throw error; });
     const query = input.query?.trim() ?? '';
-    const visible = (await Promise.all(names.filter(name => name.endsWith('.json') && libraryId(name.slice(0, -5))).map(name => this.get(name.slice(0, -5)))))
-      .filter(asset => Boolean(asset.trashedAt) === Boolean(input.trash));
+    const records = names.filter(name => name.endsWith('.json') && libraryId(name.slice(0, -5)));
+    const assets: LibraryAsset[] = [];
+    // Bound open metadata files even when a library contains thousands of assets.
+    for (let start = 0; start < records.length; start += 32) {
+      assets.push(...await Promise.all(records.slice(start, start + 32).map(name => this.get(name.slice(0, -5)))));
+    }
+    const visible = assets.filter(asset => Boolean(asset.trashedAt) === Boolean(input.trash));
     const filtered = visible
       .filter(asset => {
         if (input.modality && asset.modality !== input.modality) return false;

@@ -105,6 +105,9 @@ jobs:
       - name: Check composition, discovery and install attribution
         if: steps.scope.outputs.full == 'true'
         run: node --test tests/composition-canvas.test.ts tests/short-form-discovery.test.ts tests/install-attribution-worker.test.ts
+      - name: Check bounded asset library listing
+        if: steps.scope.outputs.full == 'true'
+        run: node --test tests/asset-library-listing.test.ts
 
   platform-reliability:
     name: Workspace reliability (${{ matrix.os }})
