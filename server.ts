@@ -293,6 +293,25 @@ async function readRawBody(req: IncomingMessage, maxBytes = 1024 * 1024): Promis
   return Buffer.concat(chunks).toString('utf8');
 }
 
+/**
+ * Whether a mutating request comes from the studio page we serve.
+ *
+ * Browsers always put the non-default port in `Origin`, so a portless value such as
+ * `http://127.0.0.1` can only come from a client that rewrote the header (some embedded and
+ * proxied browsers do). Such a client is no less trusted than one that omits `Origin`, which
+ * this guard already allows, so a portless origin is accepted when its hostname matches.
+ */
+function requestOriginTrusted(origin: string | undefined, host: string | undefined) {
+  if (!origin) return true;
+  try {
+    const parsed = new URL(origin);
+    if (parsed.host === host) return true;
+    return parsed.port === '' && parsed.hostname === String(host || '').split(':')[0];
+  } catch {
+    return false;
+  }
+}
+
 function resolveTrackingHost(context: Service, token: unknown): HostContext | undefined {
   if (typeof token !== 'string' || !uuid.test(token)) return undefined;
   const page = context.trackingHosts?.get(token);
@@ -495,7 +514,7 @@ export async function handler(req: IncomingMessage, res: ServerResponse, store =
       /^\/(?:motion|design)-api\/triggers\/[a-f0-9-]{36}\/fire$/.test(rawPath)
       && ((typeof req.headers.authorization === 'string' && /^Bearer\s+/i.test(req.headers.authorization))
         || typeof req.headers['x-openmotion-signature'] === 'string');
-    if (!['GET', 'HEAD'].includes(req.method || '') && !isBridgeDaemonRoute && !isTriggerWebhookRoute && (!req.headers.origin || new URL(req.headers.origin).host !== host)) {
+    if (!['GET', 'HEAD'].includes(req.method || '') && !isBridgeDaemonRoute && !isTriggerWebhookRoute && !requestOriginTrusted(req.headers.origin, host)) {
       return json(res, 403, { error: '仅允许当前预览页面发起修改' });
     }
     const projectHeader = req.headers['x-opendesign-project-id'];
