@@ -250,6 +250,22 @@ function acpMetaReasoning(meta: any): string[] | null | undefined {
 }
 
 /**
+ * ACP select options may carry a multi-part model handle as a JSON string instead of a plain slug
+ * (DeepSeek Harness uses `["provider","model"]`). Such handles must still round-trip to the agent, so
+ * discovery keys the model by its readable option name rather than dropping the option.
+ */
+function isEncodedAcpModelValue(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (trimmed.length < 2 || trimmed.length > 400) return false;
+  if (trimmed[0] !== '[' && trimmed[0] !== '{') return false;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return Array.isArray(parsed) || (typeof parsed === 'object' && parsed !== null);
+  } catch { return false; }
+}
+
+/**
  * Extracts normalized models + reasoning levels from ACP `configOptions` and legacy `models.availableModels`.
  * Prefers `configOptions` (matching ACP v1/v2 & t3code) so agents like Antigravity 1.4/1.5+ expose clean
  * model families with per-model reasoning levels instead of flattened effort variants.
@@ -294,7 +310,16 @@ export function extractAcpModels(configOptions: unknown, availableModels: unknow
     return reasoning ? { ...entry, reasoning } : entry;
   });
 
-  return normalizeAgentModels(enriched);
+  const displayable = enriched.map((entry: any) => {
+    if (!entry || typeof entry !== 'object') return entry;
+    const rawValue = entry.value ?? entry.modelId ?? entry.id;
+    if (!isEncodedAcpModelValue(rawValue)) return entry;
+    const name = typeof entry.name === 'string' ? entry.name.trim()
+      : typeof entry.label === 'string' ? entry.label.trim() : '';
+    return name && validModelId(name) ? { ...entry, value: name } : entry;
+  });
+
+  return normalizeAgentModels(displayable);
 }
 
 function isAcpAuthError(error: any): boolean {
