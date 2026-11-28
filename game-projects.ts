@@ -1048,8 +1048,13 @@ export class GameProjects {
     state[id] = viewer; await saveJson(path.join(this.root, '.state.json'), state); return this.get(id);
   }); }
   async delete(id: string) { return this.mutate(async () => {
-    const { dir } = await this.locate(id, true); await rm(dir, { recursive: true });
-    const state = await jsonFile<Record<string, Viewer>>(path.join(this.root, '.state.json'), {}); delete state[id]; await saveJson(path.join(this.root, '.state.json'), state); return { deleted: true, id };
+    const { dir } = await this.locate(id, true);
+    // Read and prepare auxiliary state before irreversibly removing the game's source.
+    const state = await jsonFile<Record<string, Viewer>>(path.join(this.root, '.state.json'), {});
+    delete state[id];
+    await rm(dir, { recursive: true });
+    await saveJson(path.join(this.root, '.state.json'), state);
+    return { deleted: true, id };
   }); }
   async detail(id: string) { const game = await this.get(id); return { ...game, files: await inventory((await this.locate(id)).dir) }; }
   async exportZip(id: string): Promise<{ filename: string; data: Buffer }> {
