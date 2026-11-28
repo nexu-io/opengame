@@ -7944,6 +7944,29 @@
   color: var(--motion-accent);
 }
 
+.om-sa-presented-assets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--motion-space-4) var(--motion-space-12);
+  min-width: 0;
+}
+
+.om-sa-presented-assets .om-sa-link {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  overflow-wrap: anywhere;
+  text-align: start;
+  cursor: pointer;
+}
+
+.om-sa-presented-assets .om-sa-link:hover {
+  color: var(--motion-text);
+}
+
 .om-sa-deliverables-group {
   display: flex;
   flex-direction: column;
@@ -8998,28 +9021,6 @@
   background: var(--motion-panel);
 }
 
-.om-sa-link-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.om-sa-link-viewer-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1px 3px;
-  min-width: auto;
-  min-height: auto;
-  border-radius: var(--motion-radius-xs);
-  color: var(--motion-muted);
-}
-
-.om-sa-link-viewer-btn:hover {
-  background: var(--motion-hover);
-  color: var(--motion-accent);
-}
-
 .om-sa-file-chip {
   display: inline-flex;
   align-items: center;
@@ -9038,23 +9039,6 @@
 .om-sa-file-chip:hover {
   background: var(--motion-hover);
   border-color: var(--motion-border);
-}
-
-.om-sa-file-chip.om-sa-artifact-inline-chip {
-  border: 0;
-  border-radius: var(--motion-radius-full);
-  padding: 2px var(--motion-space-8);
-  background: color-mix(in srgb, var(--motion-accent) 14%, transparent);
-  color: var(--motion-accent);
-  font-family: inherit;
-  font-size: 0.88em;
-  font-weight: var(--motion-weight-medium);
-  white-space: nowrap;
-}
-
-.om-sa-file-chip.om-sa-artifact-inline-chip:hover {
-  background: color-mix(in srgb, var(--motion-accent) 22%, transparent);
-  color: var(--motion-accent);
 }
 
 /* Game Studio mode strip, artwork pickers, and card badges inside Super Agent */
@@ -11388,6 +11372,12 @@
   flex-direction: column;
 }
 
+.om-sa-workspace-file-body > .om-sa-media-stage[data-kind='video'] { padding: 0; }
+.om-sa-workspace-file-body > .om-sa-media-stage video {
+  width: 100%; height: 100%; object-fit: contain;
+  border-radius: 0; background: transparent;
+}
+
 .om-sa-markdown-doc {
   flex: 1 1 auto;
   min-height: 0;
@@ -11470,7 +11460,6 @@
   align-items: center;
   justify-content: center;
   padding: var(--motion-space-16);
-  background: var(--motion-inset);
 }
 
 .om-sa-workspace-file-image img {

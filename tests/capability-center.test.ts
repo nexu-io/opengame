@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { assetHash } from '../gateway/asset-library.ts';
+import { superAgentConversations } from '../gateway/super-agent.ts';
 import { fixture } from './fixtures.ts';
 import { execute, pluginRoot } from '../hyperframes.ts';
 import { verificationBinaries } from '../scripts/verify-export.ts';
@@ -954,7 +955,7 @@ function makeTinyWav(): Buffer {
   return buf;
 }
 
-function makeTinyGlb(): Buffer {
+function makeTinyGlb(names = ['Idle']): Buffer {
   const json = JSON.stringify({
     asset: { version: '2.0' },
     meshes: [{ name: 'HeroMesh', primitives: [{ attributes: { POSITION: 0 } }] }],
@@ -963,7 +964,7 @@ function makeTinyGlb(): Buffer {
     buffers: [{ byteLength: 36 }],
     nodes: [{ name: 'mixamorigRightHand' }],
     skins: [{ joints: [0] }],
-    animations: [{ name: 'Idle', channels: [], samplers: [] }],
+    animations: names.map(name => ({ name, channels: [], samplers: [] })),
   });
   let jsonBuf = Buffer.from(json, 'utf8');
   const jsonPad = (4 - (jsonBuf.length % 4)) % 4;
@@ -982,6 +983,42 @@ function makeTinyGlb(): Buffer {
   binHeader.write('BIN\0', 4);
   return Buffer.concat([header, jsonHeader, jsonBuf, binHeader, binBuf]);
 }
+
+test('present_asset binds pinned clips and scoped workspace files to a durable conversation', () => fixture(async store => {
+  const api = service(store);
+  const chats = superAgentConversations(store);
+  const chat = await chats.create();
+  const other = await chats.create();
+  const cwd = path.join(store.directory, 'super-agent', 'work', chat.id);
+  await mkdir(cwd, { recursive: true });
+  const model = path.join(cwd, 'hero.glb');
+  await writeFile(model, makeTinyGlb(['Idle', 'Run']));
+  await writeFile(path.join(cwd, 'unknown.dat'), 'opaque');
+  const imported = await api.call('openmotion_asset_manage', { action: 'import', sourcePath: model, requestId: 'hero-glb' });
+  const ref = { assetId: imported.asset.id, versionId: imported.asset.currentVersionId };
+  const present = (source: Record<string, unknown>) => api.call('openmotion_asset_manage', { action: 'present_asset', conversationId: chat.id, ...source });
+  const [idle, run] = await Promise.all(['Idle', 'Run'].map(animation => present({ ...ref, animation })));
+  assert.equal(idle.artifact.kind, 'asset-3d');
+  assert.notEqual(idle.artifact.id, run.artifact.id);
+  const replay = await present({ ...ref, animation: 'Idle' });
+  assert.equal(replay.artifact.id, idle.artifact.id);
+  assert.ok(replay.artifact.presentedAt > idle.artifact.presentedAt);
+  const file = await present({ path: 'hero.glb', animation: 'Run' });
+  assert.equal(file.artifact.kind, 'workspace-file');
+  assert.equal(file.artifact.filePath, 'hero.glb');
+  assert.equal(new URL(file.artifact.url, 'http://localhost').searchParams.get('chatId'), chat.id);
+  for (const source of [{ ...ref, animation: 'missing' }, { path: 'hero.glb', animation: 'missing' }]) {
+    await assert.rejects(present(source), { availableAnimations: ['Idle', 'Run'], applied: false });
+  }
+  for (const source of [{ ...ref, path: 'hero.glb' }, { path: model }, { path: 'https://example.com/file.glb' }, { path: '../hero.glb' },
+    { path: 'unknown.dat' }, { path: 'hero.glb', conversationId: other.id }, { ...ref, versionId: chat.id }, { ...ref, conversationId: ref.assetId },
+    { ...ref, url: '/fake' }, { assetId: ref.assetId }, { ...ref, conversationId: undefined }]) await assert.rejects(present(source));
+  const saved = JSON.parse(await readFile(await chats.file(chat.id), 'utf8'));
+  assert.deepEqual(new Set(saved.messages.flatMap((message: { artifactIds: string[] }) => message.artifactIds)), new Set([idle.artifact.id, run.artifact.id, file.artifact.id]));
+  assert.equal(saved.messages.length, 3);
+  assert.equal(saved.activeArtifactId, file.artifact.id);
+  assert.equal((await chats.get(other.id)).artifacts.length, 0);
+}, false));
 
 test('sound-effects capability gates honestly on AMR audio_sound_effects and submits exact AMR #1161 contract', () =>
   fixture(async store => {

@@ -38,6 +38,24 @@ Discover available providers and models through `openmotion_media_use` before ge
 
 The browser upload endpoint is `POST /motion-api/assets/upload?requestId=...` with binary body and URI-encoded `X-File-Name`. Media `GET`/`HEAD` at `/motion-api/assets/<assetId>/versions/<versionId>/file` supports single byte ranges and attachment downloads. These are local installation routes behind the existing loopback and same-origin boundary, not public remote endpoints. Browser imports use selected Files; external MCP imports require paths readable on the host.
 
+## Presenting an asset in Studio
+
+An agent connected to the same workspace can show a file or a saved library version in a particular Studio conversation. Call `openmotion_asset_manage` with `action: "present_asset"` and the target `conversationId`. Pass either a workspace-relative `path` or the pair `assetId` and `versionId`. For an animated GLB, pass the exact embedded clip name in `animation`. For example, a conversation with `assets/knight.glb` in its working directory can present that path with `animation: "Idle"` if the model contains an `Idle` clip.
+
+For an ordinary reference, write a Markdown link such as `[Knight](./assets/Knight.glb)`. Clicking it opens the appropriate preview in the right pane. A web link opens the pane's browser. The agent can also use `present_asset` to open a preview immediately and leave an inline link with the filename and optional animation name. Reopening a library entry shows its saved version. Reopening a workspace file reads its current contents. Keep a multi-file asset and its companion textures or buffers together.
+
+Use Command-click on macOS or Ctrl-click on Windows and Linux to open outside the pane. In a browser, the link opens a new tab or downloads the file according to its type. The desktop app sends web links to the system browser and supported local files to their associated application.
+
+| Workspace file | Viewer |
+| --- | --- |
+| GLB | Orbit, zoom, embedded animation selection and playback. Meshopt, Draco and KTX2 decoders ship with Studio. |
+| glTF, FBX, OBJ, STL, PLY, BVH | Local glTF buffers and textures, embedded FBX textures, OBJ geometry, meshes, point clouds or skeleton motion according to the format. Use GLB for compressed glTF scenes. |
+| Images and sprite sheets | Image preview, grid slicing, frame rate and frame stepping. TexturePacker/Pixi JSON can reference a companion atlas image. |
+| Tiled JSON | Finite orthogonal tile layers with array-encoded tiles and local atlas images or TSJ tilesets. |
+| Audio and video | Browser playback, seeking and volume for locally supported codecs. |
+
+The workspace file viewer opens model and media links from chat. A `.blend` project, an engine package or a Spine export needs a suitable importer or conversion before interactive playback. The library stores reusable versions of supported media and GLB files. Browsing a workspace file does not import it into the library.
+
 ## Reading a fixed version
 
 Call `openmotion_assets_use` (or `openmotion_asset_manage`) with `action: "read"` and either `assetId` + `versionId` (single asset) or `items` (1–12 pinned `{assetId, versionId}` image versions for a single contact sheet). `get` stays metadata-only. The shared reader snapshots every regular no-follow file, verifies its saved byte count/SHA-256 and decodes that snapshot; it never follows a changing current-version pointer. Retained trash is readable, consistently with get/download, while new references and project imports still require an active asset.

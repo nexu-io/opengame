@@ -5,6 +5,7 @@ import {
   type DesktopChromeInsets,
   type DesktopDiagnosticExportResult,
   type DesktopPlatform,
+  type LocalPreviewFile,
   type DesktopUpdateState,
 } from '../../../shared/platform-host';
 
@@ -235,6 +236,18 @@ export function useDesktopUpdateState() {
     downloadUpdate,
     installUpdateNow,
   };
+}
+
+export async function openLocalPreviewFile(file: LocalPreviewFile): Promise<void> {
+  const bridge = getDesktopBridge();
+  if (bridge?.openLocalPreviewFile) return bridge.openLocalPreviewFile(file);
+  if (file.kind === 'workspace-file' && file.conversationId.trim() && file.path.trim()) {
+    const params = new URLSearchParams({ chatId: file.conversationId, path: file.path, raw: '1' });
+    if (file.rootKey) params.set('rootKey', file.rootKey);
+    window.open(`/motion-api/super-agent/file-content?${params}`, '_blank', 'noopener,noreferrer');
+  } else if (file.kind === 'library-asset' && /^[\w-]+$/.test(file.assetId) && /^[\w-]+$/.test(file.versionId)) {
+    window.open(`/motion-api/assets/${file.assetId}/versions/${file.versionId}/file`, '_blank', 'noopener,noreferrer');
+  } else throw new Error('Invalid file reference');
 }
 
 export async function openExternalUrl(url: string): Promise<void> {

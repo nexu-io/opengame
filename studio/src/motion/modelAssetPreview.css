@@ -1,0 +1,53 @@
+.om-game-asset-preview, .om-game-preview-inspector {
+  width: 100%; height: 100%; min-width: 0; min-height: 0;
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+.om-game-preview-inspector {
+  container-type: inline-size;
+  grid-template-rows: minmax(0, 1fr) auto;
+  background: var(--motion-panel);
+  color: var(--motion-text);
+}
+.om-sa-workspace-file-body > :is(.om-game-asset-preview, .om-game-preview-inspector) { flex: 1 1 0; }
+.om-inspector-stage {
+  position: relative; min-width: 0; min-height: 0;
+  display: grid; place-items: center; overflow: hidden;
+  container-type: size;
+}
+.om-inspector-image {
+  display: block; width: min(100cqw, calc(100cqh * var(--asset-aspect))); height: auto;
+  max-height: 100%; object-fit: contain;
+}
+.om-inspector-map { display: block; overflow: auto; }
+.om-inspector-map canvas { display: block; margin: auto; }
+.om-model-stage model-viewer { position: absolute; inset: 0; width: 100%; height: 100%; --poster-color: transparent; }
+.om-model-stage model-viewer::part(default-progress-bar) { display: none; }
+.om-inspector-footer {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: var(--motion-space-4) var(--motion-space-16);
+  padding: var(--motion-space-4) var(--motion-space-8);
+  background: var(--motion-panel); border-top: 1px solid var(--motion-border-subtle);
+  font-size: var(--motion-text-xs);
+}
+.om-inspector-options, .om-inspector-transport {
+  display: flex; align-items: center; min-width: 0;
+  gap: var(--motion-space-2); white-space: nowrap;
+}
+.om-inspector-options { max-width: 100%; }
+.om-inspector-footer [data-odui-component='button'], .om-inspector-footer [data-odui-component='icon-button'] { height: var(--motion-control); }
+.om-inspector-footer [data-odui-component='icon-button'] { width: var(--motion-control); flex: none; }
+.om-inspector-transport { flex: 1 1 12rem; }
+.om-inspector-transport [data-odui-component='slider'] { margin-inline: var(--motion-space-8); }
+.om-inspector-counter { font-family: var(--motion-font-mono); font-variant-numeric: tabular-nums; color: var(--motion-muted); }
+[data-motion-studio] .om-inspector-options .om-inspector-select {
+  width: auto; max-width: min(13rem, 52cqw); height: var(--motion-control);
+  background: transparent; border: 0; box-shadow: none;
+}
+[data-motion-studio] .om-inspector-options .om-inspector-select:is(:hover, [data-popup-open]),
+[data-motion-studio] .om-inspector-options button[aria-pressed='true'] { background: var(--motion-hover); }
+.om-inspector-settings { display: grid; gap: var(--motion-space-8); }
+.om-inspector-field { display: grid; grid-template-columns: minmax(0, 1fr) 5rem; align-items: center; gap: var(--motion-space-16); font-size: var(--motion-text-xs); }
+@container (max-width: 28rem) {
+  .om-inspector-transport { flex-basis: 100%; }
+}

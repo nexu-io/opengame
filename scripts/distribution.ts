@@ -864,7 +864,7 @@ export async function distributionFiles(profile: string, include: (file: string)
   files.push('template-library/openmotion-welcome/assets/soundtrack.m4a');
   files.push('skills/openmotion-game/LICENSE-HIGGSFIELD');
   for (const skill of packagedSkills) await walk('skills/' + skill, /\.(?:md|mjs|ts|py|json|ya?ml)$/);
-  await walk('studio/build', /\.(?:html|js|css|json|svg|png|jpg|webp|woff2?|ttf|txt)$/);
+  await walk('studio/build', /\.(?:html|js|css|json|svg|png|jpg|webp|woff2?|ttf|txt)$|^(?:draco_decoder|basis_transcoder)-[\w-]+\.wasm$/);
   await walk('studio/public', /\.(?:html|js|css|json|svg|png|jpg|webp|woff2?|ttf|txt)$/);
   // A lightweight application must not require optional showcase bytes that its
   // caller intentionally excludes. Full bundles still validate the whole list.

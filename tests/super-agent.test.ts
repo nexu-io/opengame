@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, stat, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { designHttp, designProjectsFor } from '../design-projects.ts';
 import { GameProjects, gameHttp, gameProjectsFor } from '../game-projects.ts';
@@ -2818,6 +2818,55 @@ test('HTTP /motion-api/super-agent uploads, workspace files, file-content, and s
     `/motion-api/super-agent/file-content?workingDir=${encodeURIComponent(workDir)}&path=${encodeURIComponent('../../etc/passwd')}`,
   );
   assert.equal(noRootTraversalRes.status, 400);
+}));
+
+test('workspace previews stream large models and resolve companions within the selected root', () => fixture(async store => {
+  const req = transport(store);
+  const root = path.join(store.directory, 'asset-preview');
+  await mkdir(path.join(root, 'model'), { recursive: true });
+  const query = (file: string, raw = false) => '/motion-api/super-agent/file-content?' + new URLSearchParams({
+    workingDir: root, rootKey: `custom:${root}`, path: file, ...(raw ? { raw: '1' } : {}),
+  });
+  const bytes = Buffer.alloc(16 * 1024 * 1024, 0x2a);
+  await writeFile(path.join(root, 'model/scene.glb'), bytes);
+  const meta = await (await req(query('model/scene.glb'))).json();
+  assert.equal(meta.sizeBytes, bytes.length);
+  assert.equal(meta.binary, true);
+  assert.equal(meta.content, undefined);
+  const full = await req(meta.previewUrl);
+  assert.equal(full.headers.get('content-type'), 'model/gltf-binary');
+  assert.deepEqual(Buffer.from(await full.arrayBuffer()), bytes);
+  const suffix = await req(meta.previewUrl, { headers: { Range: 'bytes=-4' } });
+  assert.equal(suffix.status, 206);
+  assert.equal(suffix.headers.get('content-range'), `bytes ${bytes.length - 4}-${bytes.length - 1}/${bytes.length}`);
+  assert.deepEqual(Buffer.from(await suffix.arrayBuffer()), bytes.subarray(-4));
+  const invalid = await req(meta.previewUrl, { headers: { Range: `bytes=${bytes.length}-` } });
+  assert.equal(invalid.status, 416);
+  assert.equal(invalid.headers.get('content-range'), `bytes */${bytes.length}`);
+
+  for (const [name, mime] of Object.entries({
+    'scene.gltf': 'model/gltf+json', 'buffer.bin': 'application/octet-stream', 'texture.png': 'image/png',
+    'scene.obj': 'model/obj', 'material.mtl': 'model/mtl', 'scene.fbx': 'application/octet-stream',
+    'mesh.stl': 'model/stl', 'mesh.ply': 'application/octet-stream', 'rig.bvh': 'text/plain',
+    'atlas.json': 'application/json', 'sound.wav': 'audio/wav', 'sound.mp3': 'audio/mpeg',
+    'sound.ogg': 'audio/ogg', 'clip.mp4': 'video/mp4', 'clip.webm': 'video/webm',
+  })) {
+    const companionPath = `model/${name}`;
+    await writeFile(path.join(root, companionPath), name);
+    const companion = new URL(meta.previewUrl, 'http://localhost');
+    companion.searchParams.set('path', companionPath);
+    const response = await req(companion.pathname + companion.search);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), mime);
+    assert.equal(await response.text(), name);
+  }
+  const outside = path.join(store.directory, 'outside');
+  await mkdir(outside);
+  await writeFile(path.join(outside, 'private.bin'), 'private');
+  await symlink(outside, path.join(root, 'model', 'external'), 'junction');
+  assert.equal((await req(query('model/external/private.bin', true))).status, 400);
+  assert.equal((await req(query('../outside/private.bin', true))).status, 400);
+  assert.equal((await req(query('model/scene.glb', true) + '&chatId=missing')).status, 404);
 }));
 
 test('Referenced chats (<openmotion-referenced-conversations>), uploaded textExcerpt, and inline segments persistence', () => fixture(async store => {

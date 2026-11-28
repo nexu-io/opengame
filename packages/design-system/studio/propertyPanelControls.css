@@ -31,8 +31,10 @@
 }
 
 .motion-color-checkerboard {
-  background: conic-gradient(var(--motion-neutral-n0) 25%, var(--motion-neutral-n4) 0 50%,
-    var(--motion-neutral-n0) 0 75%, var(--motion-neutral-n4) 0) 0 0 / 8px 8px;
+  --checker-light: var(--motion-neutral-n0);
+  --checker-dark: var(--motion-neutral-n4);
+  background: conic-gradient(var(--checker-light) 25%, var(--checker-dark) 0 50%,
+    var(--checker-light) 0 75%, var(--checker-dark) 0) 0 0 / 8px 8px;
 }
 
 .motion-color-picker-marker {

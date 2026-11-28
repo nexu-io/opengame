@@ -1,6 +1,7 @@
 import { Dialog } from '@base-ui/react/dialog';
 import { Button } from 'open-design-ui/button';
 import { IconButton } from 'open-design-ui/icon-button';
+import { detectGameAssetPreview } from '../../../shared/game-asset-preview';
 import { useEffect, useRef, useState } from 'react';
 import type { DesignExportFormat } from '../../../shared/design-project';
 import { gameGenreLabels, type GameGenre } from '../../../shared/game-contract';
@@ -12,6 +13,7 @@ import { designClient } from '../design/designClient';
 import { useI18n } from '../i18n/I18n';
 import { RemixIcon } from '../icons/RemixIcons';
 import { modelDisplayLabel } from '../motion/generationLabels';
+import { isMediaArtifact } from './assetPresentation';
 import { buildGamePublishOpenInput, resolveGameCloudTarget, resolvePublishableGameId } from './gamePublish/gamePublishEntry';
 import { gamePublishActions, useGamePublishSession } from './gamePublish/gamePublishStore';
 
@@ -67,6 +69,24 @@ export function artifactDeliverableMeta(artifact: SuperAgentArtifact): ArtifactD
         primaryActionLabel: 'Play',
         primaryActionIcon: 'play-fill',
       };
+    case 'asset-3d':
+      return {
+        icon: 'stack-line',
+        tone: 'agent',
+        typeLabel: '3D',
+        primaryActionLabel: 'Preview',
+        primaryActionIcon: 'eye-line',
+      };
+    case 'workspace-file': {
+      const kind = detectGameAssetPreview(artifact.filePath ?? artifact.title);
+      return {
+        icon: kind === 'glb' || kind === 'model' ? 'stack-line' : 'file-line',
+        tone: 'agent',
+        typeLabel: kind === 'glb' || kind === 'model' ? '3D' : 'File',
+        primaryActionLabel: 'Preview',
+        primaryActionIcon: 'eye-line',
+      };
+    }
     case 'asset-image':
       return {
         icon: 'image-line',
@@ -348,7 +368,7 @@ export function ArtifactDeliverableCard({
 
   const meta = artifactDeliverableMeta(artifact);
   const rawSub = (artifact.subtitle ?? '').trim();
-  const subDetail = formatArtifactSubDetail(rawSub, t);
+  const subDetail = artifact.animation || formatArtifactSubDetail(rawSub, t);
   const isHero = layout === 'hero';
   const orientationTag = artifact.kind === 'game-project' && artifact.scenario === 'portrait'
     ? t('Portrait 9:16')
@@ -449,7 +469,7 @@ export function ArtifactDeliverableCard({
   const mediaDownloadUrl =
     artifact.kind === 'motion-export'
       ? artifact.downloadUrl || artifact.url
-      : ['asset-image', 'asset-video', 'asset-audio'].includes(artifact.kind)
+      : isMediaArtifact(artifact.kind)
         ? artifact.downloadUrl || (artifact.url ? appendDownloadParam(artifact.url) : undefined)
         : undefined;
 
@@ -591,7 +611,7 @@ export function ArtifactDeliverableCard({
               ? 'mp4'
               : artifact.kind === 'asset-audio'
                 ? 'mp3'
-                : 'png';
+                : artifact.kind === 'asset-3d' ? 'glb' : 'png';
             void handleDirectDownload(mediaDownloadUrl, `${safeFilenameSlug(artifact.title, artifact.id)}.${ext}`);
           }}
         >
@@ -600,7 +620,7 @@ export function ArtifactDeliverableCard({
         </Button>
       )}
 
-      {['asset-image', 'asset-video', 'asset-audio'].includes(artifact.kind) && artifact.assetId && onOpenInAssets && (
+      {isMediaArtifact(artifact.kind) && artifact.assetId && onOpenInAssets && (
         <Button
           variant="plain"
           type="button"

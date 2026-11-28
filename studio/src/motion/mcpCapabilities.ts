@@ -48,6 +48,11 @@ export const animeOpeningScenario = {
 };
 
 export const mcpScenarios = [animeOpeningScenario, {
+  id: 'present-game-asset', icon: 'box-3-line', title: 'Preview a game asset',
+  description: 'Open a workspace file or a saved asset version in the conversation viewer.',
+  tools: ['openmotion_asset_manage'],
+  prompt: 'Show the selected asset in this Studio conversation using openmotion_asset_manage with action=present_asset and conversationId. Use the workspace-relative path or the exact assetId and versionId. For a GLB animation, use its embedded clip name.',
+}, {
   id: 'game-validation', icon: 'layout-line', title: 'Validate and playtest a local game',
   description: 'Inspect the selected game, validate its source and simulate reference and idle routes. Run headless clients when Chrome and loopback are available; inspect failed assertions before changing status or publishing.',
   tools: ['openmotion_game_get', 'openmotion_game_validate', 'openmotion_game_simulate', 'openmotion_game_playtest'],

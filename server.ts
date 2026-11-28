@@ -21,7 +21,8 @@ import { createAutomationHost } from './gateway/automation-host.ts';
 import { MCP_HTTP_PATH } from './shared/mcp-http.ts';
 import { superAgentConversations } from './gateway/super-agent.ts';
 import { collectWorkspaceResources } from './gateway/super-agent-resources.ts';
-import { listTaskWorkspaceEntries, readTaskWorkspaceFile, resolveBrowsableRoots } from './gateway/super-agent-workspace.ts';
+import { pipeline } from 'node:stream/promises';
+import { listTaskWorkspaceEntries, openTaskWorkspaceFile, resolveBrowsableRoots, workspaceFileMetadata, workspaceFileRange } from './gateway/super-agent-workspace.ts';
 import { assetHttp } from './gateway/asset-http.ts';
 import { capabilityDiscover, capabilityRun, loadCapabilityCatalog, syncCapabilityRemoteConfig } from './gateway/capability-center.ts';
 import { extractRequestReferenceMeta, isMediaTelemetryModality, recordPreGatewayRejection, spatialKindForCapability } from './gateway/media-telemetry.ts';
@@ -964,42 +965,56 @@ export async function handler(req: IncomingMessage, res: ServerResponse, store =
           items: await listTaskWorkspaceEntries(roots, { query, limit }),
         });
       }
-      if (url.pathname === '/api/super-agent/file-content' && req.method === 'GET') {
+      if (url.pathname === '/api/super-agent/file-content' && (req.method === 'GET' || (req.method === 'HEAD' && url.searchParams.get('raw') === '1'))) {
         const chatId = url.searchParams.get('chatId')?.trim() || undefined;
         const workingDir = url.searchParams.get('workingDir')?.trim() || undefined;
         const rootKey = url.searchParams.get('rootKey')?.trim() || '';
         const relPath = url.searchParams.get('path')?.trim() || '';
         const chat = chatId ? await superAgent.get(chatId).catch(() => null) : null;
+        if (chatId && !chat) throw new Error('FILE_ROOT_NOT_FOUND');
         const roots = await resolveBrowsableRoots(
           (store.workspaceStore ?? store).directory,
           chat,
-          workingDir,
-          process.cwd(),
+          chat ? undefined : workingDir,
+          chat || workingDir ? undefined : process.cwd(),
         );
-        const fileData = await readTaskWorkspaceFile(roots, rootKey, relPath);
-        if (url.searchParams.get('raw') === '1' && fileData.rawBuffer) {
-          res.writeHead(200, {
-            'Content-Type': fileData.mimeType,
-            'Content-Length': fileData.rawBuffer.length,
-            'Cache-Control': 'no-store',
-            'X-Content-Type-Options': 'nosniff',
-            'Content-Security-Policy': "default-src 'none'; sandbox",
+        const file = await openTaskWorkspaceFile(roots, rootKey, relPath);
+        try {
+          if (url.searchParams.get('raw') === '1') {
+            const range = req.headers.range === undefined ? undefined : workspaceFileRange(req.headers.range, file.sizeBytes);
+            if (range === null) {
+              res.writeHead(416, { 'Content-Range': `bytes */${file.sizeBytes}`, 'Content-Length': 0 });
+              res.end();
+              return;
+            }
+            const start = range?.start ?? 0;
+            const end = range?.end ?? file.sizeBytes - 1;
+            res.writeHead(range ? 206 : 200, {
+              'Content-Type': file.mimeType,
+              'Content-Length': end - start + 1,
+              'Accept-Ranges': 'bytes',
+              ...(range ? { 'Content-Range': `bytes ${start}-${end}/${file.sizeBytes}` } : {}),
+              'Cache-Control': 'no-store',
+              'X-Content-Type-Options': 'nosniff',
+              'Content-Security-Policy': "default-src 'none'; sandbox",
+            });
+            if (req.method === 'HEAD' || !file.sizeBytes) res.end();
+            else await pipeline(file.handle.createReadStream({ start, end }), res).catch(() => res.destroy());
+            return;
+          }
+          const previewParams = new URLSearchParams({ rootKey: file.rootKey, path: file.path, raw: '1' });
+          if (chatId) previewParams.set('chatId', chatId);
+          else if (workingDir) previewParams.set('workingDir', workingDir);
+          return json(res, 200, {
+            path: file.path,
+            ...await workspaceFileMetadata(file),
+            sizeBytes: file.sizeBytes,
+            mimeType: file.mimeType,
+            previewUrl: `/motion-api/super-agent/file-content?${previewParams.toString()}`,
           });
-          res.end(fileData.rawBuffer);
-          return;
+        } finally {
+          await file.handle.close();
         }
-        const resolvedRootKey = fileData.rootKey || rootKey;
-        const previewParams = new URLSearchParams({ rootKey: resolvedRootKey, path: fileData.path, raw: '1' });
-        if (chatId) previewParams.set('chatId', chatId);
-        if (workingDir) previewParams.set('workingDir', workingDir);
-        return json(res, 200, {
-          path: fileData.path,
-          ...(fileData.content !== undefined ? { content: fileData.content } : {}),
-          binary: fileData.binary,
-          sizeBytes: fileData.sizeBytes,
-          mimeType: fileData.mimeType,
-          previewUrl: `/motion-api/super-agent/file-content?${previewParams.toString()}`,
-        });
       }
       if (url.pathname === '/api/super-agent/preferences') {
         if (req.method === 'GET') {
@@ -1286,7 +1301,9 @@ export async function handler(req: IncomingMessage, res: ServerResponse, store =
         const message = error instanceof Error ? error.message : 'Tool failed';
         const { error_code, invalid_field, validation_rule } = toolFailureFields(error);
         const settingsHandoff = (error as { settingsHandoff?: unknown })?.settingsHandoff;
+        const availableAnimations = (error as { availableAnimations?: string[] })?.availableAnimations;
         return json(res, 400, { error: message, ...(error_code !== 'TOOL_FAILED' ? { code: error_code } : {}),
+          ...(availableAnimations ? { availableAnimations } : {}),
           ...(invalid_field ? { invalid_field, validation_rule } : {}),
           ...(settingsHandoff ? { settingsHandoff } : {}),
           applied: (error as any)?.applied === false || /^(OPENDESIGN_SIGN_IN_REQUIRED|NATIVE_RUNTIME_NOT_READY|INVALID_|VERSION_CONFLICT|VERSION_NOT_RESTORABLE|VERSION_NOT_FOUND|PROJECT_NOT_|PROJECT_SESSION_|PROJECT_TRASHED|PROJECT_VALIDATION_FAILED|REQUEST_ID_CONFLICT|SESSION_NOT_FOUND|MCP_TOOL_NOT_EXPOSED|EXPORT_NOT_|TEMPLATE_NOT_|WORK_CLOSED|WORK_VERSION_MISMATCH|WORK_GENERATION_UNTRACKED|WORK_ID_CONFLICT|WORK_NOT_FOUND|GENERATION_CONTENT_UNCHANGED|GENERATION_ARTIFACT_INVALID|DUPLICATE_ITEM_ID|ITEM_ID_CONFLICT|DUPLICATE_FILE_PATH|CONFLICTING_FILE_PATHS|SOURCE_BATCH_TOO_LARGE|REVIEW_VERSION_MISMATCH|REVIEW_OBJECT_MISMATCH|PREVIEW_TARGET_MISMATCH)(?::|$)/.test(message) ? false : 'unknown' });

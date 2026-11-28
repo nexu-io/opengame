@@ -1,12 +1,55 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
-import { startServer } from '../server.ts';
+import { createServer } from 'node:http';
+import { handler, startServer } from '../server.ts';
+import { pluginRoot } from '../hyperframes.ts';
+import { mcpHttpFor } from '../gateway/mcp-http.ts';
 import { gameProjectsFor } from '../game-projects.ts';
 import { MCP_HTTP_PATH, MCP_STATUS_API, MCP_TOKENS_API } from '../shared/mcp-http.ts';
 import { fixture } from './fixtures.ts';
+import { superAgentConversations } from '../gateway/super-agent.ts';
 import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/server';
+
+test('present_asset enforces MCP write scope and reuses the HTTP deliverable with Studio offline', () => fixture(async store => {
+  const context = { runtimeRoot: pluginRoot };
+  const server = createServer((req, res) => { void handler(req, res, store, context); });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const gateway = mcpHttpFor(store);
+  try {
+    const chats = superAgentConversations(store);
+    const chat = await chats.create();
+    const workspace = path.join(store.directory, 'super-agent', 'work', chat.id);
+    await mkdir(workspace, { recursive: true });
+    await writeFile(path.join(workspace, 'hero.obj'), 'v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n');
+    const presentation = { name: 'openmotion_asset_manage', arguments: { action: 'present_asset', conversationId: chat.id, path: 'hero.obj' } };
+    const presentWithScope = async (scope: 'read' | 'write', extra: Record<string, unknown> = {}) => {
+      const { token } = await gateway.tokenStore.create(scope, scope, `${origin}/mcp`);
+      return (await fetch(`${origin}/mcp`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 41, method: 'tools/call', params: { ...presentation, arguments: { ...presentation.arguments, ...extra } } }),
+      })).json();
+    };
+    assert.equal((await presentWithScope('read')).error.code, -32003);
+    assert.equal((await chats.get(chat.id)).messages.length, 0);
+    const invalid = (await presentWithScope('write', { animation: 'Idle' })).result;
+    assert.equal(invalid.isError, true);
+    assert.deepEqual(invalid.structuredContent.error.availableAnimations, []);
+    const presented = (await presentWithScope('write')).result.structuredContent;
+    assert.equal(presented.conversationId, chat.id);
+    const replay = await fetch(`${origin}/motion-api/phase1/call`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin }, body: JSON.stringify(presentation),
+    });
+    assert.equal(replay.status, 200);
+    assert.equal((await replay.json()).artifact.id, presented.artifact.id);
+    assert.equal((await chats.get(chat.id)).messages.length, 1);
+  } finally {
+    await gateway.close();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+}, false));
 
 test('Streamable HTTP /mcp supports initialize, tools/list, tools/call, scoped tokens, SSE GET, and DELETE termination', () =>
   fixture(async store => {

@@ -131,6 +131,7 @@ export function resourceIcon(
   if (item.kind === 'asset' || item.kind === 'model') {
     if (item.modality === 'video') return 'movie-line';
     if (item.modality === 'audio') return 'music-2-line';
+    if (item.modality === '3d') return 'stack-line';
     return item.kind === 'model' ? 'robot-line' : 'image-line';
   }
   if (item.kind === 'brand-kit') return 'palette-line';
@@ -183,7 +184,7 @@ export function resourceDisplaySubtitle({ kind, subtitle, scenario, modality, si
     if (subtitle === 'upload') return t('Local upload');
     if (subtitle === 'generated') return t('AI generated');
     if (subtitle !== modality) return subtitle;
-    return t(modality === 'image' ? 'Image' : modality === 'video' ? 'Video' : 'Audio');
+    return t(modality === 'image' ? 'Image' : modality === 'video' ? 'Video' : modality === '3d' ? '3D' : 'Audio');
   }
 
   const scenarioLabel = findDesignScenario(scenario)?.label;

@@ -11,11 +11,13 @@ const object = <T extends Record<string, unknown>>(properties: T, required: stri
   additionalProperties: false,
 });
 const reference = object({ assetId: uuid, versionId: uuid }, ['assetId', 'versionId']);
+const animation = { type: 'string', minLength: 1, maxLength: 512 };
+const workspacePath = { type: 'string', minLength: 1, maxLength: 2048 };
 
 export const capabilityDiscoverActions = ['list', 'describe', 'quote', 'providers', 'models'] as const;
 export const capabilityRunActions = ['run'] as const;
 export const jobManageActions = ['list', 'status', 'cancel', 'retry_save', 'resume'] as const;
-export const assetManageActions = ['list', 'get', 'read', 'import', 'update', 'import_to_project', 'brand_kit'] as const;
+export const assetManageActions = ['list', 'get', 'read', 'import', 'update', 'import_to_project', 'brand_kit', 'present_asset'] as const;
 
 export const capabilityDiscoverTool = {
   name: 'openmotion_capability_discover',
@@ -124,11 +126,14 @@ export const assetManageTool = {
   name: 'openmotion_asset_manage',
   title: 'OpenMotion · Asset Manage',
   description:
-    'Pure Workspace Asset, immutable version, capability provenance and Brand Kit manager, decoupled from generation and job polling. list/get inspect assets, versions, capabilityId/capabilityOptions and parent/reference provenance; read returns bounded image previews, video frames or 16 kHz audio clips for a pinned assetId+versionId, or composites 1–12 pinned image items into one contact sheet PNG (optional maxEdge 128–1024); import copies a real local file (max 500 MB); update renames, trashes/restores or switches currentVersionId while retaining history; import_to_project copies a pinned version into a target project without altering its timeline; brand_kit manages style-only Brand Kits.',
+    'Manage workspace assets, immutable versions, capability provenance and Brand Kits. present_asset adds a reopenable preview to an explicitly selected Studio conversationId. Supply pinned library assetId and versionId, or a relative path to a supported image, audio, video, model or sprite atlas in that conversation’s workspace. For GLB files, optionally pass an exact embedded animation name. list/get inspect assets, versions, capabilityId/capabilityOptions and parent/reference provenance; read returns bounded image previews, video frames or 16 kHz audio clips for a pinned assetId+versionId, or composites 1–12 pinned image items into one contact sheet PNG (optional maxEdge 128–1024); import copies a real local file (max 500 MB); update renames, trashes/restores or switches currentVersionId while retaining history; import_to_project copies a pinned version into a target project without altering its timeline; brand_kit manages style-only Brand Kits.',
   inputSchema: {
     ...object(
       {
         action: { enum: [...assetManageActions] },
+        conversationId: uuid,
+        animation,
+        path: workspacePath,
         requestId,
         assetId: uuid,
         versionId: uuid,
@@ -168,6 +173,8 @@ export const assetManageTool = {
         required,
         additionalProperties: true,
       })),
+      object({ action: { enum: ['present_asset'] }, conversationId: uuid, assetId: uuid, versionId: uuid, animation }, ['action', 'conversationId', 'assetId', 'versionId']),
+      object({ action: { enum: ['present_asset'] }, conversationId: uuid, path: workspacePath, animation }, ['action', 'conversationId', 'path']),
       {
         type: 'object',
         properties: { action: { enum: ['read'] } },

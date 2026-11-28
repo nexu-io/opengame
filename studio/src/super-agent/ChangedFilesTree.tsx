@@ -2,6 +2,7 @@ import { useMemo, useState, type CSSProperties } from 'react';
 import { Button } from 'open-design-ui/button';
 import { IconButton } from 'open-design-ui/icon-button';
 import type { SuperAgentFileOperation } from '../../../shared/super-agent';
+import { detectGameAssetPreview } from '../../../shared/game-asset-preview';
 import { Tooltip } from '../components/ui/Tooltip';
 import { useI18n } from '../i18n/I18n';
 import { RemixIcon } from '../icons/RemixIcons';
@@ -268,10 +269,11 @@ function ChangedTreeNodeList({
         }
 
         const file = node.file;
+        const opensAsset = Boolean(onOpenFile && file.action !== 'delete' && detectGameAssetPreview(file.path));
         const canExpandInline = Boolean(file.diffPreview || file.previewUrl);
         const diffOpen = Boolean(openDiffs[file.path]);
         const meta = changedFileMeta(file.path, file.binary);
-        const canOpenViewer = Boolean(onOpenFile && file.artifactId && isInspectableChangedFile(file.path));
+        const canOpenViewer = opensAsset ? canExpandInline : Boolean(onOpenFile && file.artifactId && isInspectableChangedFile(file.path));
         const hasLineStats =
           (file.addedLines !== undefined && file.addedLines > 0)
           || (file.removedLines !== undefined && file.removedLines > 0);
@@ -326,8 +328,8 @@ function ChangedTreeNodeList({
                   variant="ghost"
                   size="sm"
                   className="om-sa-file-copy-btn"
-                  aria-label={t('Open in Code Viewer')}
-                  title={t('Open in Code Viewer')}
+                  aria-label={t(opensAsset ? 'Open in Viewer' : 'Open in Code Viewer')}
+                  title={t(opensAsset ? 'Open in Viewer' : 'Open in Code Viewer')}
                   onClick={() => onOpenFile?.(file)}
                   icon={<RemixIcon name="external-link-line" size={12} />}
                 />
@@ -412,6 +414,8 @@ export function FilesChangedCard({
   const handleToggleFile = (file: SuperAgentFileOperation) => {
     if (file.diffPreview || file.previewUrl) {
       setOpenDiffs(prev => ({ ...prev, [file.path]: !prev[file.path] }));
+    } else if (onOpenFile && file.action !== 'delete' && detectGameAssetPreview(file.path)) {
+      onOpenFile(file);
     } else if (onOpenFile && file.artifactId && isInspectableChangedFile(file.path)) {
       onOpenFile(file);
     } else {

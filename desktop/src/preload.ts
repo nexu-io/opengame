@@ -22,6 +22,13 @@ const initialChrome: DesktopChromeInsets = resolveDesktopChrome({
   linuxCustomTitleBar,
 });
 
+// Consume one trusted modifier click while it is being dispatched in the Studio document.
+let modifierClick = false;
+window.addEventListener('click', event => {
+  modifierClick = event.isTrusted && event.button === 0 && (event.metaKey || event.ctrlKey);
+  setTimeout(() => { modifierClick = false; }, 0);
+}, true);
+
 const bridge: DesktopBridgeApi = {
   initialChrome,
   getAppInfo: () => ipcRenderer.invoke('openmotion:get-app-info'),
@@ -51,6 +58,11 @@ const bridge: DesktopBridgeApi = {
   exportDesktopLogs: () => ipcRenderer.invoke('openmotion:export-logs'),
   openLogsFolder: () => ipcRenderer.invoke('openmotion:open-logs-folder'),
   openExternal: url => ipcRenderer.invoke('openmotion:open-external', url),
+  openLocalPreviewFile: async file => {
+    if (!modifierClick || !navigator.userActivation.isActive) throw new Error('A modifier click is required');
+    modifierClick = false;
+    await ipcRenderer.invoke('openmotion:open-local-preview-file', file);
+  },
   subscribeMenuActions: callback => {
     const handler = (_event: unknown, action: DesktopMenuAction) => {
       callback(action);

@@ -94,6 +94,8 @@ import { agentRuntimesFor, isLocalDirectEnabled } from './agent-runtimes.ts';
 import { executeRemoteServiceRun } from './agent-service-adapter.ts';
 import { AssetAgentRpc } from './asset-chat.ts';
 import { AssetLibrary, assetHash, atomicAssetJson } from './asset-library.ts';
+import { resolveAssetPresentation, type AssetPresentationSource } from './asset-presentation.ts';
+import { withProcessLock } from '../shared/process-lock.ts';
 import { readBrandCatalog } from './brand-catalog.ts';
 import { brandKitsFor } from './brand-kits.ts';
 import { resolveLocalAgent } from './local-agents.ts';
@@ -593,6 +595,7 @@ const ALLOWED_ARTIFACT_KINDS = new Set<SuperAgentArtifact['kind']>([
   'asset-image',
   'asset-video',
   'asset-audio',
+  'asset-3d',
   'brand-kit',
   'game-project',
   'workspace-file',
@@ -886,6 +889,7 @@ function buildValidatedArtifact(input: Partial<SuperAgentArtifact>, now = Date.n
     revision: input.revision,
     assetId: input.assetId,
     versionId: input.versionId,
+    ...((input.kind === 'asset-3d' || input.kind === 'workspace-file') && typeof input.animation === 'string' ? { animation: input.animation } : {}),
     kitId: input.kitId,
     jobId: input.jobId,
     url: validatedUrl,
@@ -953,7 +957,8 @@ const presentArtifactTool: AgentDynamicToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
-      kind: { enum: ['design-project', 'motion-project', 'motion-export', 'asset', 'asset-image', 'asset-video', 'asset-audio', 'brand-kit', 'game-project', 'web'] },
+      kind: { enum: ['design-project', 'motion-project', 'motion-export', 'asset', 'asset-image', 'asset-video', 'asset-audio', 'asset-3d', 'brand-kit', 'game-project', 'web'] },
+      animation: { type: 'string', minLength: 1, maxLength: 512 },
       title: { type: 'string', maxLength: 160 },
       projectId: { type: 'string', maxLength: 120 },
       assetId: { type: 'string', maxLength: 120 },
@@ -1073,7 +1078,9 @@ function upsertChatArtifact(
     chat.artifacts.push(stored);
   }
   if (chat.artifacts.length > 40) {
-    chat.artifacts.splice(0, chat.artifacts.length - 40);
+    const delivered = new Set(chat.messages.flatMap(message => message.artifactIds ?? []));
+    const oldest = chat.artifacts.findIndex(item => item.id !== stored.id && !delivered.has(item.id));
+    if (oldest >= 0) chat.artifacts.splice(oldest, 1);
   }
   const artIntent = artifactToSuperAgentIntent(stored);
   if (artIntent && !(stored.kind === 'web' && chat.intent === 'coding')) {
@@ -1491,6 +1498,29 @@ export class SuperAgentConversations {
       artifact.revision = game.updatedAt;
       artifact.updatedAt = Date.parse(game.updatedAt);
     }
+  }
+
+  async presentAsset(conversationId: string, input: AssetPresentationSource, title?: string) {
+    const file = await this.file(conversationId);
+    return withProcessLock(`${file}.presentation.lock`, async () => {
+      const snapshot = await this.readChat(conversationId, false);
+      const draft = await resolveAssetPresentation(this.store, snapshot, input);
+      const { id } = draft;
+      const live = this.active.get(conversationId);
+      const chat = live?.chat ?? snapshot;
+      const existing = chat.artifacts.find(item => item.id === id);
+      const presentedAt = Math.max(Date.now(), (existing?.presentedAt ?? 0) + 1);
+      const artifact = upsertChatArtifact(chat, {
+        ...draft, title: title || draft.title, createdAt: presentedAt, updatedAt: presentedAt, presentedAt, assetPresentationAt: presentedAt,
+      });
+      const messageId = `presentation:${id}`;
+      if (!chat.messages.some(message => message.id === messageId)) {
+        chat.messages.push({ id: messageId, role: 'assistant', text: '', status: 'completed', createdAt: presentedAt, artifactIds: [id] });
+      }
+      if (live) (live.presentedArtifactIds ??= new Set()).add(id);
+      await this.persistChatState(chat, live);
+      return { presented: true, conversationId, artifact };
+    });
   }
 
   async update(
@@ -1930,7 +1960,9 @@ export class SuperAgentConversations {
       active.chat.messages.push({ ...msg, text: msg.text.slice(0, 100_000) });
     }
     if (active.chat.messages.length > 600) {
-      active.chat.messages.splice(0, active.chat.messages.length - 600);
+      const excess = active.chat.messages.length - 600;
+      const retained = active.chat.messages.slice(0, excess).filter(message => message.id.startsWith('presentation:'));
+      active.chat.messages.splice(0, excess, ...retained);
     }
     void this.persist(active, immediate);
   }
@@ -4210,6 +4242,12 @@ export class SuperAgentConversations {
 
     if (toolName === presentArtifactTool.name) {
       validateInput(presentArtifactTool.inputSchema, rawArgs);
+      if (String(rawArgs.kind).startsWith('asset')) {
+        if (rawArgs.url !== undefined) throw new Error('Present a library asset by assetId and versionId');
+        const assetId = String(rawArgs.assetId || '');
+        const versionId = typeof rawArgs.versionId === 'string' ? rawArgs.versionId : (await new AssetLibrary(this.store).get(assetId)).currentVersionId;
+        return this.presentAsset(active.chat.id, { assetId, versionId, animation: rawArgs.animation as string | undefined }, rawArgs.title as string | undefined);
+      }
       if (String(rawArgs.kind) === 'web' && typeof rawArgs.url === 'string' && isProviderSettingsWebArtifactUrl(rawArgs.url, runtime.origin)) {
         return {
           presented: false,
@@ -4233,6 +4271,12 @@ export class SuperAgentConversations {
     const phase1Def = exposedPhase1Tools.find(tool => tool.name === normalizedTool);
     if (!phase1Def) throw new Error(`Unknown tool: ${toolName}`);
     const args = { ...rawArgs };
+    if (normalizedTool === 'openmotion_asset_manage' && args.action === 'present_asset') {
+      if (args.conversationId !== undefined && args.conversationId !== active.chat.id) throw new Error('Presentation must target the current conversation');
+      args.conversationId = active.chat.id;
+      validateInput(phase1Def.inputSchema, args);
+      return this.presentAsset(active.chat.id, args as unknown as AssetPresentationSource);
+    }
     if (normalizedTool === 'openmotion_design_comments' && active.attachedDesignComments.length) {
       const { action, projectId, commentId } = normalizeToolInput(phase1Def.inputSchema, args);
       if ((action === 'update' || action === 'delete')
@@ -4357,29 +4401,6 @@ export class SuperAgentConversations {
         projectId: job.projectId,
         downloadUrl: `/api/exports/${encodeURIComponent(job.id)}/file`,
         mimeType: 'video/mp4',
-        createdAt: now,
-        updatedAt: now,
-      };
-    }
-
-    if (kind === 'asset' || kind === 'asset-image' || kind === 'asset-video' || kind === 'asset-audio') {
-      const assetId = String(args.assetId || '');
-      const asset = await new AssetLibrary(this.store).get(assetId);
-      const versionId = typeof args.versionId === 'string' && args.versionId ? args.versionId : asset.currentVersionId;
-      const version = assetVersion(asset, versionId);
-      if (!version) throw new Error('Asset version not found');
-      const artifactKind = asset.modality === 'video' ? 'asset-video' : asset.modality === 'audio' ? 'asset-audio' : 'asset-image';
-      const url = assetMediaUrl(asset.id, version.id);
-      return {
-        id: `asset:${asset.id}:${version.id}`,
-        kind: artifactKind,
-        title: customTitle || asset.name,
-        subtitle: version.model || asset.modality,
-        assetId: asset.id,
-        versionId: version.id,
-        url,
-        downloadUrl: `${url}?download=1`,
-        mimeType: version.mimeType,
         createdAt: now,
         updatedAt: now,
       };
@@ -4514,7 +4535,7 @@ export class SuperAgentConversations {
     const now = Date.now();
     const name = toolName.replace(/^mcp_+openmotion_+/, '');
 
-    if (name === 'openmotion_present_artifact' && value.artifact?.id) {
+    if ((name === 'openmotion_present_artifact' || (name === 'openmotion_asset_manage' && args.action === 'present_asset')) && value.artifact?.id) {
       return value.artifact as SuperAgentArtifact;
     }
 
@@ -4711,10 +4732,11 @@ export class SuperAgentConversations {
           const asset = await library.get(ref.assetId).catch(() => null);
           if (!asset) continue;
           const version = assetVersion(asset, ref.versionId);
+          if (!version) continue;
           const url = assetMediaUrl(asset.id, ref.versionId);
           const draft: SuperAgentArtifact = {
             id: `asset:${asset.id}:${ref.versionId}`,
-            kind: asset.modality === 'video' ? 'asset-video' : asset.modality === 'audio' ? 'asset-audio' : 'asset-image',
+            kind: `asset-${asset.modality}`,
             title: asset.name,
             subtitle: version?.model || asset.modality,
             assetId: asset.id,

@@ -1,0 +1,52 @@
+{
+  "zh-CN": {
+    "Animation position": "动画进度",
+    "Drag to orbit. Scroll or pinch to zoom.": "拖动可旋转视角，滚动或双指捏合可缩放。",
+    "Preview requires a GLB with embedded buffers and textures.": "预览需要使用内嵌缓冲区和纹理的 GLB 文件。"
+  },
+  "ja": {
+    "Animation position": "アニメーションの再生位置",
+    "Drag to orbit. Scroll or pinch to zoom.": "ドラッグで回転、スクロールまたはピンチで拡大・縮小できます。",
+    "Preview requires a GLB with embedded buffers and textures.": "プレビューにはバッファとテクスチャを埋め込んだ GLB が必要です。"
+  },
+  "ko": {
+    "Animation position": "애니메이션 재생 위치",
+    "Drag to orbit. Scroll or pinch to zoom.": "드래그하여 회전하고 스크롤하거나 두 손가락으로 확대·축소하세요.",
+    "Preview requires a GLB with embedded buffers and textures.": "미리 보려면 버퍼와 텍스처를 포함한 GLB 파일이 필요합니다."
+  },
+  "de": {
+    "Animation position": "Wiedergabeposition der Animation",
+    "Drag to orbit. Scroll or pinch to zoom.": "Zum Drehen ziehen. Zum Zoomen scrollen oder zwei Finger verwenden.",
+    "Preview requires a GLB with embedded buffers and textures.": "Die Vorschau erfordert eine GLB-Datei mit eingebetteten Puffern und Texturen."
+  },
+  "fr": {
+    "Animation position": "Position de lecture de l’animation",
+    "Drag to orbit. Scroll or pinch to zoom.": "Faites glisser pour tourner. Faites défiler ou pincez pour zoomer.",
+    "Preview requires a GLB with embedded buffers and textures.": "L’aperçu nécessite un fichier GLB avec des tampons et des textures intégrés."
+  },
+  "ru": {
+    "Animation position": "Позиция воспроизведения анимации",
+    "Drag to orbit. Scroll or pinch to zoom.": "Перетаскивайте для вращения. Меняйте масштаб колесом мыши или двумя пальцами.",
+    "Preview requires a GLB with embedded buffers and textures.": "Для предпросмотра нужен файл GLB со встроенными буферами и текстурами."
+  },
+  "es": {
+    "Animation position": "Posición de la animación",
+    "Drag to orbit. Scroll or pinch to zoom.": "Arrastra para girar. Usa la rueda o pellizca para ajustar el zoom.",
+    "Preview requires a GLB with embedded buffers and textures.": "La vista previa requiere un GLB con búferes y texturas incrustados."
+  },
+  "pt-BR": {
+    "Animation position": "Posição da animação",
+    "Drag to orbit. Scroll or pinch to zoom.": "Arraste para girar. Role ou faça o gesto de pinça para ajustar o zoom.",
+    "Preview requires a GLB with embedded buffers and textures.": "A prévia requer um GLB com buffers e texturas incorporados."
+  },
+  "it": {
+    "Animation position": "Posizione dell’animazione",
+    "Drag to orbit. Scroll or pinch to zoom.": "Trascina per ruotare. Scorri o usa due dita per regolare lo zoom.",
+    "Preview requires a GLB with embedded buffers and textures.": "L’anteprima richiede un file GLB con buffer e texture incorporati."
+  },
+  "tr": {
+    "Animation position": "Animasyonun oynatma konumu",
+    "Drag to orbit. Scroll or pinch to zoom.": "Döndürmek için sürükleyin. Yakınlaştırmak için kaydırın veya iki parmağınızı kullanın.",
+    "Preview requires a GLB with embedded buffers and textures.": "Önizleme için tamponları ve dokuları gömülü bir GLB dosyası gerekir."
+  }
+}

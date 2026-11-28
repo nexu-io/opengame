@@ -95,6 +95,10 @@ export type DesktopSplashProgress = {
   errorMessage?: string;
 };
 
+export type LocalPreviewFile =
+  | { kind: 'workspace-file'; conversationId: string; rootKey?: string; path: string }
+  | { kind: 'library-asset'; assetId: string; versionId: string };
+
 export type DesktopBridgeApi = {
   readonly initialChrome?: DesktopChromeInsets;
   getAppInfo: () => Promise<DesktopAppInfo>;
@@ -112,6 +116,7 @@ export type DesktopBridgeApi = {
   exportDesktopLogs: () => Promise<DesktopDiagnosticExportResult>;
   openLogsFolder: () => Promise<{ ok: boolean; path?: string; error?: string }>;
   openExternal: (url: string) => Promise<{ ok: boolean; error?: string }>;
+  openLocalPreviewFile?: (file: LocalPreviewFile) => Promise<void>;
   subscribeMenuActions: (callback: (action: DesktopMenuAction) => void) => () => void;
   notifyRendererReady: () => void;
   retryDesktopStartup?: () => Promise<void>;

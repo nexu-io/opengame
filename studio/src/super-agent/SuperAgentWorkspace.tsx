@@ -5,6 +5,8 @@ import { Suspense, useCallback, useEffect, useEffectEvent, useId, useMemo, useRe
 import { LOCAL_DIRECT_RUNTIME_ID, type AgentRuntimeInfo } from '../../../shared/agent-runtimes';
 import { pickPreferredLocalAgent } from '../../../shared/local-agents';
 import { assetMediaUrl } from '../../../shared/asset-library';
+import { detectGameAssetPreview } from '../../../shared/game-asset-preview';
+import { assetKindForModality, isMediaArtifact, mediaArtifactAttachment, presentedAssetIds } from './assetPresentation';
 import type { SuperAgentHandoffPayload } from '../../../shared/capability-hub';
 import { designRoutes } from '../../../shared/design-project';
 import type { GameCard } from '../../../shared/game-contract';
@@ -187,7 +189,7 @@ function resourceToArtifactPatch(
     };
   }
   if (item.kind === 'asset' && item.versionId) {
-    const kind = item.modality === 'video' ? 'asset-video' : item.modality === 'audio' ? 'asset-audio' : 'asset-image';
+    const kind = assetKindForModality[item.modality ?? 'image'];
     const url = assetMediaUrl(item.id, item.versionId);
     return {
       id: `asset:${item.id}:${item.versionId}`,
@@ -254,17 +256,7 @@ function artifactToResourceAttachment(artifact: SuperAgentArtifact): SuperAgentR
       previewUrl: artifact.url,
     };
   }
-  if (artifact.assetId && (artifact.kind === 'asset-image' || artifact.kind === 'asset-video' || artifact.kind === 'asset-audio')) {
-    return {
-      id: artifact.assetId,
-      kind: 'asset',
-      title: artifact.title,
-      subtitle: artifact.subtitle,
-      modality: artifact.kind === 'asset-video' ? 'video' : artifact.kind === 'asset-audio' ? 'audio' : 'image',
-      versionId: artifact.versionId,
-      previewUrl: artifact.url,
-    };
-  }
+  if (isMediaArtifact(artifact.kind)) return mediaArtifactAttachment(artifact);
   if (artifact.kind === 'brand-kit' && artifact.kitId) {
     return {
       id: artifact.kitId,
@@ -482,6 +474,24 @@ export function SuperAgentWorkspace({
     presentedById: {},
   });
   const prevBusyRef = useRef(false);
+  const viewedPresentations = useRef(new Map<string, string>());
+
+  useEffect(() => {
+    if (!active || !activeChat || activeChat.id !== chatId) return;
+    const explicitIds = presentedAssetIds(activeChat);
+    const latest = activeChat.artifacts.find(artifact => artifact.id === activeChat.activeArtifactId);
+    if (!latest?.assetPresentationAt || !explicitIds.has(latest.id)) return;
+    const key = `motion.super-agent.viewed-presentation.${activeChat.id}`;
+    const receipt = `${latest.id}:${latest.assetPresentationAt}`;
+    let seen = viewedPresentations.current.get(key);
+    try { seen ??= sessionStorage.getItem(key) ?? undefined; } catch { /* In-memory tracking remains available. */ }
+    if (seen === receipt) return;
+    viewedPresentations.current.set(key, receipt);
+    try { sessionStorage.setItem(key, receipt); } catch { /* Storage can be disabled. */ }
+    setOpenTabIds(current => current.includes(latest.id) ? current : [...current, latest.id]);
+    setActiveTabId(latest.id);
+    setViewerOpen(true);
+  }, [active, activeChat, chatId]);
 
   const currentViewerArtifact = useMemo(
     () => (activeTabId !== NEW_VIEWER_TAB_ID ? viewerArtifacts.find(item => item.id === activeTabId) ?? null : null),
@@ -496,6 +506,7 @@ export function SuperAgentWorkspace({
       || currentViewerArtifact.kind === 'motion-project'
       || currentViewerArtifact.kind === 'motion-export'
       || currentViewerArtifact.kind === 'asset-video'
+      || currentViewerArtifact.kind === 'asset-3d'
     ),
   );
 
@@ -707,6 +718,7 @@ export function SuperAgentWorkspace({
 
   // Apply chat snapshot and sync tabs / agent choices
   const applyChatSnapshot = useCallback((next: SuperAgentChat, isInitialLoad = false) => {
+    if (!isInitialLoad && routedChatIdRef.current && next.id !== routedChatIdRef.current) return;
     seedCachedSuperAgentChat(next);
     setActiveChat(next);
     setConversations(prev => upsertSummary(prev, next));
@@ -767,7 +779,8 @@ export function SuperAgentWorkspace({
       const prevActivePresentedAt = activeId ? (prev.presentedById[activeId] ?? 0) : 0;
       const activeRePresented = activePresentedAt !== undefined && activePresentedAt > prevActivePresentedAt;
       const activeChanged = Boolean(activeId && activeId !== prev.activeId);
-      const shouldPresent = Boolean(activeId) && (
+      const activeArtifact = artifacts.find(item => item.id === activeId);
+      const shouldPresent = activeArtifact && !isMediaArtifact(activeArtifact.kind) && activeArtifact.kind !== 'workspace-file' && (
         activeRePresented
         || activeChanged
         || (activeId ? newIds.includes(activeId) : false)
@@ -821,17 +834,23 @@ export function SuperAgentWorkspace({
     }
 
     let cancelled = false;
+    let lastSnapshotAt = 0;
+    const acceptSnapshot = (snapshot: SuperAgentChat, initial = false) => {
+      if (cancelled || snapshot.id !== chatId || snapshot.updatedAt < lastSnapshotAt) return;
+      lastSnapshotAt = snapshot.updatedAt;
+      applyChatSnapshot(snapshot, initial);
+    };
     const cached = chatRetry === 0 ? peekCachedSuperAgentChat(chatId) : undefined;
     if (cached) {
-      applyChatSnapshot(cached, true);
+      acceptSnapshot(cached, true);
       setLoadingChat(false);
     } else {
       setLoadingChat(true);
     }
     setLoadFailed(false);
-    void getSuperAgentChat(chatId)
+    void getSuperAgentChat(chatId, { fresh: true })
       .then(result => {
-        if (!cancelled && result.conversation !== cached) applyChatSnapshot(result.conversation, true);
+        if (result.conversation !== cached) acceptSnapshot(result.conversation, true);
       })
       .catch(() => {
         if (!cancelled && !cached) setLoadFailed(true);
@@ -843,9 +862,9 @@ export function SuperAgentWorkspace({
     let resyncTimer: number | null = null;
     const resyncChat = () => {
       if (cancelled) return;
-      void getSuperAgentChat(chatId)
+      void getSuperAgentChat(chatId, { fresh: true })
         .then(result => {
-          if (!cancelled) applyChatSnapshot(result.conversation, false);
+          acceptSnapshot(result.conversation);
         })
         .catch(() => { /* keep last known state while offline */ });
     };
@@ -857,7 +876,7 @@ export function SuperAgentWorkspace({
       }, 1500);
     };
     const onVisibilityChange = () => {
-      if (!document.hidden && prevBusyRef.current) {
+      if (!document.hidden) {
         resyncChat();
       }
     };
@@ -870,7 +889,7 @@ export function SuperAgentWorkspace({
           window.clearTimeout(resyncTimer);
           resyncTimer = null;
         }
-        if (!cancelled) applyChatSnapshot(next, false);
+        acceptSnapshot(next);
       },
       scheduleResync,
     );
@@ -1258,7 +1277,9 @@ export function SuperAgentWorkspace({
     if (activeChat && activeChat.activeArtifactId !== artifactId && !previewArtifactIdsRef.current.has(artifactId)) {
       void updateSuperAgentChat(activeChat.id, { activeArtifactId: artifactId })
         .then(res => {
-          if (res?.conversation) setActiveChat(res.conversation);
+          if (res?.conversation && routedChatIdRef.current === res.conversation.id) {
+            setActiveChat(current => current?.id === res.conversation.id && current.updatedAt <= res.conversation.updatedAt ? res.conversation : current);
+          }
         })
         .catch(() => { /* local tab already focused */ });
     }
@@ -1305,7 +1326,7 @@ export function SuperAgentWorkspace({
     return directMatch?.id ?? null;
   }, [viewerArtifacts]);
 
-  const handleOpenFilePath = useCallback((rawPath: string, label?: string) => {
+  const handleOpenFilePath = useCallback((rawPath: string, label?: string, rootKey?: string) => {
     const trimmed = rawPath.trim().replace(/^file:\/\//i, '');
     const hashIdx = trimmed.indexOf('#');
     const cleanPath = (hashIdx >= 0 ? trimmed.slice(0, hashIdx) : trimmed).trim();
@@ -1317,8 +1338,9 @@ export function SuperAgentWorkspace({
       return;
     }
 
+    const id = rootKey ? `file:ref:${rootKey}:${cleanPath}` : `file:ref:${cleanPath}`;
     const existing = viewerArtifacts.find(item =>
-      item.kind === 'workspace-file' && (item.filePath === cleanPath || item.id === `file:ref:${cleanPath}`),
+      item.kind === 'workspace-file' && !item.animation && (!rootKey || rootKey === item.rootKey) && (item.filePath === cleanPath || item.id === id),
     );
     if (existing) {
       void handleOpenArtifactId(existing.id);
@@ -1330,11 +1352,12 @@ export function SuperAgentWorkspace({
     const isMarkdown = /\.(?:md|markdown|mdx)$/i.test(cleanPath);
     const now = Date.now();
     openLocalPreviewArtifact({
-      id: `file:ref:${cleanPath}`,
+      id,
       kind: 'workspace-file',
       title: displayTitle,
       subtitle: cleanPath,
       filePath: cleanPath,
+      rootKey,
       ...(isMarkdown ? { mimeType: 'text/markdown' } : {}),
       createdAt: now,
       updatedAt: now,
@@ -1343,6 +1366,10 @@ export function SuperAgentWorkspace({
   }, [viewerArtifacts, openLocalPreviewArtifact, resolveInternalArtifactRouteId]);
 
   const handleOpenChangedFile = (file: SuperAgentFileOperation) => {
+    if (detectGameAssetPreview(file.path)) {
+      handleOpenFilePath(file.path, undefined, file.artifactId);
+      return;
+    }
     const inspectable = activeChat?.artifacts.filter(
       a => a.kind === 'game-project' || a.kind === 'design-project' || a.kind === 'motion-project',
     ) ?? [];
@@ -1399,6 +1426,10 @@ export function SuperAgentWorkspace({
       }
     }
     if (item.kind === 'file' && item.artifactId && item.filePath) {
+      if (detectGameAssetPreview(item.filePath) && item.rootKey !== 'upload') {
+        handleOpenFilePath(item.filePath, item.title, item.rootKey);
+        return;
+      }
       const projectArtifact = viewerArtifacts.find(a => a.id === item.artifactId);
       if (
         projectArtifact
@@ -1475,7 +1506,10 @@ export function SuperAgentWorkspace({
       }
       try {
         const res = await updateSuperAgentChat(activeChat.id, { addArtifact: patch });
+        if (routedChatIdRef.current !== activeChat.id) return;
         applyChatSnapshot(res.conversation, false);
+        setOpenTabIds(current => current.includes(patchId) ? current : [...current, patchId]);
+        setActiveTabId(patchId);
         setViewerOpen(true);
       } catch (error) {
         showToast(error instanceof Error ? error.message : t('Could not preview resource'));

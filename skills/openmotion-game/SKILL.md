@@ -19,6 +19,8 @@ When working on an owned copy of a complete, playable built-in template (`remixO
 
 ## 1. Route First — Read Only What Applies
 
+For a file reference in chat, write a short Markdown link to its workspace path. When the player asks you to show a model, clip, sprite atlas, map or sound immediately, call `openmotion_asset_manage` with `action: "present_asset"`, the intended Studio `conversationId`, and either the workspace-relative `path` or pinned `assetId` and `versionId`. To show a specific embedded GLB clip, send its exact name as `animation`. The conversation retains a link to reopen it. Apply a chosen asset to the game only when the user asks to use it.
+
 Ask **at most two short questions** only when missing: local-market publication consent and (when paid multimodal assets are planned) one batched spend confirmation. Load **only matching references** via MCP resources (`openmotion://workflow/game/<section>`, never stale local plugin caches) — read each needed section completely without slicing off later sections:
 
 | Decision | Options & Rule | Read Only When Matched |
