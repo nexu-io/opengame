@@ -9,6 +9,14 @@ function alive(pid: number) {
   try { process.kill(pid, 0); return true; }
   catch (error) { return (error as NodeJS.ErrnoException).code !== 'ESRCH'; }
 }
+export class ProcessLockTimeoutError extends Error {
+  readonly lockPath: string;
+  constructor(lockPath: string) {
+    super('Timed out waiting for OpenMotion lock: ' + lockPath);
+    this.name = 'ProcessLockTimeoutError';
+    this.lockPath = lockPath;
+  }
+}
 async function retryBusy<T>(work: () => Promise<T>): Promise<T> {
   const deadline = Date.now() + 2000;
   for (;;) {
@@ -47,7 +55,7 @@ export async function withProcessLock<T>(filename: string, work: () => Promise<T
             if ((await ownerOf(filename))?.token === owner.token) await retryBusy(() => unlink(filename));
           }, Math.max(1, deadline - Date.now()));
         }
-        if (Date.now() >= deadline) throw new Error('Timed out waiting for OpenMotion lock: ' + filename);
+        if (Date.now() >= deadline) throw new ProcessLockTimeoutError(filename);
         await pause();
       }
     }

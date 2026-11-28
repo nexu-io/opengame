@@ -23,7 +23,7 @@ Modes:
 Options:
   --force            Bypass the 24-hour check cooldown (for --check or --auto)
   --no-restart       Do not shut down an idle local editor daemon after updating
-  --data-dir DIR     Workspace data directory for update-check state and lock (default: MOTION_DATA_DIR or .motion-data)
+  --data-dir DIR     Workspace data directory for update-check state (default: MOTION_DATA_DIR or .motion-data)
   --remote NAME      Git remote to fetch from (default: ${DEFAULT_UPDATE_REMOTE})
   --branch NAME      Git branch to track (default: ${DEFAULT_UPDATE_BRANCH})
   -h, --help         Show this help text`;
