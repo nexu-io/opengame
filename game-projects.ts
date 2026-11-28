@@ -2060,7 +2060,12 @@ function peer(socket: Duplex, onMessage: (data: any) => void, onClose: () => voi
   let fragmentTimer: ReturnType<typeof setTimeout> | undefined;
   const clearFragmentTimer = () => { if (fragmentTimer) clearTimeout(fragmentTimer); fragmentTimer = undefined; };
   socket.once('close', clearFragmentTimer);
-  const send = (value: RoomServerMessage & { reconnectToken?: string }) => { if (!socket.destroyed) { if (socket.writableLength > 2 * LIMIT) socket.destroy(); else socket.write(frame(1,Buffer.from(JSON.stringify(value)))); } };
+  const canWriteFrame = () => {
+    if (socket.destroyed) return false;
+    if (socket.writableLength > 2 * LIMIT) { socket.destroy(); return false; }
+    return true;
+  };
+  const send = (value: RoomServerMessage & { reconnectToken?: string }) => { if (canWriteFrame()) socket.write(frame(1,Buffer.from(JSON.stringify(value)))); };
   socket.on('error', () => socket.destroy()); socket.once('close', onClose);
   socket.on('data', chunk => {
     if (socket.destroyed) return;
@@ -2077,8 +2082,8 @@ function peer(socket: Duplex, onMessage: (data: any) => void, onClose: () => voi
         if (buffer.length < offset+4+size) break;
         const mask = buffer.subarray(offset,offset+4), payload = Buffer.from(buffer.subarray(offset+4,offset+4+size)); buffer = buffer.subarray(offset+4+size);
         for (let i=0;i<size;i++) payload[i] ^= mask[i%4];
-        if (opcode === 8) { socket.end(frame(8,payload)); return; }
-        if (opcode === 9) { socket.write(frame(10,payload)); continue; }
+        if (opcode === 8) { if (canWriteFrame()) socket.end(frame(8,payload)); return; }
+        if (opcode === 9) { if (canWriteFrame()) socket.write(frame(10,payload)); continue; }
         if (opcode === 10) continue;
         if (opcode !== 1 && opcode !== 0 || opcode === 0 && !fragmented || opcode === 1 && fragmented) throw new Error('Invalid text fragmentation');
         if (opcode === 1 && !fin) { fragmentTimer = setTimeout(() => socket.destroy(), 10000); fragmentTimer.unref(); }
