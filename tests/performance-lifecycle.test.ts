@@ -213,6 +213,36 @@ test('serveEditorFile compresses static payloads (br/gzip), sets cache headers, 
     assert.equal(gzRes.headers['content-encoding'], 'gzip');
     assert.equal(gunzipSync(gzRes.body).equals(cssDisk), true);
 
+    const encodingCases: Array<[string | null, 'br' | 'gzip' | null]> = [
+      ['gzip;q=1, br;q=0', 'gzip'],
+      ['br;q=0, gzip;q=0', null],
+      ['br;q=0.1, gzip;q=1', 'gzip'],
+      ['br;q=0.9, gzip;q=0.2', 'br'],
+      ['br;q=0, *;q=0.5', 'gzip'],
+      ['gzip;q=0, *;q=0.5', 'br'],
+      ['BR ; q=0.000, GZIP ; Q=0.8', 'gzip'],
+      ['x-br-test, x-gzip-test', null],
+      ['br;q=0.5, identity;q=1', null],
+      ['br;q=0.5, gzip;q=0.5', 'br'],
+      ['*;q=1', 'br'],
+      ['br;q=0., gzip;q=1.', 'gzip'],
+      ['gzip;q=0.5', 'gzip'],
+      ['', null],
+      [null, null],
+    ];
+    for (const [acceptEncoding, expectedEncoding] of encodingCases) {
+      const label = acceptEncoding ?? 'no Accept-Encoding header';
+      const response = await requestRaw(address.port, '/design-system/studio.css', acceptEncoding === null ? {} : {
+        'Accept-Encoding': acceptEncoding,
+      });
+      assert.equal(response.statusCode, 200, label);
+      assert.equal(response.headers['content-encoding'], expectedEncoding ?? undefined, label);
+      const decoded = expectedEncoding === 'br' ? brotliDecompressSync(response.body)
+        : expectedEncoding === 'gzip' ? gunzipSync(response.body)
+          : response.body;
+      assert.deepEqual(decoded, cssDisk, label);
+    }
+
     const notModified = await requestRaw(address.port, '/design-system/studio.css', {
       'Accept-Encoding': 'br, gzip',
       'If-None-Match': String(brRes.headers.etag),

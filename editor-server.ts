@@ -72,10 +72,24 @@ function resolveCacheControl(pathname: string, designFile: string | undefined): 
 function negotiatedEncoding(req?: IncomingMessage): 'br' | 'gzip' | null {
   const header = req?.headers['accept-encoding'];
   const accept = Array.isArray(header) ? header.join(',').toLowerCase() : String(header ?? '').toLowerCase();
-  if (!accept) return null;
-  if (/\bbr\b/.test(accept)) return 'br';
-  if (/\bgzip\b/.test(accept)) return 'gzip';
-  return null;
+  const qualities = new Map<string, number>();
+  for (const entry of accept.split(',')) {
+    const match = /^\s*(br|gzip|identity|\*)\s*(?:;\s*q\s*=\s*(0(?:\.\d{0,3})?|1(?:\.0{0,3})?))?\s*$/.exec(entry);
+    if (!match) continue;
+    const quality = match[2] === undefined ? 1 : Number(match[2]);
+    qualities.set(match[1], Math.max(qualities.get(match[1]) ?? 0, quality));
+  }
+
+  let encoding: 'br' | 'gzip' | null = null;
+  let quality = qualities.get('identity') ?? 0;
+  for (const coding of ['br', 'gzip'] as const) {
+    const candidateQuality = qualities.get(coding) ?? qualities.get('*') ?? 0;
+    if (candidateQuality > quality) {
+      encoding = coding;
+      quality = candidateQuality;
+    }
+  }
+  return encoding;
 }
 
 async function compressPayload(raw: Buffer, encoding: 'br' | 'gzip'): Promise<Buffer> {
