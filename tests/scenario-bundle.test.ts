@@ -462,3 +462,77 @@ test('full workflow ZIP keeps the script after saving a brief version and honors
     }));
     assert.equal(await exportedScript('script-bundle-promoted'), scripts[0]);
   }, false));
+
+
+for (const [label, names] of [
+  ['duplicate labels', ['Landing Page', 'Landing Page']],
+  ['non-ASCII labels', ['首页', '促销页']],
+  ['a generated suffix colliding with another label', ['Page', 'Page', 'Page-2']],
+] as const) {
+  test('scenario bundle keeps project-relative files for ' + label, () =>
+    fixture(async store => {
+      const api = transport(store, { runtimeRoot: pluginRoot } as Service);
+      const design = designProjectsFor(store.directory);
+      let { run }: { run: ScenarioRun } = await callScenario(api, {
+        command: 'create', scenarioId: 'design-full-chain', requestId: 'directory-run',
+      });
+      const expected = new Map<string, { css: string; script: string }>();
+      const selected: string[] = [];
+      for (const [index, title] of names.entries()) {
+        const project = await design.create({
+          requestId: 'directory-create-' + index, scenario: 'prototype', title,
+        });
+        const css = 'body { --page-id: "page-' + index + '"; }';
+        const script = 'window.pageId = "page-' + index + '";';
+        const written = await design.write(project.id, {
+          requestId: 'directory-write-' + index, expectedRevision: project.revision,
+          files: [
+            { path: 'index.html', content: '<!doctype html><html><head><link rel="stylesheet" href="./styles/main.css"></head><body><h1>Page ' + index + '</h1><script src="./scripts/app.js"></script></body></html>' },
+            { path: 'styles/main.css', content: css },
+            { path: 'scripts/app.js', content: script },
+          ],
+        });
+        expected.set(project.id, { css, script });
+        const added = await callScenario(api, {
+          command: 'add_pool', runId: run.id, expectedRevision: run.revision,
+          requestId: 'directory-pool-' + index,
+          items: [{
+            ref: { type: 'design', projectId: project.id, versionId: written.version.id, revision: written.project.revision },
+            label: title, source: 'workspace', stepId: null,
+          }],
+        });
+        run = added.run;
+        selected.push(added.poolItemIds[0]);
+      }
+      for (const includeStandaloneHtml of [false, true]) {
+        const { bundle } = await callScenario(api, {
+          command: 'export', runId: run.id, requestId: 'directory-export-' + includeStandaloneHtml,
+          poolItemIds: selected, includeStandaloneHtml,
+        });
+        const entries = readProjectZip(await readFile(bundle.archivePath));
+        const prefix = [...entries.keys()][0].split('/')[0] + '/';
+        const manifest = JSON.parse(entries.get(prefix + 'manifest.json')!.toString()) as {
+          pool: Array<{ id: string; path: string; ref: { projectId: string } }>;
+        };
+        const directories = new Set<string>();
+        assert.deepEqual(manifest.pool.map(item => item.id), selected);
+        for (const item of manifest.pool) {
+          const directory = path.posix.dirname(item.path);
+          directories.add(directory);
+          const files = expected.get(item.ref.projectId)!;
+          const html = entries.get(prefix + item.path)!.toString();
+          assert.match(html, /href="\.\/styles\/main\.css"/);
+          assert.match(html, /src="\.\/scripts\/app\.js"/);
+          assert.equal(entries.get(prefix + directory + '/styles/main.css')?.toString(), files.css);
+          assert.equal(entries.get(prefix + directory + '/scripts/app.js')?.toString(), files.script);
+          assert.equal(path.posix.basename(item.path), 'index.html');
+          if (includeStandaloneHtml) {
+            const standalone = entries.get(prefix + directory + '.standalone.html')?.toString();
+            assert.ok(standalone?.includes(files.css));
+            assert.ok(standalone.includes(files.script));
+          }
+        }
+        assert.equal(directories.size, names.length);
+      }
+    }, false));
+}

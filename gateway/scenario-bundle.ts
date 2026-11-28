@@ -148,6 +148,7 @@ export async function buildScenarioBundle(
     const rootDir = `${mediaFilename(title, '')} · ${formatDateStamp(new Date())}`;
     const entries: { name: string; data: Buffer }[] = [];
     const usedNames = new Set<string>();
+    const usedDesignFolders = new Set<string>();
     let totalBytes = 0;
 
     const allocateRelPath = (rawRel: string): string => {
@@ -208,20 +209,27 @@ export async function buildScenarioBundle(
       folderSlug: string,
       onPath?: (rel: string) => void,
     ): Promise<{ paths: string[]; entryRel: string }> => {
+      // Keep each project's relative file graph together. Renaming individual
+      // colliding files would leave its HTML/CSS/JS pointing at another project.
+      let folder = folderSlug;
+      for (let suffix = 2; usedDesignFolders.has(foldProjectName(folder)); suffix += 1) {
+        folder = `${folderSlug}-${suffix}`;
+      }
+      usedDesignFolders.add(foldProjectName(folder));
       const projectDetail = await host.design.get(projectId, host.origin());
       const zipExport = await host.design.exportProject(projectId, { format: 'zip', versionId });
       const unpacked = readProjectZip(zipExport.data);
       const paths: string[] = [];
-      let entryRel = `web/${folderSlug}/${projectDetail.entry}`;
+      let entryRel = `web/${folder}/${projectDetail.entry}`;
       for (const [relPath, buf] of unpacked.entries()) {
-        const storedRel = addEntry(`web/${folderSlug}/${cleanDesignPath(relPath)}`, buf);
+        const storedRel = addEntry(`web/${folder}/${cleanDesignPath(relPath)}`, buf);
         paths.push(storedRel);
         if (relPath === projectDetail.entry) entryRel = storedRel;
         onPath?.(storedRel);
       }
       if (includeStandaloneHtml) {
         const htmlExport = await host.design.exportProject(projectId, { format: 'html', versionId });
-        const standaloneRel = addEntry(`web/${folderSlug}.standalone.html`, htmlExport.data);
+        const standaloneRel = addEntry(`web/${folder}.standalone.html`, htmlExport.data);
         paths.push(standaloneRel);
         onPath?.(standaloneRel);
       }
