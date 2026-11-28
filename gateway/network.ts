@@ -217,12 +217,25 @@ export async function resolvePublicAddresses(
     publicDns: resolvePublicDns,
   },
 ): Promise<PublicAddress[]> {
+  signal.throwIfAborted();
   const family = isIP(hostname);
   if (family) {
     if (!isPublicAddress(hostname)) throw new Error(errorMessage);
     return [{ address: hostname, family }];
   }
-  let addresses = await dependencies.lookup(hostname);
+  // System DNS does not accept AbortSignal. Release the caller on cancellation
+  // while retaining handlers for any eventual resolver result or failure.
+  let cancelWait = () => {};
+  const cancelled = new Promise<never>((_resolve, reject) => {
+    cancelWait = () => reject(signal.reason);
+    signal.addEventListener('abort', cancelWait, { once: true });
+  });
+  let addresses: PublicAddress[];
+  try {
+    addresses = await Promise.race([dependencies.lookup(hostname), cancelled]);
+  } finally {
+    signal.removeEventListener('abort', cancelWait);
+  }
   signal.throwIfAborted();
   // Only the benchmarking/Fake-IP range (198.18.0.0/15) used by TUN proxies gets a DoH re-check.
   if (addresses.length && addresses.every(({ address }) => syntheticAddress(address))) {

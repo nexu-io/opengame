@@ -278,7 +278,7 @@ jobs:
             tests/bootstrap.test.ts tests/inline-onboarding.test.ts tests/inline-storyboard.test.ts \
             tests/onboarding-workspace.test.ts tests/source-marketplace.test.ts \
             tests/byok.test.ts tests/transcription.test.ts tests/transcription-transport.test.ts tests/generation-options.test.ts tests/asset-library.test.ts \
-            tests/gateway.test.ts tests/capability-center.test.ts tests/mcp-onboarding.test.ts tests/media-use.test.ts tests/product-identity.test.ts \
+            tests/gateway.test.ts tests/provider-dns-cancellation.test.ts tests/capability-center.test.ts tests/mcp-onboarding.test.ts tests/media-use.test.ts tests/product-identity.test.ts \
             tests/provider-settings.test.ts tests/local-agents.test.ts tests/agent-runtimes.test.ts tests/super-agent-adapters.test.ts \
             tests/web-publish.test.ts tests/content-batch.test.ts tests/design-deploy.test.ts tests/e2e-deploy-game-chain.test.ts tests/mcp-http.test.ts \
             tests/wechat-minigame.test.ts tests/local-game-preview.test.ts tests/workspace-json-preview.test.ts \
