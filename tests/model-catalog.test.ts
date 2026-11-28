@@ -9,6 +9,22 @@ import { catalogDimension, searchModels } from '../gateway/model-catalog.ts';
 import { superAgentConversations } from '../gateway/super-agent.ts';
 import { pluginRoot } from '../hyperframes.ts';
 import { fixture } from './fixtures.ts';
+import { assetManageTool } from '../shared/capability-tools.ts';
+import { validateInput } from '../shared/phase1-tools.ts';
+
+test('catalog and presentation actions accept request context while keeping sources exclusive', () => {
+  const conversationId = '00000000-0000-4000-8000-000000000001';
+  const context = { conversationId, requestId: 'preview-request' };
+  const validate = (input: Record<string, unknown>) => validateInput(assetManageTool.inputSchema, input);
+  for (const action of [
+    { action: 'present_asset', path: 'art/hero.glb' },
+    { action: 'present_asset', assetId: conversationId, versionId: conversationId },
+    { action: 'browse_models' }, { action: 'search_models', query: 'hero' },
+    { action: 'acquire_model', id: 'polyhaven:chair' },
+  ]) validate({ ...context, ...action });
+  assert.throws(() => validate({ ...context, action: 'present_asset', path: 'hero.glb', assetId: conversationId }));
+  assert.throws(() => validate({ ...context, action: 'browse_models', undocumented: true }));
+});
 
 test('model catalog shares scoped search, browsing and verified workspace downloads across HTTP and MCP', t => fixture(async store => {
   const server = createServer((req, res) => { void handler(req, res, store, { runtimeRoot: pluginRoot }); });

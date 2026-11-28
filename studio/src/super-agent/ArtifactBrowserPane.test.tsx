@@ -76,7 +76,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function renderViewer(artifacts: SuperAgentArtifact[], initialTabId = artifacts[0].id, onModelCatalogAction = vi.fn(async (_action: { query?: string } | { id: string }) => {})) {
+async function renderViewer(artifacts: SuperAgentArtifact[], initialTabId = artifacts[0].id, onModelCatalogAction = vi.fn(async (_action: { query?: string } | { id: string }) => {}), onOpenWebUrl = vi.fn((_url: string) => {})) {
   const noop = () => {};
   function Harness() {
     const [activeTabId, setActiveTabId] = useState(initialTabId);
@@ -91,7 +91,7 @@ async function renderViewer(artifacts: SuperAgentArtifact[], initialTabId = arti
         onSelectTab={setActiveTabId}
         onCloseTab={noop}
         onNewTab={() => setActiveTabId(NEW_VIEWER_TAB_ID)}
-        onOpenWebUrl={noop}
+        onOpenWebUrl={onOpenWebUrl}
         onOpenArtifact={setActiveTabId}
         onModelCatalogAction={onModelCatalogAction}
         onOpenResource={noop}
@@ -114,6 +114,27 @@ async function renderViewer(artifacts: SuperAgentArtifact[], initialTabId = arti
     await Promise.resolve();
   });
 }
+
+it('keeps edited catalog addresses out of web suggestions and web navigation', async () => {
+  const catalog: SuperAgentArtifact = { id: 'catalog', kind: 'model-catalog', title: 'Catalog', createdAt: 1, updatedAt: 1 };
+  const navigate = vi.fn((_url: string) => {});
+  await renderViewer([catalog], catalog.id, undefined, navigate);
+  const input = container.querySelector<HTMLInputElement>('.om-sa-address-form input')!;
+  const type = async (text: string) => act(async () => {
+    input.focus();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const submit = () => act(async () => { input.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+  await type('catalog://sprites?q=dungeon');
+  expect(container.querySelector('.om-sa-address-suggest')).toBeNull();
+  await submit();
+  expect(navigate).not.toHaveBeenCalled();
+  await type('oak trees');
+  expect(container.querySelector('.om-sa-address-suggest')).not.toBeNull();
+  await submit();
+  expect(navigate).toHaveBeenCalledTimes(1);
+});
 
 it('opens the catalog from a new tab and renders an Agent search with source-only and downloadable results', async () => {
   const catalog: SuperAgentArtifact = { id: 'catalog', kind: 'model-catalog', title: 'Free 3D models', catalogQuery: 'oak tree', createdAt: 1, updatedAt: 1 };

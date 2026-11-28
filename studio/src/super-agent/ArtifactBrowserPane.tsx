@@ -139,6 +139,8 @@ function artifactTabIcon(kind: SuperAgentArtifactKind, filePath?: string, mimeTy
   }
 }
 
+const INTERNAL_ARTIFACT_ADDRESS = /^(?:design|motion|game|export|asset|brand|catalog):\/\//i;
+
 function normalizeBrowserAddress(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
@@ -2643,7 +2645,7 @@ export function ArtifactBrowserPane({
               event.preventDefault();
               const trimmed = addressDraft.trim();
               const activeDisplay = catalogAddress || (activeArtifact ? artifactAddressDisplay(activeArtifact) : '');
-              if (!trimmed || (activeArtifact?.kind !== 'web' && trimmed === activeDisplay) || /^(?:design|motion|game|export|asset|brand):\/\//i.test(trimmed)) return;
+              if (!trimmed || (activeArtifact?.kind !== 'web' && trimmed === activeDisplay) || INTERNAL_ARTIFACT_ADDRESS.test(trimmed)) return;
               const normalized = normalizeBrowserAddress(trimmed);
               setAddressEditing(false);
               addressInputRef.current?.blur();
@@ -2668,7 +2670,7 @@ export function ArtifactBrowserPane({
           {addressEditing
             && addressDraft.trim()
             && !(activeArtifact && activeArtifact.kind !== 'web' && addressDraft.trim() === (catalogAddress || artifactAddressDisplay(activeArtifact)))
-            && !/^(?:design|motion|game|export|asset|brand):\/\//i.test(addressDraft.trim())
+            && !INTERNAL_ARTIFACT_ADDRESS.test(addressDraft.trim())
             && (() => {
             const trimmed = addressDraft.trim();
             const normalized = normalizeBrowserAddress(trimmed);
