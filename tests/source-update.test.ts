@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -1323,4 +1323,114 @@ test('syncInstalledHostSkills refreshes consolidated openmotion-video copies in 
   assert.ok(synced.some(entry => entry.endsWith('openmotion-video')), synced.join(', '));
   assert.match(await readFile(path.join(installedDir, 'SKILL.md'), 'utf8'), /updated body/);
   assert.match(await readFile(path.join(installedDir, 'workflows/director.md'), 'utf8'), /# director/);
+});
+
+test('source update preserves checkout identity changes made during fetch', async t => {
+  for (const change of ['commit', 'branch', 'detach'] as const) {
+    await t.test(change, async subtest => {
+      const { checkout, dataDir, fakeHome, commitUpstream } = await createGitFixtures(subtest);
+      const before = await runGit(checkout, ['rev-parse', 'HEAD']);
+      await commitUpstream({ 'game-projects.ts': 'export const gameVersion = 2;\n' }, 'Upstream update');
+      const tracker = createTrackingExec();
+      let changed = false;
+      let preservedCommit = before;
+
+      const result = await applySourceUpdate({
+        repoRoot: checkout,
+        dataDirectory: dataDir,
+        homeDirectory: fakeHome,
+        restartBackend: false,
+        exec: async (file, args, options) => {
+          const output = await tracker.exec(file, args, options);
+          if (file === 'git' && args.includes('fetch') && !changed) {
+            changed = true;
+            if (change === 'commit') {
+              await writeFile(path.join(checkout, 'local-note.txt'), 'saved during fetch\n');
+              await runGit(checkout, ['add', 'local-note.txt']);
+              await runGit(checkout, ['commit', '-m', 'Local work during fetch']);
+              preservedCommit = await runGit(checkout, ['rev-parse', 'HEAD']);
+            } else if (change === 'branch') {
+              await runGit(checkout, ['checkout', '-b', 'local-work']);
+            } else {
+              await runGit(checkout, ['checkout', '--detach']);
+            }
+          }
+          return output;
+        },
+      });
+
+      assert.equal(changed, true);
+      assert.equal(await runGit(checkout, ['rev-parse', 'HEAD']), preservedCommit, 'the updater must preserve the new checkout');
+      assert.equal(await runGit(checkout, ['branch', '--show-current']), change === 'commit' ? 'main' : change === 'branch' ? 'local-work' : '');
+      assert.equal(result.status, change === 'commit' ? 'non_fast_forward' : 'non_target_branch');
+      assert.equal(result.reason, 'checkout_changed_during_update');
+      assert.equal(result.updated, false);
+      assert.equal(result.currentCommit, preservedCommit);
+      assert.equal(tracker.gitCalls.some(args => args.includes('reset')), false);
+      assert.equal(tracker.npmCalls.length, 0);
+      assert.equal((await readUpdateState(dataDir))?.currentCommit, preservedCommit);
+      if (change === 'commit') {
+        assert.equal(await readFile(path.join(checkout, 'local-note.txt'), 'utf8'), 'saved during fetch\n');
+      }
+    });
+  }
+});
+
+test('source update preserves checkout changes instead of rolling them back after a failed build', async t => {
+  for (const change of ['commit', 'branch', 'edit'] as const) {
+    await t.test(change, async subtest => {
+      const { checkout, dataDir, fakeHome, commitUpstream } = await createGitFixtures(subtest);
+      const target = await commitUpstream({ 'studio/src/app.ts': 'export const v = 2;\n' }, 'Studio update');
+      const tracker = createTrackingExec({ failOnNpmRun: true });
+      let changed = false;
+      let preservedCommit = target;
+
+      const result = await applySourceUpdate({
+        repoRoot: checkout,
+        dataDirectory: dataDir,
+        homeDirectory: fakeHome,
+        restartBackend: false,
+        exec: async (file, args, options) => {
+          try {
+            return await tracker.exec(file, args, options);
+          } catch (error) {
+            if (args.includes('build:studio') && !changed) {
+              changed = true;
+              if (change === 'commit') {
+                await writeFile(path.join(checkout, 'local-note.txt'), 'saved during build\n');
+                await runGit(checkout, ['add', 'local-note.txt']);
+                await runGit(checkout, ['commit', '-m', 'Local work during build']);
+                preservedCommit = await runGit(checkout, ['rev-parse', 'HEAD']);
+              } else if (change === 'branch') {
+                await runGit(checkout, ['checkout', '-b', 'local-work']);
+              } else {
+                await writeFile(path.join(checkout, 'game-projects.ts'), 'export const localWork = true;\n');
+              }
+            }
+            throw error;
+          }
+        },
+      });
+
+      assert.equal(changed, true);
+      assert.equal(await runGit(checkout, ['rev-parse', 'HEAD']), preservedCommit, 'rollback must preserve the new checkout');
+      assert.equal(await runGit(checkout, ['branch', '--show-current']), change === 'branch' ? 'local-work' : 'main');
+      assert.equal(result.status, 'failed');
+      assert.equal(result.rolledBack, false);
+      assert.equal(result.reason, 'checkout_changed_during_update');
+      assert.equal(result.currentCommit, preservedCommit);
+      assert.match(result.error ?? '', /Vite build exploded; rollback skipped/);
+      assert.equal(tracker.gitCalls.filter(args => args.includes('reset')).length, 1, 'only the initial update reset may run');
+      assert.equal((await readUpdateState(dataDir))?.currentCommit, preservedCommit);
+      if (change === 'commit') {
+        assert.equal(await readFile(path.join(checkout, 'local-note.txt'), 'utf8'), 'saved during build\n');
+      } else if (change === 'edit') {
+        assert.equal(await readFile(path.join(checkout, 'game-projects.ts'), 'utf8'), 'export const localWork = true;\n');
+      }
+      const backupRoot = path.join(checkout, '.artifacts/install');
+      const backups = (await readdir(backupRoot)).filter(name => name.startsWith('update-rollback-'));
+      assert.equal(backups.length, 1, 'keep the old build available for recovery');
+      assert.equal(await readFile(path.join(backupRoot, backups[0], 'studio/build/index.html'), 'utf8'), '<html>v1</html>');
+    });
+  }
 });

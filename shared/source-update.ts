@@ -1010,6 +1010,22 @@ export async function discardBuildBackups(backups: BuildOutputBackupSet | null):
   await rm(backups.rootDir, { recursive: true, force: true }).catch(() => {});
 }
 
+async function readCheckoutIdentity(
+  exec: ExecRunner,
+  repoRoot: string,
+  env: NodeJS.ProcessEnv,
+): Promise<{ commit: string; branch: string | undefined }> {
+  const commit = (await runGit(exec, repoRoot, ['rev-parse', 'HEAD'], env, 5_000)).stdout.trim().toLowerCase();
+  let branch: string | undefined;
+  try {
+    branch = (await runGit(exec, repoRoot, ['symbolic-ref', '--quiet', '--short', 'HEAD'], env, 5_000)).stdout.trim();
+  } catch (error) {
+    // A detached HEAD is a valid identity, but an unreadable checkout is not.
+    if ((error as { code?: unknown }).code !== 1) throw error;
+  }
+  return { commit, branch };
+}
+
 async function isAncestor(
   exec: ExecRunner,
   repoRoot: string,
@@ -1287,6 +1303,30 @@ export async function applySourceUpdate(options: SourceUpdateOptions): Promise<S
       };
     }
 
+    // A commit, branch switch or detach can leave a clean worktree. Preserve
+    // changes made while fetch/ancestry checks were in flight before resetting.
+    const currentCheckout = await readCheckoutIdentity(exec, repoRoot, env);
+    if (currentCheckout.commit !== previousCommit || currentCheckout.branch !== branch) {
+      const status = currentCheckout.branch !== branch ? 'non_target_branch' : 'non_fast_forward';
+      await writeUpdateState(options.dataDirectory, {
+        lastCheckedAt: now,
+        lastAttemptAt: now,
+        lastStatus: status,
+        currentCommit: currentCheckout.commit,
+        remoteCommit: targetCommit,
+        branch: currentCheckout.branch,
+        lastError: undefined,
+      }).catch(() => {});
+      return {
+        status,
+        updated: false,
+        reason: 'checkout_changed_during_update',
+        branch: currentCheckout.branch,
+        previousCommit,
+        currentCommit: currentCheckout.commit,
+      };
+    }
+
     await runGit(exec, repoRoot, ['reset', '--hard', targetCommit], env, 30_000);
 
     let depsInstalled = false;
@@ -1326,17 +1366,26 @@ export async function applySourceUpdate(options: SourceUpdateOptions): Promise<S
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       let gitRolledBack = false;
+      let checkoutChanged = false;
+      let remainingCommit = targetCommit;
+      let remainingBranch: string | undefined = branch;
       try {
-        await runGit(exec, repoRoot, ['reset', '--hard', previousCommit], env, 30_000);
-        gitRolledBack = true;
+        const checkout = await readCheckoutIdentity(exec, repoRoot, env);
+        remainingCommit = checkout.commit;
+        remainingBranch = checkout.branch;
+        checkoutChanged = checkout.commit !== targetCommit || checkout.branch !== branch
+          || (await readDirtyWorktreeFiles()).length > 0;
+        if (!checkoutChanged) {
+          await runGit(exec, repoRoot, ['reset', '--hard', previousCommit], env, 30_000);
+          gitRolledBack = true;
+        }
       } catch {
         gitRolledBack = false;
       }
 
-      // Always restore backed-up build outputs (or discard backups if git reset failed)
-      // regardless of whether dependency reinstall succeeds, so studio/build is recovered
-      // whenever possible and any unrestored backup remains preserved under gitignored
-      // .artifacts/install for manual recovery.
+      // Restore outputs after a successful rollback, even if dependency reinstall
+      // fails. When the checkout changed during installation/build, leave its files
+      // alone and retain the previous build under .artifacts/install for recovery.
       const restoredBuildState = gitRolledBack ? await loadBuildStateModule(repoRoot).catch(() => null) : null;
       if (buildBackups) {
         if (gitRolledBack) {
@@ -1344,7 +1393,7 @@ export async function applySourceUpdate(options: SourceUpdateOptions): Promise<S
           if (outputsRestored && restoredBuildState && existsSync(path.join(repoRoot, '.artifacts/install/source-build.json'))) {
             await restoredBuildState.recordSourceBuild(repoRoot).catch(() => {});
           }
-        } else {
+        } else if (!checkoutChanged) {
           await discardBuildBackups(buildBackups);
         }
         buildBackups = null;
@@ -1359,23 +1408,27 @@ export async function applySourceUpdate(options: SourceUpdateOptions): Promise<S
         }
       }
 
+      const failureMessage = checkoutChanged
+        ? `${message}; rollback skipped because the checkout changed during the update`
+        : message;
       await writeUpdateState(options.dataDirectory, {
         lastCheckedAt: undefined,
         lastAttemptAt: now,
         lastStatus: gitRolledBack ? 'failed_rolled_back' : 'failed',
-        currentCommit: gitRolledBack ? previousCommit : targetCommit,
+        currentCommit: gitRolledBack ? previousCommit : remainingCommit,
         remoteCommit: targetCommit,
-        branch,
-        lastError: message.slice(0, 500),
+        branch: remainingBranch,
+        lastError: failureMessage.slice(0, 500),
       }).catch(() => {});
       return {
         status: gitRolledBack ? 'failed_rolled_back' : 'failed',
         updated: false,
         rolledBack: gitRolledBack,
-        branch,
+        ...(checkoutChanged ? { reason: 'checkout_changed_during_update' } : {}),
+        branch: remainingBranch,
         previousCommit,
-        currentCommit: gitRolledBack ? previousCommit : targetCommit,
-        error: message,
+        currentCommit: gitRolledBack ? previousCommit : remainingCommit,
+        error: failureMessage,
       };
     }
 
