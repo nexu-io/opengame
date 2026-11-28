@@ -1,3 +1,4 @@
+import type { PreviewKind } from '../../../../shared/game-asset-preview';
 export { detectGameAssetPreview, type PreviewKind } from '../../../../shared/game-asset-preview';
 
 export type GameAssetPreviewProps = {
@@ -5,6 +6,7 @@ export type GameAssetPreviewProps = {
   url: string;
   resolveFileUrl?: (workspacePath: string) => string | null | undefined;
   content?: string;
+  previewKind?: PreviewKind;
   active?: boolean;
   title?: string;
 };
@@ -23,7 +25,7 @@ export function companionPath(path: string, reference: string) {
   return segments.join('/');
 }
 
-export async function readPreviewBytes(url: string, signal: AbortSignal, limit: number) {
+export async function readPreviewBytes(url: string | URL, signal: AbortSignal, limit: number) {
   const response = await fetch(url, { signal, redirect: 'error', mode: 'same-origin' });
   if (!response.ok || !response.body) throw new Error('Could not load file');
   const reader = response.body.getReader();

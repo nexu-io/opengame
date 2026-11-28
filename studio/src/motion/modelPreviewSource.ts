@@ -1,3 +1,5 @@
+import { readPreviewBytes } from './gameAssetPreview/formats';
+
 const offlineMessage = 'Preview requires a GLB with embedded buffers and textures.';
 
 /** Inspect the JSON chunk before the renderer can request external files or CDN decoders. */
@@ -8,9 +10,7 @@ export async function loadModelPreviewSource(src: string, signal: AbortSignal) {
   const workspaceFile = url.pathname === '/motion-api/super-agent/file-content' && url.searchParams.get('raw') === '1';
   if (url.origin !== location.origin || !['http:', 'https:'].includes(url.protocol) || url.username || url.password ||
       !(assetFile || upload || workspaceFile)) throw new Error('Preview unavailable');
-  const response = await fetch(url, { signal, redirect: 'error' });
-  if (!response.ok) throw new Error('Preview unavailable');
-  const file = await response.blob();
+  const file = await readPreviewBytes(url, signal, 48 * 1024 ** 2);
   const header = new DataView(await file.slice(0, 20).arrayBuffer());
   if (header.byteLength < 20 || header.getUint32(0, true) !== 0x46546c67 ||
       header.getUint32(4, true) !== 2 || header.getUint32(8, true) !== file.size || header.getUint32(16, true) !== 0x4e4f534a) {

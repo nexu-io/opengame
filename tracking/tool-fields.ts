@@ -562,7 +562,7 @@ const invalidFields = [
   'anchor.annotation.height', 'anchor.annotation.marks', 'anchor.annotation.marks[]', 'anchor.annotation.marks[].kind',
   'anchor.annotation.marks[].text', 'anchor.annotation.marks[].points', 'anchor.annotation.marks[].points[]',
   'anchor.annotation.marks[].points[].x', 'anchor.annotation.marks[].points[].y',
-  'copyAttemptId', 'templateEntry', 'action', 'all', 'arguments', 'assetId', 'assetNames', 'assetNames[]', 'assetNames[].name',
+  'copyAttemptId', 'templateEntry', 'action', 'all', 'animation', 'arguments', 'assetId', 'assetNames', 'assetNames[]', 'assetNames[].name',
   'assetNames[].path', 'audio', 'brandKit', 'brandKit.catalogId', 'brandKit.expectedUpdatedAt', 'brandKit.file',
   'brandKit.file.data', 'brandKit.file.name', 'brandKit.kitId', 'brandKit.name', 'brandKit.operation',
   'brandKit.query', 'brandKit.remove', 'brandKit.requestId', 'brandKit.rules', 'brandKit.rules[]', 'brandKit.style',

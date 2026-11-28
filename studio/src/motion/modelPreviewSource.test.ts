@@ -42,13 +42,31 @@ describe('local model preview sources', () => {
     await expect(load()).rejects.toThrow('Preview unavailable');
   });
 
+  it.each(['declared', 'streamed'])('cancels a GLB exceeding 48 MiB (%s size)', async size => {
+    const cancel = vi.fn();
+    const chunk = new Uint8Array(1024 ** 2);
+    let chunks = 0;
+    const body = new ReadableStream({
+      pull(controller) {
+        if (++chunks > 49) controller.close();
+        else controller.enqueue(chunk);
+      },
+      cancel,
+    }, { highWaterMark: 0 });
+    vi.mocked(fetch).mockResolvedValue(new Response(body, { headers: size === 'declared' ? { 'Content-Length': String(48 * 1024 ** 2 + 1) } : {} }));
+    await expect(load()).rejects.toThrow('File too large');
+    expect(chunks).toBe(size === 'declared' ? 0 : 49);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
   it('keeps embedded WebP and Meshopt local and disables HTTP redirects', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(glb({ extensionsUsed: ['EXT_meshopt_compression', 'EXT_texture_webp'], images: [{ bufferView: 0, mimeType: 'image/webp' }] })));
-    const source = await load();
+    const signal = new AbortController().signal;
+    const source = await loadModelPreviewSource(asset, signal);
     try {
       expect(source.meshopt).toBe(true);
       expect(source.objectUrl).toMatch(/^blob:/);
-      expect(fetch).toHaveBeenCalledWith(new URL(asset, origin), expect.objectContaining({ redirect: 'error' }));
+      expect(fetch).toHaveBeenCalledWith(new URL(asset, origin), expect.objectContaining({ signal, redirect: 'error' }));
     } finally {
       URL.revokeObjectURL(source.objectUrl);
     }

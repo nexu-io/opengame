@@ -28,7 +28,7 @@ export function GameAssetPreview({ active = true, ...props }: GameAssetPreviewPr
 function Preview(props: GameAssetPreviewProps) {
   const { t } = useI18n();
   const [failed, setFailed] = useState(false);
-  const kind = detectGameAssetPreview(props.path, props.content);
+  const kind = props.previewKind ?? detectGameAssetPreview(props.path, props.content);
   switch (kind) {
     case 'tilemap': return <TiledMapPreview {...props} />;
     case 'image': case 'atlas': return <SpritePreview {...props} atlas={kind === 'atlas'} />;

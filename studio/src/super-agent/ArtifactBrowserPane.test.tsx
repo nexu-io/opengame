@@ -133,6 +133,26 @@ it('reads workspace model bytes from the authorized preview URL and changes the 
   expect(stage?.getAttribute('data-animation')).toBe('Run');
 });
 
+it.each(['atlas', 'tilemap', null])('uses the workspace metadata kind %s for a truncated JSON excerpt', async previewKind => {
+  const path = 'assets/level.json';
+  const previewUrl = `/motion-api/super-agent/file-content?rootKey=game&path=${path}&raw=1`;
+  const artifact: SuperAgentArtifact = { id: 'json', kind: 'workspace-file', title: path, filePath: path, rootKey: 'game', createdAt: 1, updatedAt: 1 };
+  // For a rejected document, the excerpt alone looks like a complete map.
+  const content = (previewKind ? '' : '{"type":"map","layers":[],"tilesets":[]}').padEnd(256 * 1024);
+  vi.stubGlobal('IntersectionObserver', undefined);
+  try {
+    vi.mocked(fetch).mockImplementation(async input => {
+      if (String(input) === previewUrl) return new Response('{}');
+      return Response.json({ path, binary: false, sizeBytes: content.length + 100, mimeType: 'application/json', previewUrl, previewKind, content });
+    });
+    await renderViewer([artifact]);
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url) === previewUrl)).toBe(Boolean(previewKind));
+    expect(Boolean(container.querySelector('.om-game-asset-preview'))).toBe(Boolean(previewKind));
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
 it('waits for the isolated trial origin before navigating the game iframe', async () => {
   let resolvePreview: (response: Response) => void = () => {};
   const previewResponse = new Promise<Response>(resolve => { resolvePreview = resolve; });

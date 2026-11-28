@@ -2963,6 +2963,41 @@ test('Referenced chats (<openmotion-referenced-conversations>), uploaded textExc
   await service.close();
 }));
 
+test('asset presentations keep the most recent 40 artifacts and clean evicted message references', () => fixture(async store => {
+  const service = new SuperAgentConversations(store);
+  const chat = await service.create({ workingDir: store.directory });
+  const ids: string[] = [];
+  for (let i = 0; i < 40; i++) {
+    const filename = `image-${i}.png`;
+    await writeFile(path.join(store.directory, filename), 'preview');
+    ids.push((await service.presentAsset(chat.id, { path: filename })).artifact.id);
+  }
+  await service.presentAsset(chat.id, { path: 'image-0.png' });
+  const before = await service.get(chat.id);
+  before.messages.push({ id: 'ordinary', role: 'assistant', text: 'See these images', createdAt: Date.now(), artifactIds: [ids[1], ids[0]] });
+  const file = await service.file(chat.id);
+  await writeFile(file, JSON.stringify(before));
+  await writeFile(path.join(store.directory, 'next.png'), 'preview');
+  const { artifact } = await service.presentAsset(chat.id, { path: 'next.png' });
+  const after = await service.get(chat.id);
+  const retained = [ids[0], ...ids.slice(2), artifact.id];
+  assert.deepEqual(after.artifacts.map(item => item.id), retained);
+  assert.equal(after.activeArtifactId, artifact.id);
+  assert.deepEqual(after.messages.filter(message => message.id.startsWith('presentation:')).map(message => message.artifactIds), retained.map(id => [id]));
+  assert.deepEqual(after.messages.find(message => message.id === 'ordinary')?.artifactIds, [ids[0]]);
+
+  for (const id of ['legacy-a', 'legacy-b', 'legacy-c']) {
+    after.artifacts.push({ ...artifact, id, updatedAt: 1, presentedAt: 1 });
+    after.messages.push({ id: `presentation:${id}`, role: 'assistant', text: '', createdAt: 1, artifactIds: [id] });
+  }
+  await writeFile(file, JSON.stringify(after));
+  await service.update(chat.id, { pinned: true });
+  const repaired = await service.get(chat.id);
+  assert.deepEqual(repaired.artifacts.map(item => item.id), retained);
+  assert.deepEqual(repaired.messages.filter(message => message.id.startsWith('presentation:')).map(message => message.id), retained.map(id => `presentation:${id}`));
+  await service.close();
+}));
+
 test('SuperAgentConversations accepts asset-* present aliases, extracts multiple assets, and long-polls status', () => fixture(async store => {
   const lib = new AssetLibrary(store);
   const img1 = await lib.importFile(await (async () => {

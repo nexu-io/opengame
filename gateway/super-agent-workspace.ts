@@ -5,6 +5,7 @@ import { constants } from 'node:fs';
 import { lstat, open, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { detectGameAssetPreview, MAX_PREVIEW_JSON_BYTES } from '../shared/game-asset-preview.ts';
 import {
   buildUnifiedDiffPreview,
   isBinaryFilePath,
@@ -974,13 +975,25 @@ async function openResolvedWorkspaceFile(
 }
 
 export async function workspaceFileMetadata(file: Awaited<ReturnType<typeof openResolvedWorkspaceFile>>) {
-  if (isBinaryFilePath(file.path)) return { binary: true };
-  const buf = Buffer.alloc(Math.min(MAX_TEXT_READ_BYTES, file.sizeBytes));
-  const { bytesRead } = await file.handle.read(buf, 0, buf.length, 0);
-  if (buf.subarray(0, Math.min(bytesRead, 4096)).includes(0)) {
-    return { binary: true };
+  let previewKind = detectGameAssetPreview(file.path);
+  if (isBinaryFilePath(file.path)) return { binary: true, previewKind };
+  const inspectJson = !previewKind && /\.json$/i.test(file.path) && file.sizeBytes <= MAX_PREVIEW_JSON_BYTES;
+  // One extra byte detects a file that grew after it was opened.
+  const buf = Buffer.alloc(inspectJson ? file.sizeBytes + 1 : Math.min(MAX_TEXT_READ_BYTES, file.sizeBytes));
+  let bytesRead = 0;
+  while (bytesRead < buf.length) {
+    const read = await file.handle.read(buf, bytesRead, buf.length - bytesRead, bytesRead);
+    if (!read.bytesRead) break;
+    bytesRead += read.bytesRead;
   }
-  return { binary: false, content: buf.toString('utf8', 0, bytesRead) };
+  if (buf.subarray(0, Math.min(bytesRead, 4096)).includes(0)) {
+    return { binary: true, previewKind };
+  }
+  const content = buf.toString('utf8', 0, Math.min(bytesRead, MAX_TEXT_READ_BYTES));
+  if (inspectJson && bytesRead === file.sizeBytes) {
+    previewKind = detectGameAssetPreview(file.path, bytesRead <= MAX_TEXT_READ_BYTES ? content : buf.toString('utf8', 0, bytesRead));
+  }
+  return { binary: false, content, previewKind };
 }
 
 /** Single inclusive range for playback and seeking. */

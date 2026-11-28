@@ -1590,14 +1590,7 @@ function WorkspaceFileArtifactView({
   onOpenFilePath?: (filePath: string, label?: string, rootKey?: string) => void;
 }) {
   const { t } = useI18n();
-  const [data, setData] = useState<{
-    path: string;
-    content?: string;
-    binary: boolean;
-    sizeBytes: number;
-    mimeType: string;
-    previewUrl?: string;
-  } | null>(null);
+  const [data, setData] = useState<Awaited<ReturnType<typeof readSuperAgentFileContent>> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -1650,7 +1643,7 @@ function WorkspaceFileArtifactView({
   const isMarkdown = /\.(?:md|markdown|mdx)$/i.test(data?.path || relPath) || data?.mimeType === 'text/markdown';
   const lineCount = useMemo(() => (data?.content ? data.content.split('\n').length : 0), [data?.content]);
   const sizeLabel = formatAttachmentBytes(data?.sizeBytes ?? artifact.sizeBytes);
-  const previewKind = data && detectGameAssetPreview(data.path, data.content);
+  const previewKind = data && (data.previewKind === undefined ? detectGameAssetPreview(data.path, data.content) : data.previewKind);
   const previewUrl = data?.previewUrl && (data.previewUrl.startsWith(`${SUPER_AGENT_API}/file-content?`) || data.previewUrl.startsWith(`${SUPER_AGENT_API}/uploads/`))
     ? data.previewUrl : undefined;
   const documentRootKey = previewUrl?.startsWith(`${SUPER_AGENT_API}/file-content?`)
@@ -1779,7 +1772,7 @@ function WorkspaceFileArtifactView({
         ) : (previewKind === 'audio' || previewKind === 'video') && previewUrl ? (
           <div className="om-sa-media-stage motion-asset-stage" data-kind={previewKind}><ManagedMediaElement kind={previewKind} src={previewUrl} /></div>
         ) : previewKind && data && previewUrl ? (
-          <GameAssetPreview path={data.path} url={previewUrl} content={data.content} title={artifact.title} resolveFileUrl={resolveFileUrl} />
+          <GameAssetPreview path={data.path} url={previewUrl} previewKind={previewKind} title={artifact.title} resolveFileUrl={resolveFileUrl} />
         ) : data?.mimeType?.startsWith('image/') && data.mimeType !== 'image/svg+xml' && previewUrl ? (
           <div className="om-sa-workspace-file-image motion-asset-stage">
             <img src={previewUrl} alt={artifact.title} />

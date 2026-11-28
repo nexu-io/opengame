@@ -1,11 +1,12 @@
 export type PreviewKind = 'image' | 'audio' | 'video' | 'atlas' | 'tilemap' | 'model' | 'glb';
+export const MAX_PREVIEW_JSON_BYTES = 4 * 1024 ** 2;
 
 export function detectGameAssetPreview(path: string, content?: string): PreviewKind | null {
   const extension = /\.([^./\\]+)$/.exec(path)?.[1].toLowerCase();
   if (extension === 'tmj') return 'tilemap';
   if (extension === 'json') {
     if (/(?:^|[./_-])(?:atlas|spritesheet)\.json$/i.test(path)) return 'atlas';
-    if (!content || content.length > 4194304 || !/"(?:layers|frames)"\s*:/.test(content)) return null;
+    if (!content || content.length > MAX_PREVIEW_JSON_BYTES) return null;
     try {
       const json = JSON.parse(content);
       if (json?.type === 'map' && Array.isArray(json.layers) && Array.isArray(json.tilesets)) return 'tilemap';

@@ -41,8 +41,7 @@ export async function resolveAssetPresentation(store: WorkspaceStore, chat: Supe
     const roots = await resolveBrowsableRoots(store.directory, chat);
     const file = await openTaskWorkspaceFile(roots, '', relative);
     try {
-      const metadata = /\.json$/i.test(file.path) ? await workspaceFileMetadata(file) : undefined;
-      const kind = detectGameAssetPreview(file.path, metadata?.content);
+      const kind = /\.json$/i.test(file.path) ? (await workspaceFileMetadata(file)).previewKind : detectGameAssetPreview(file.path);
       if (!kind) throw new Error('Unsupported workspace asset preview format');
       if (animation !== undefined) {
         if (kind !== 'glb') throw animationError('Animation selection requires a GLB asset');

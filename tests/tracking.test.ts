@@ -190,6 +190,11 @@ test('tool dimensions use only the published actions, defaults and schema field 
   }
 });
 
+test('clip selection failures retain their field and rule without logging clip names', () => {
+  const failure = { code: 'INVALID_ARGUMENT', invalid_field: 'animation', validation_rule: 'invalid_enum', availableAnimations: ['private'] };
+  assert.deepEqual(toolFailureFields(failure), { error_code: 'INVALID_ARGUMENT', invalid_field: 'animation', validation_rule: 'invalid_enum' });
+});
+
 test('nested tool inputs identify missing fields and invalid operation or command names', () => {
   const schema = phase1Tools.find(tool => tool.name === 'openmotion_assets_use')!.inputSchema;
   for (const [args, field, rule] of [

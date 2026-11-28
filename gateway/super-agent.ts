@@ -1053,6 +1053,27 @@ function isRunnableGameFilePath(filePath: string): boolean {
   return true;
 }
 
+function removeChatArtifacts(chat: SuperAgentChat, ids: Set<string>) {
+  chat.artifacts = chat.artifacts.filter(item => !ids.has(item.id));
+  chat.messages = chat.messages.filter(message =>
+    !message.id.startsWith('presentation:') || !ids.has(message.id.slice('presentation:'.length)),
+  );
+  for (const message of chat.messages) {
+    if (message.artifactIds) message.artifactIds = message.artifactIds.filter(id => !ids.has(id));
+  }
+  if (chat.activeArtifactId && ids.has(chat.activeArtifactId)) chat.activeArtifactId = chat.artifacts.at(-1)?.id;
+}
+
+function trimChatArtifacts(chat: SuperAgentChat, storedId?: string) {
+  const excess = chat.artifacts.length - 40;
+  if (excess <= 0) return;
+  const oldest = chat.artifacts
+    .filter(item => item.id !== storedId && item.id !== chat.activeArtifactId)
+    .sort((a, b) => Math.max(a.presentedAt ?? 0, a.updatedAt) - Math.max(b.presentedAt ?? 0, b.updatedAt))
+    .slice(0, excess);
+  removeChatArtifacts(chat, new Set(oldest.map(item => item.id)));
+}
+
 function upsertChatArtifact(
   chat: SuperAgentChat,
   artifact: SuperAgentArtifact,
@@ -1077,16 +1098,12 @@ function upsertChatArtifact(
     stored = artifact;
     chat.artifacts.push(stored);
   }
-  if (chat.artifacts.length > 40) {
-    const delivered = new Set(chat.messages.flatMap(message => message.artifactIds ?? []));
-    const oldest = chat.artifacts.findIndex(item => item.id !== stored.id && !delivered.has(item.id));
-    if (oldest >= 0) chat.artifacts.splice(oldest, 1);
-  }
   const artIntent = artifactToSuperAgentIntent(stored);
   if (artIntent && !(stored.kind === 'web' && chat.intent === 'coding')) {
     chat.intent = artIntent;
   }
   if (activate) chat.activeArtifactId = stored.id;
+  trimChatArtifacts(chat, stored.id);
   return stored;
 }
 
@@ -1561,10 +1578,7 @@ export class SuperAgentConversations {
       if (artIntent) chat.intent = artIntent;
     }
     if (patch.removeArtifactId) {
-      chat.artifacts = chat.artifacts.filter(item => item.id !== patch.removeArtifactId);
-      if (chat.activeArtifactId === patch.removeArtifactId) {
-        chat.activeArtifactId = chat.artifacts.at(-1)?.id;
-      }
+      removeChatArtifacts(chat, new Set([patch.removeArtifactId]));
     }
     if (patch.activeArtifactId !== undefined) {
       chat.activeArtifactId = patch.activeArtifactId === null
@@ -1573,6 +1587,7 @@ export class SuperAgentConversations {
           ? patch.activeArtifactId
           : chat.activeArtifactId;
     }
+    trimChatArtifacts(chat);
     chat.updatedAt = Date.now();
     this.syncProjectDir(chat);
     if (live) {
@@ -1908,6 +1923,7 @@ export class SuperAgentConversations {
 
   private enqueuePersistWrite(active: ActiveSuperAgentChat): Promise<unknown> {
     if (active.deleted) return active.writes;
+    trimChatArtifacts(active.chat);
     const snapshot = structuredClone(active.chat);
     const next = active.writes
       .catch(() => {})
@@ -2243,6 +2259,7 @@ export class SuperAgentConversations {
   }
 
   private async persistChatState(chat: SuperAgentChat, live?: ActiveSuperAgentChat): Promise<SuperAgentChat> {
+    trimChatArtifacts(chat);
     if (live) {
       await this.persist(live, true);
       return structuredClone(live.chat);
