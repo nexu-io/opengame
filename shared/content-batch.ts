@@ -272,12 +272,12 @@ export const BATCH_RECIPES: readonly BatchRecipeDefinition[] = [
     defaultConcurrency: 2,
     criteria: ['Complete brief binding', 'Seed starter landing page deliverable'],
     scenarioConfig: {
-      scenarioId: 'motion-full-chain',
+      scenarioId: 'design-full-chain',
       createPage: true,
     },
     sampleItems: [
-      { label: 'Spring Launch - US', variables: { product: 'OpenMotion Pro', audience: 'Motion Designers', tone: 'Crisp & technical' } },
-      { label: 'Spring Launch - JP', variables: { product: 'OpenMotion Pro', audience: 'クリエイター', tone: '丁寧で洗練された表現' } },
+      { label: 'Spring Launch - US', variables: { productName: 'OpenMotion Pro', audience: 'Motion Designers', tone: 'informative' } },
+      { label: 'Spring Launch - JP', variables: { productName: 'OpenMotion Pro', audience: 'クリエイター', tone: 'premium' } },
     ],
   },
 ];

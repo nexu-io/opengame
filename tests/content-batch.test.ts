@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import test from 'node:test';
-import { ContentBatchService } from '../gateway/content-batch.ts';
+import { ContentBatchService, type BatchExecutionHost } from '../gateway/content-batch.ts';
+import { designProjectsFor } from '../design-projects.ts';
+import { ScenarioRuns, scenarioOperation, type ScenarioHost } from '../gateway/scenario-runs.ts';
 import { startServer } from '../server.ts';
-import { CONTENT_BATCH_API } from '../shared/content-batch.ts';
+import { BATCH_RECIPES, CONTENT_BATCH_API } from '../shared/content-batch.ts';
 import { MCP_HTTP_PATH } from '../shared/mcp-http.ts';
 import { fixture } from './fixtures.ts';
 
@@ -138,3 +140,196 @@ test('Batch optimization works identically via HTTP routes and openmotion_assets
       await running.close();
     }
   }));
+
+function scenarioBatchFixture(run: (context: {
+  service: ContentBatchService;
+  scenarios: ScenarioRuns;
+  host: BatchExecutionHost;
+  design: ReturnType<typeof designProjectsFor>;
+  motionRequests: Record<string, unknown>[];
+}) => Promise<void>) {
+  return fixture(async store => {
+    const service = new ContentBatchService(store.directory);
+    const scenarios = new ScenarioRuns(store.directory, store);
+    const design = designProjectsFor(store.directory);
+    const motionRequests: Record<string, unknown>[] = [];
+    const scenarioHost: ScenarioHost = {
+      origin: () => 'http://localhost',
+      design,
+      resolveAsset: async () => null,
+      assets: async () => { throw new Error('Unexpected media generation'); },
+      createMotionProject: async input => {
+        motionRequests.push(input);
+        const projectId = '11111111-1111-4111-8111-' + String(motionRequests.length).padStart(12, '0');
+        return { projectId, sessionId: null, previewUrl: 'http://localhost/editor/' + projectId };
+      },
+      exportMotionArchive: async () => { throw new Error('Unexpected Motion export'); },
+    };
+    const host: BatchExecutionHost = {
+      callMcpTool: async (tool, args) => {
+        assert.equal(tool, 'openmotion_assets_use');
+        assert.equal(args.action, 'scenario');
+        return scenarioOperation(scenarios, args.scenario, scenarioHost);
+      },
+      runAgentOptimization: async () => { throw new Error('Unexpected agent dispatch'); },
+    };
+    try {
+      await run({ service, scenarios, host, design, motionRequests });
+    } finally {
+      await service.close();
+    }
+  });
+}
+
+test('scenario matrix campaign recipe creates real starter pages for all sample items', () =>
+  scenarioBatchFixture(async ({ service, scenarios, host, design }) => {
+    const recipe = BATCH_RECIPES.find(item => item.id === 'campaign-scenario-batch')!;
+    const { batch } = await service.create({
+      title: 'Campaign recipe',
+      mode: 'scenario-matrix',
+      recipeId: recipe.id,
+      items: structuredClone(recipe.sampleItems),
+      autoStart: true,
+      wait: true,
+    }, host);
+    assert.equal(batch.state, 'completed', JSON.stringify(batch.items));
+    assert.equal(batch.counts.completed, recipe.sampleItems.length);
+    for (const item of batch.items) {
+      const runId = item.outputs.find(output => output.kind === 'scenario-run')?.runId;
+      assert.ok(runId);
+      const { run } = await scenarios.get(runId);
+      assert.equal(run.scenarioId, 'design-full-chain');
+      const pageId = run.steps['landing-page'].links.designProjectId;
+      assert.ok(pageId);
+      assert.ok(item.outputs.some(output => output.kind === 'design-project' && output.id === pageId));
+      assert.match((await design.readFile(pageId, 'index.html')).content, /OpenMotion Pro/);
+    }
+  }));
+
+test('scenario matrix preserves typed briefs and creates linked page and Motion outputs', () =>
+  scenarioBatchFixture(async ({ service, scenarios, host, motionRequests }) => {
+    const label = 'a'.repeat(119) + '🎮';
+    const { batch } = await service.create({
+      title: 'Typed scenario inputs',
+      mode: 'scenario-matrix',
+      scenarioConfig: { scenarioId: 'design-full-chain', createPage: true, createMotion: true },
+      items: [{
+        label,
+        prompt: 'Launch an accessible editing toolkit',
+        variables: { productName: 'Toolkit', valueProps: ['Keyboard controls', 'Clear typography'] },
+      }],
+      autoStart: true,
+      wait: true,
+    }, host);
+    assert.equal(batch.state, 'completed', JSON.stringify(batch.items));
+    const item = batch.items[0];
+    const { run } = await scenarios.get(item.outputs.find(output => output.kind === 'scenario-run')!.runId!);
+    assert.equal(run.title, 'a'.repeat(119));
+    assert.deepEqual(run.brief.valueProps, ['Keyboard controls', 'Clear typography']);
+    assert.equal(run.brief.idea, 'Launch an accessible editing toolkit');
+    assert.equal(run.revision, 3);
+    assert.equal(motionRequests.length, 1);
+    assert.equal(motionRequests[0].projectType, 'natural_language');
+    assert.equal(String(motionRequests[0].title).length, 100);
+    assert.ok(item.outputs.some(output => output.kind === 'motion-project'
+      && output.id === run.steps['promo-video'].links.motionProjectId));
+    assert.ok(item.outputs.some(output => output.kind === 'design-project'
+      && output.id === run.steps['landing-page'].links.designProjectId));
+  }));
+
+test('scenario matrix rejects unsupported page creation before leaving a scenario run', () =>
+  scenarioBatchFixture(async ({ service, scenarios, host }) => {
+    const { batch } = await service.create({
+      title: 'Unsupported page target',
+      mode: 'scenario-matrix',
+      scenarioConfig: { scenarioId: 'motion-full-chain', createPage: true },
+      items: [{ label: 'Variant' }],
+      autoStart: true,
+      wait: true,
+    }, host);
+    assert.equal(batch.state, 'failed');
+    assert.match(batch.items[0].error ?? '', /no page creation step/);
+    assert.equal((await scenarios.list()).runs.length, 0);
+  }));
+
+test('scenario matrix cancellation stops subsequent mutations after an in-flight call', () =>
+  scenarioBatchFixture(async ({ service, scenarios, host }) => {
+    let releaseCreate!: () => void;
+    let created!: () => void;
+    const createGate = new Promise<void>(resolve => { releaseCreate = resolve; });
+    const enteredCreate = new Promise<void>(resolve => { created = resolve; });
+    const commands: string[] = [];
+    const pausedHost: BatchExecutionHost = {
+      ...host,
+      callMcpTool: async (tool, args) => {
+        const command = (args.scenario as { command: string }).command;
+        commands.push(command);
+        const result = await host.callMcpTool(tool, args);
+        if (command === 'create') {
+          created();
+          await createGate;
+        }
+        return result;
+      },
+    };
+    try {
+      const { batch } = await service.create({
+        title: 'Cancel scenario dispatch',
+        mode: 'scenario-matrix',
+        scenarioConfig: { scenarioId: 'design-full-chain', createPage: true },
+        items: [{ label: 'Variant', variables: { productName: 'Toolkit' } }],
+      });
+      const running = service.start(batch.id, pausedHost, { wait: true });
+      await enteredCreate;
+      const cancelled = service.cancel(batch.id);
+      releaseCreate();
+      await cancelled;
+      const final = await running;
+      assert.equal(final.state, 'cancelled');
+      assert.deepEqual(commands, ['create']);
+      const runId = final.items[0].outputs.find(output => output.kind === 'scenario-run')!.runId!;
+      assert.deepEqual((await scenarios.get(runId)).run.brief, { productName: 'Toolkit' });
+    } finally {
+      releaseCreate();
+    }
+  }));
+
+
+test('scenario matrix validates briefs before creating runs: scalar arrays remain compatible', () =>
+  scenarioBatchFixture(async ({ service, scenarios, host }) => {
+    const { batch } = await service.create({
+      title: 'Scalar array brief', mode: 'scenario-matrix',
+      scenarioConfig: { scenarioId: 'design-full-chain', createPage: true },
+      items: [{ label: 'Audience variant', variables: {
+        productName: 'Toolkit', audience: ['Designers', 'Marketers'], valueProps: ['Fast', 'Accessible'],
+      } }],
+      autoStart: true, wait: true,
+    }, host);
+    assert.equal(batch.state, 'completed', JSON.stringify(batch.items));
+    const { runs } = await scenarios.list();
+    assert.equal(runs.length, 1);
+    const { run } = await scenarios.get(runs[0].id);
+    assert.equal(run.brief.audience, 'Designers,Marketers');
+    assert.deepEqual(run.brief.valueProps, ['Fast', 'Accessible']);
+    assert.equal(run.revision, 2);
+  }));
+
+for (const [label, variables, message] of [
+  ['unknown fields', { unsupportedField: 'unused' }, /Unknown brief field/],
+  ['invalid list values', { valueProps: 'must be a list' }, /must be an array/],
+] as const) {
+  test('scenario matrix validates briefs before creating runs: ' + label, () =>
+    scenarioBatchFixture(async ({ service, scenarios, host, design }) => {
+      const { batch } = await service.create({
+        title: 'Invalid brief', mode: 'scenario-matrix',
+        scenarioConfig: { scenarioId: 'design-full-chain', createPage: true },
+        items: [{ label: 'Invalid variant', variables }],
+        autoStart: true, wait: true,
+      }, host);
+      assert.equal(batch.state, 'failed');
+      assert.match(batch.items[0].error ?? '', message);
+      assert.equal((await scenarios.list()).runs.length, 0);
+      assert.equal((await design.list()).length, 0);
+      assert.deepEqual(batch.items[0].outputs, []);
+    }));
+}

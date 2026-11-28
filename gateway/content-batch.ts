@@ -19,6 +19,7 @@ import {
   type ContentBatchSummary,
 } from '../shared/content-batch.ts';
 import { withProcessLock } from '../shared/process-lock.ts';
+import { findScenario } from '../shared/scenarios.ts';
 import { phase1Tools } from '../shared/phase1-tools.ts';
 import type { WorkspaceStore } from '../workspace.ts';
 
@@ -501,56 +502,88 @@ export class ContentBatchService {
           }
         } else if (jobSnapshot.mode === 'scenario-matrix') {
           const scenarioId = jobSnapshot.scenarioConfig?.scenarioId || 'motion-full-chain';
+          const scenario = findScenario(scenarioId);
+          if (!scenario) throw new Error('INVALID_ARGUMENT: Unknown batch scenario');
+          const pageStep = scenario.steps.find(step => step.type === 'web-page' && step.page && step.page.mode !== 'embed');
+          const motionStep = scenario.steps.find(step => step.motion);
+          if (jobSnapshot.scenarioConfig?.createPage && !pageStep) {
+            throw new Error('INVALID_ARGUMENT: Scenario has no page creation step');
+          }
+          if (jobSnapshot.scenarioConfig?.createMotion && !motionStep) {
+            throw new Error('INVALID_ARGUMENT: Scenario has no Motion project step');
+          }
+          const fields = new Map(scenario.briefFields.map(field => [field.id, field]));
+          const briefValues: Record<string, string | string[]> = {};
+          for (const [key, value] of Object.entries({ ...jobSnapshot.sharedVariables, ...itemSnapshot.variables })) {
+            if (value === undefined || value === null) continue;
+            const field = fields.get(key);
+            if (!field) throw new Error(`INVALID_ARGUMENT: Unknown brief field: ${key}`);
+            briefValues[key] = Array.isArray(value) && (field.kind === 'list' || field.kind === 'multi')
+              ? value.map(String)
+              : String(value);
+          }
+          if (itemSnapshot.prompt) briefValues.idea = itemSnapshot.prompt;
+          signal.throwIfAborted();
           const created = await host.callMcpTool('openmotion_assets_use', {
             action: 'scenario',
             scenario: {
               command: 'create',
               scenarioId,
-              title: itemSnapshot.label,
+              brief: briefValues,
+              title: itemSnapshot.label.slice(0, 120).replace(/[\uD800-\uDBFF]$/, ''),
               ...(jobSnapshot.scenarioConfig?.locale ? { locale: jobSnapshot.scenarioConfig.locale } : {}),
               requestId: derivedBatchRequestId(batchId, itemSnapshot.id, 'sc-create', attempt),
             },
           });
           stepOutputs.create = created;
+          if (Object.keys(briefValues).length > 0) stepOutputs.brief = created;
           outputs = mergeOutputs(outputs, extractStepOutputs('openmotion_assets_use', created));
           let runRevision = created.run.revision as number;
           const runId = String(created.run.id);
 
-          const briefValues: Record<string, string> = {};
-          for (const [k, v] of Object.entries({ ...jobSnapshot.sharedVariables, ...itemSnapshot.variables })) {
-            if (v !== undefined && v !== null) briefValues[k] = String(v);
-          }
-          if (itemSnapshot.prompt) briefValues.prompt = itemSnapshot.prompt;
-          if (Object.keys(briefValues).length > 0) {
-            const briefed = await host.callMcpTool('openmotion_assets_use', {
-              action: 'scenario',
-              scenario: {
-                command: 'update_brief',
-                runId,
-                expectedRevision: runRevision,
-                brief: briefValues,
-                requestId: derivedBatchRequestId(batchId, itemSnapshot.id, 'sc-brief', attempt),
-              },
-            });
-            stepOutputs.brief = briefed;
-            runRevision = briefed.run.revision;
-          }
-
-          if (jobSnapshot.scenarioConfig?.createPage) {
+          if (jobSnapshot.scenarioConfig?.createPage && pageStep) {
+            signal.throwIfAborted();
             const paged = await host.callMcpTool('openmotion_assets_use', {
               action: 'scenario',
               scenario: {
                 command: 'create_page',
                 runId,
                 expectedRevision: runRevision,
+                stepId: pageStep.id,
+                mode: 'starter',
                 requestId: derivedBatchRequestId(batchId, itemSnapshot.id, 'sc-page', attempt),
               },
             });
             stepOutputs.create_page = paged;
-            runRevision = paged.run?.revision ?? runRevision;
+            runRevision = paged.run.revision;
+            outputs = mergeOutputs(outputs, [{
+              kind: 'design-project', id: paged.project.id, revision: paged.project.revision, title: paged.project.title,
+            }]);
+          }
+
+          if (jobSnapshot.scenarioConfig?.createMotion && motionStep) {
+            signal.throwIfAborted();
+            const motion = await host.callMcpTool('openmotion_assets_use', {
+              action: 'scenario',
+              scenario: {
+                command: 'create_motion',
+                runId,
+                expectedRevision: runRevision,
+                stepId: motionStep.id,
+                projectType: 'natural_language',
+                title: itemSnapshot.label.slice(0, 100).replace(/[\uD800-\uDBFF]$/, ''),
+                requestId: derivedBatchRequestId(batchId, itemSnapshot.id, 'sc-motion', attempt),
+              },
+            });
+            stepOutputs.create_motion = motion;
+            runRevision = motion.run.revision;
+            outputs = mergeOutputs(outputs, [{
+              kind: 'motion-project', id: motion.project.projectId, url: motion.project.previewUrl,
+            }]);
           }
 
           if (jobSnapshot.scenarioConfig?.autoExport) {
+            signal.throwIfAborted();
             const exported = await host.callMcpTool('openmotion_assets_use', {
               action: 'scenario',
               scenario: {
