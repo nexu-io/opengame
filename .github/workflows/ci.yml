@@ -105,6 +105,9 @@ jobs:
       - name: Check composition, discovery and install attribution
         if: steps.scope.outputs.full == 'true'
         run: node --test tests/composition-canvas.test.ts tests/short-form-discovery.test.ts tests/install-attribution-worker.test.ts
+      - name: Check terminal-state simulation
+        if: steps.scope.outputs.full == 'true'
+        run: node --test tests/game-simulation-terminal.test.ts
 
   platform-reliability:
     name: Workspace reliability (${{ matrix.os }})

@@ -1397,19 +1397,18 @@ server.listen(port, '127.0.0.1', () => {
     if(actionCount>100000)throw new GameError('Simulation exceeds 100000 scripted input applications');
     const timeline:{tick:number;state:unknown}[]=[{tick:0,state:runtime.summary(ids[0])}];
     let tick=0,last=JSON.stringify(timeline[0].state),lastKey=simulationMilestone(timeline[0].state);
+    let over=runtime.over();
     const sampleEvery=Math.max(1,Math.ceil(maxTicks/50));
-    for(tick=1;tick<=maxTicks;tick++){
-      runtime.tick(tick);
+    while(tick<maxTicks&&!over.over){
+      runtime.tick(++tick);
       for(let i=0;i<ids.length;i++)for(const step of routes[i])if(tick>=step.fromTick&&tick<=step.toTick)runtime.apply(ids[i],step.action);
-      const over=runtime.over();
+      over=runtime.over();
       if(tick%sampleEvery===0||over.over){const state=runtime.summary(ids[0]),serialized=JSON.stringify(state);if(serialized!==last||over.over){timeline.push({tick,state});last=serialized;lastKey=simulationMilestone(state);}}
       else {const state=runtime.summary(ids[0]),key=simulationMilestone(state);if(key!==lastKey){timeline.push({tick,state});lastKey=key;last=JSON.stringify(state);}}
       if(timeline.length>100)timeline.splice(1,1);
-      if(over.over)break;
     }
-    tick=Math.min(tick,maxTicks);
     if(timeline.at(-1)?.tick!==tick){if(timeline.length>=100)timeline.splice(1,1);timeline.push({tick,state:runtime.summary(ids[0])});}
-    return {id,players,maxTicks,result:{...runtime.over(),tick},timeline,scope:'Deterministic logic-only simulation with ordinary validated inputs; not browser, rendering or human acceptance.'};
+    return {id,players,maxTicks,result:{...over,tick},timeline,scope:'Deterministic logic-only simulation with ordinary validated inputs; not browser, rendering or human acceptance.'};
   }
   private async trailerStorage(id:string,create=false) {
     const located=await this.locateCard(id),workspace=path.dirname(this.root);
