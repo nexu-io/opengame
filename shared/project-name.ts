@@ -1,9 +1,10 @@
 /** Names that cannot survive a round trip through a portable project archive. */
-const reservedDeviceName = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
+// Win32 also recognizes superscript 1, 2 and 3 as COM/LPT device numbers.
+const reservedDeviceName = /^(?:con|prn|aux|nul|(?:com|lpt)[1-9¹²³])(?:\.|$)/i;
 
 /** One path segment a Windows or default macOS volume cannot store safely. */
 export function unsafePortableSegment(segment: string): boolean {
-  return reservedDeviceName.test(segment) || /[. ]$/.test(segment);
+  return reservedDeviceName.test(segment) || /[<>"|?*]/.test(segment) || /[. ]$/.test(segment);
 }
 
 /** The first unsafe segment of a project-relative path, or null when every segment is portable. */

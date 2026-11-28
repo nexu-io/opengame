@@ -8,6 +8,7 @@ import { atomicJson, jsonFile } from './phase1-versions.ts';
 import { inspectProject, nativeProjectConfig, ensureRuntime } from './hyperframes.ts';
 import { zip } from './scripts/zip.mjs';
 import { readProjectZip } from './shared/project-zip.ts';
+import { portableNameProblem } from './shared/project-name.ts';
 import { PROJECT_ARCHIVE_LIMITS as limits, PROJECT_ARCHIVE_VALIDATION_UNAVAILABLE, type ProjectArchiveInput } from './shared/project-archive.ts';
 import { withProcessLock } from './shared/process-lock.ts';
 
@@ -23,8 +24,11 @@ export function portableProjectFile(name: string) {
   if (name.split('/').some(p => p.startsWith('.') || ['node_modules', 'renders', 'dist', 'output', '__MACOSX'].includes(p)) || metadata.has(name)) return false;
   return extensions.has(path.extname(name).slice(1).toLowerCase()) || /^(license|notice|copying)(\.|$)/i.test(path.basename(name));
 }
-function checkedPath(name: string) {
+function checkedPath(name: string, title?: string) {
   try { projectPath(name); } catch { throw new Error('INVALID_PROJECT_ARCHIVE: Unsafe project path'); }
+  if (portableNameProblem(name)) {
+    throw new Error('INVALID_PROJECT_ARCHIVE: ' + (title ? title + ' — ' : '') + 'Non-portable project file: ' + name);
+  }
   if (!portableProjectFile(name)) throw new Error('INVALID_PROJECT_ARCHIVE: Unsupported project file: ' + name);
   return name;
 }
@@ -58,13 +62,14 @@ function decodePackage(entries: Map<string, Buffer>): PackedProject[] {
     const used = new Set([manifestName]);
     const projects = value.projects.map((project: any) => {
       if (!/^projects\/[a-f0-9-]{36}$/.test(project.root) || !Array.isArray(project.files) || !project.files.length) throw new Error('INVALID_PROJECT_ARCHIVE: Invalid project manifest');
+      const title = validateProjectTitle(project.title);
       const files = new Map<string, Buffer>();
       for (const file of project.files) {
-        const name = checkedPath(file.path), key = project.root + '/' + name, data = entries.get(key);
+        const name = checkedPath(file.path, title), key = project.root + '/' + name, data = entries.get(key);
         if (!data || used.has(key) || data.length !== file.bytes || hash(data) !== file.sha256) throw new Error('INVALID_PROJECT_ARCHIVE: File checksum mismatch');
         used.add(key); files.set(name, data);
       }
-      return { title: validateProjectTitle(project.title), files };
+      return { title, files };
     });
     if (used.size !== entries.size) throw new Error('INVALID_PROJECT_ARCHIVE: Unlisted archive files');
     return projects;
@@ -84,8 +89,9 @@ function decodePackage(entries: Map<string, Buffer>): PackedProject[] {
   // validateProject supplies the native defaults when no marker exists.
   if (!relative.has('index.html')) throw new Error('INVALID_PROJECT_ARCHIVE: A HyperFrames composition must contain index.html');
   const portable = new Map([...relative].filter(([name]) => portableProjectFile(name)));
-  for (const name of portable.keys()) checkedPath(name);
-  return [{ title: validateProjectTitle(nativePrefix.slice(0, -1) || 'Imported project'), files: portable }];
+  const title = validateProjectTitle(nativePrefix.slice(0, -1) || 'Imported project');
+  for (const name of portable.keys()) checkedPath(name, title);
+  return [{ title, files: portable }];
 }
 function archiveError(error: unknown) {
   const message = (error as Error).message;
@@ -107,7 +113,7 @@ async function validateProject(project: PackedProject, directory: string, runtim
   // Native configuration paths must stay inside the imported project.
   for (const value of Object.values(config.paths ?? {})) if (typeof value !== 'string' || value.startsWith('/') || value.includes('\\') || /[\x00-\x1f]/.test(value) || value.split(/[\\/]/).some(p => p === '..') || value.includes(':')) throw new Error('INVALID_PROJECT_ARCHIVE: Project paths must be relative');
   for (const [name, data] of project.files) {
-    checkedPath(name); const target = path.join(directory, name);
+    checkedPath(name, project.title); const target = path.join(directory, name);
     await mkdir(path.dirname(target), { recursive: true, mode: 0o700 }); await writeFile(target, data, { mode: 0o600, flag: 'wx' });
   }
   const report = await inspectProject(runtimeRoot, directory, 'lint').catch(error => {
@@ -201,8 +207,10 @@ async function snapshotProjects(store: WorkspaceStore, input: ProjectArchiveInpu
     if (!current.project) throw new Error('PROJECT_NOT_READY: Open the project once before exporting');
     if (input.expectedRevisions?.[id] && current.revision !== input.expectedRevisions[id]) throw new Conflict();
     revisions[id] = current.revision;
+    const title = catalog.projects.find(p => p.id === id)!.title;
     const projectRoot = 'projects/' + randomUUID(), files = [];
     for (const file of current.project.files.filter(file => portableProjectFile(file.path))) {
+      checkedPath(file.path, title);
       total += file.size;
       if (total > limits.bytes || entries.length >= limits.files - 1) throw new Error('PROJECT_ARCHIVE_TOO_LARGE: Export fewer projects (500 MB / 5000 files maximum)');
       const data = await readBounded(await scoped.safePath(file.path), limits.bytes - (total - file.size));
@@ -210,7 +218,7 @@ async function snapshotProjects(store: WorkspaceStore, input: ProjectArchiveInpu
       entries.push({ name: projectRoot + '/' + file.path, data });
       files.push({ path: file.path, bytes: data.length, sha256: file.hash });
     }
-    projects.push({ title: catalog.projects.find(p => p.id === id)!.title, root: projectRoot, revision: current.revision, files });
+    projects.push({ title, root: projectRoot, revision: current.revision, files });
   }
   if (!projects.length) throw new Error('PROJECT_NOT_READY: No initialized projects to export');
   for (const id of Object.keys(revisions)) if ((await store.forProject(id).get()).revision !== revisions[id]) throw new Conflict();

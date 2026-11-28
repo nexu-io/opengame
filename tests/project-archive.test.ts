@@ -9,7 +9,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { crc32, deflateRawSync } from 'node:zlib';
 import { fixture } from './fixtures.ts';
 import { transport } from './http.ts';
-import { projectArchive, importProjects } from '../project-archive.ts';
+import { projectArchive, importProjects, duplicateProject } from '../project-archive.ts';
 import { readProjectZip } from '../shared/project-zip.ts';
 import { firstFoldedDuplicate, portableNameProblem } from '../shared/project-name.ts';
 import { zip } from '../scripts/zip.mjs';
@@ -297,10 +297,14 @@ test('import refuses a reserved device name that a write would now reject', () =
 
 test('archive CI lane checks portable names through project write and asset APIs', () => fixture(async store => {
   const current = await store.get();
-  await assert.rejects(store.writeFiles(current.revision, [{ path: 'con.html', content: html }]), /路径无效/);
+  for (const target of ['con.html', 'assets/sprite?.svg', 'models/mesh|LOD.obj', 'assets/COM¹.svg']) {
+    await assert.rejects(store.writeFiles(current.revision, [{ path: target, content: html }]), /路径无效/, target);
+  }
   const source = path.join(store.directory, 'portable-source.png');
   await writeFile(source, Buffer.from('asset-fixture'));
-  await assert.rejects(store.importAsset(current.revision, source, 'assets/nul.png'), /路径无效/);
+  for (const target of ['assets/nul.png', 'assets/sprite*.png', 'assets/LPT².png']) {
+    await assert.rejects(store.importAsset(current.revision, source, target), /路径无效/, target);
+  }
 }));
 
 test('archive CI lane keeps the entry-file guard exact on every platform', () => fixture(async store => {
@@ -319,3 +323,31 @@ test('archive import rejects a source that would block without a writer', { skip
     assert.ok(Date.now() - started < 5000, 'a FIFO source must be rejected without waiting for a writer');
   } finally { await rm(directory, { recursive: true, force: true }); }
 }));
+
+test('legacy project export names the project and non-portable file before building a ZIP', { skip: process.platform === 'win32' && 'Legacy metacharacter filenames require a POSIX filesystem' }, () => fixture(async store => {
+  const { projects: [source] } = await importProjects(store, 'legacy-source', native('Legacy campaign/'), pluginRoot);
+  const filename = 'assets/sprite?.png';
+  const legacyFile = path.join(store.projectDirectoryFor(source.projectId), filename);
+  const original = Buffer.from('legacy asset bytes');
+  // Model a project written before portable-name validation was introduced.
+  await writeFile(legacyFile, original);
+  const exportInput = { action: 'export' as const, requestId: 'legacy-export', projectIds: [source.projectId] };
+  for (const operation of [
+    () => projectArchive(store, exportInput, pluginRoot),
+    () => duplicateProject(store, { projectId: source.projectId, requestId: 'legacy-copy' }, pluginRoot),
+  ]) {
+    await assert.rejects(operation, error => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /INVALID_PROJECT_ARCHIVE:/);
+      assert.match(error.message, /Legacy campaign/);
+      assert.match(error.message, /assets\/sprite\?\.png/);
+      assert.doesNotMatch(error.message, /Invalid or unsupported ZIP/);
+      return true;
+    });
+    assert.deepEqual(await readFile(legacyFile), original);
+  }
+  await assert.rejects(access(path.join(store.directory, 'project-archives/files')), { code: 'ENOENT' });
+  await rm(legacyFile);
+  const exported = await projectArchive(store, exportInput, pluginRoot);
+  assert.ok('archivePath' in exported, 'the same export request can succeed after the named file is fixed');
+}, false));
