@@ -1801,6 +1801,11 @@ server.listen(port, '127.0.0.1', () => {
   }
 }
 
+// Generate checks on the host so author modules do not gain another reserved VM binding.
+function gameStateCheckCode(callback: 'setup' | 'applyAction') {
+  return `if(state===undefined || state?.then)throw Error(${JSON.stringify(callback + ' must return synchronous state')}); JSON.stringify(state);`;
+}
+
 /** Each call runs inside a context with no host objects, loaders, clock or random source. */
 export class GameRuntime {
   private context: vm.Context;
@@ -1840,11 +1845,11 @@ export class GameRuntime {
     if (!Number.isFinite(this.meta.tickRate) || this.meta.tickRate < 1 || this.meta.tickRate > 60) throw new GameError('tickRate must be 1–60 Hz');
   }
   private run(code: string): any { return vm.runInContext(code, this.context, { timeout: 50 }); }
-  setup(players: string[]) { this.run(`state=setup(ctx,${JSON.stringify(players)}); if(state===undefined || state?.then)throw Error('setup must return synchronous state'); JSON.stringify(state);`); }
-  tick(tick: number) { this.run(`ctx.tick=${tick};ctx.now=${tick * 1000 / this.meta.tickRate}; if(meta.serverTick === true) state=applyAction(state,null,{type:'tick'},ctx);`); }
-  membership(player: string, connected: boolean, expired = false) { this.run(`if(meta.serverTick === true) state=applyAction(state,null,${JSON.stringify({type:'membership',player,connected,expired})},ctx);`); }
+  setup(players: string[]) { this.run(`state=setup(ctx,${JSON.stringify(players)}); ${gameStateCheckCode('setup')}`); }
+  tick(tick: number) { this.run(`ctx.tick=${tick};ctx.now=${tick * 1000 / this.meta.tickRate}; if(meta.serverTick === true) { state=applyAction(state,null,{type:'tick'},ctx); ${gameStateCheckCode('applyAction')} }`); }
+  membership(player: string, connected: boolean, expired = false) { this.run(`if(meta.serverTick === true) { state=applyAction(state,null,${JSON.stringify({type:'membership',player,connected,expired})},ctx); ${gameStateCheckCode('applyAction')} }`); }
   apply(player: string, action: unknown, dryRun = false) {
-    this.run(`{const action=JSON.parse(${JSON.stringify(JSON.stringify(action))}); const valid=validateAction(state,${JSON.stringify(player)},action,ctx); if(typeof valid!=='boolean')throw Error('validateAction must return boolean'); if(valid||${dryRun}) {state=applyAction(state,${JSON.stringify(player)},action,ctx); if(state===undefined || state?.then)throw Error('applyAction must return synchronous state'); JSON.stringify(state);}}`);
+    this.run(`{const action=JSON.parse(${JSON.stringify(JSON.stringify(action))}); const valid=validateAction(state,${JSON.stringify(player)},action,ctx); if(typeof valid!=='boolean')throw Error('validateAction must return boolean'); if(valid||${dryRun}) {state=applyAction(state,${JSON.stringify(player)},action,ctx); ${gameStateCheckCode('applyAction')}}}`);
   }
   view(player: string) {
     const result = this.run(`(() => { const view=viewFor(state,${JSON.stringify(player)},ctx); if(view?.then)throw Error('viewFor must return synchronous JSON'); return JSON.stringify(view); })()`);
