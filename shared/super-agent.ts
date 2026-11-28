@@ -182,6 +182,7 @@ export type SuperAgentArtifactKind =
   | 'asset-image'
   | 'asset-video'
   | 'asset-audio'
+  | 'asset-3d'
   | 'brand-kit'
   | 'game-project'
   | 'workspace-file'
@@ -200,6 +201,7 @@ export type SuperAgentArtifact = {
   revision?: string;
   assetId?: string;
   versionId?: string;
+  animation?: string;
   kitId?: string;
   jobId?: string;
   exportRequestedAt?: number;
@@ -214,6 +216,8 @@ export type SuperAgentArtifact = {
   updatedAt: number;
   /** Monotonic timestamp bumped when an artifact is explicitly presented/opened in the Artifact Viewer. */
   presentedAt?: number;
+  /** Last request to show this asset. Background job updates never advance this timestamp. */
+  assetPresentationAt?: number;
 };
 
 export function isPlayableAdArtifact(item: Pick<SuperAgentArtifact | SuperAgentResourceAttachment, 'kind' | 'playableAd' | 'subtitle'>): boolean {
@@ -606,7 +610,8 @@ export function artifactCanonicalAddress(artifact: SuperAgentArtifact): string {
     case 'asset-image':
     case 'asset-video':
     case 'asset-audio':
-      return `asset://${artifact.assetId ?? artifact.id}${artifact.versionId ? `/${artifact.versionId}` : ''}`;
+    case 'asset-3d':
+      return `asset://${artifact.assetId ?? artifact.id}${artifact.versionId ? `/${artifact.versionId}` : ''}${artifact.animation ? `?animation=${encodeURIComponent(artifact.animation)}` : ''}`;
     case 'brand-kit':
       return `brand://${artifact.kitId ?? artifact.id}`;
     case 'workspace-file':
@@ -760,6 +765,7 @@ export function formatSuperAgentToolLabel(tool: string, args?: Record<string, un
       if (action === 'resume') return 'Resumed generation job';
       return 'Listed generation jobs';
     case 'openmotion_asset_manage':
+      if (action === 'present_asset') return 'Presented workspace asset';
       if (action === 'read') return 'Inspected media asset';
       if (action === 'import') return 'Imported workspace asset';
       if (action === 'import_to_project') return 'Adopted asset into Motion project';
@@ -941,7 +947,7 @@ function shortTargetName(filePath: string): string {
   return parts.at(-1) || filePath;
 }
 
-const BINARY_FILE_RE = /\.(?:png|jpe?g|webp|gif|avif|ico|bmp|mp3|wav|ogg|m4a|mp4|webm|woff2?|ttf|otf|wasm|glb|pdf|zip)$/i;
+const BINARY_FILE_RE = /\.(?:png|jpe?g|webp|gif|avif|ico|bmp|ktx2|mp3|wav|ogg|m4a|aac|flac|mp4|webm|mov|woff2?|ttf|otf|wasm|glb|bin|pdf|zip)$/i;
 
 export function isBinaryFilePath(filePath: string): boolean {
   return BINARY_FILE_RE.test(filePath.trim());

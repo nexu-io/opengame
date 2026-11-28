@@ -21,6 +21,16 @@
 @import "./studio/propertyPanelControls.css";
 @import "./studio/disclosure.css";
 
+.motion-asset-stage {
+  background: radial-gradient(ellipse at 50% 44%, var(--motion-asset-stage-center), var(--motion-asset-stage-edge) 90%);
+}
+
+.motion-asset-stage .motion-color-checkerboard {
+  --checker-light: color-mix(in srgb, var(--motion-asset-stage-center) 76%, var(--motion-asset-stage-edge));
+  --checker-dark: color-mix(in srgb, var(--motion-asset-stage-center) 42%, var(--motion-asset-stage-edge));
+  background-size: var(--motion-space-24) var(--motion-space-24);
+}
+
 /* Asset geometry is shared; currentColor follows the application's selected theme. */
 .motion-brand-lockup {
   display: inline-block;

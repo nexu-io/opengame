@@ -1522,8 +1522,8 @@ it('renders ExecutionTimeline live status, grouped Work Log with diffs/commands,
   expect(deliverableActions?.textContent).toContain('Share');
   expect(deliverableActions?.textContent).toContain('Export');
 
-  const viewerLinkBtn = document.querySelector<HTMLButtonElement>('.om-sa-link-viewer-btn')!;
-  await act(async () => viewerLinkBtn.click());
+  const webLink = document.querySelector<HTMLAnchorElement>('a[href="https://example.com/docs"]')!;
+  await act(async () => webLink.click());
   expect(onOpenWebUrl).toHaveBeenCalledWith('https://example.com/docs');
 
   const fileChip = document.querySelector<HTMLButtonElement>('.om-sa-file-chip')!;
@@ -1732,6 +1732,7 @@ it('opens clickable Markdown files and web links from Reasoning & Assistant in r
       fileReads.push(reqPath);
       return json({
         path: reqPath,
+        previewUrl: `${SUPER_AGENT_API}/file-content?${new URLSearchParams({ chatId: MD_CHAT_ID, rootKey: 'custom', path: reqPath, raw: '1' })}`,
         content: reqPath === 'packages/brand.md'
           ? '# Brandkit Doc\n\nNested markdown preview.\n'
           : '# Design Guide Heading\n\nDetailed markdown content with [Web Link](https://example.com/guide) and [Brandkit](../packages/brand.md).\n',
@@ -1773,9 +1774,9 @@ it('opens clickable Markdown files and web links from Reasoning & Assistant in r
 
   const reasoningBody = container.querySelector('.om-sa-reasoning-body')!;
   expect(reasoningBody).toBeTruthy();
-  const reasoningChips = [...reasoningBody.querySelectorAll<HTMLButtonElement>('.om-sa-file-chip')];
+  const reasoningChips = [...reasoningBody.querySelectorAll<HTMLAnchorElement>('a[href*="/super-agent/file-content?"]')];
   expect(reasoningChips.map(c => c.textContent?.trim())).toEqual(['Design Guide', 'README.md']);
-  expect(reasoningBody.querySelector<HTMLAnchorElement>('.om-sa-link')?.href).toBe('https://example.com/guide');
+  expect(reasoningBody.querySelector<HTMLAnchorElement>('a[href="https://example.com/guide"]')?.className).toBe('om-sa-link');
 
   // Click [Design Guide] in reasoning -> opens formatted Markdown Preview in right Viewer without adding deliverable cards
   await act(async () => reasoningChips[0].click());
@@ -1801,8 +1802,17 @@ it('opens clickable Markdown files and web links from Reasoning & Assistant in r
   expect(container.querySelector('.om-sa-workspace-file-view .om-sa-markdown-doc')).toBeTruthy();
 
   // Click relative Markdown link inside Viewer Preview -> resolves relative path and opens in new tab
-  const nestedChip = container.querySelector<HTMLButtonElement>('.om-sa-workspace-file-view .om-sa-markdown-doc .om-sa-file-chip');
+  const nestedChip = container.querySelector<HTMLAnchorElement>('.om-sa-markdown-doc a[href*="/super-agent/file-content?"]');
   expect(nestedChip?.textContent?.trim()).toBe('Brandkit');
+  expect(Object.fromEntries(new URL(nestedChip!.href).searchParams)).toEqual({ chatId: MD_CHAT_ID, path: 'packages/brand.md', rootKey: 'custom', raw: '1' });
+  const activeTab = container.querySelector('.om-sa-viewer [role="tab"][aria-selected="true"]');
+  for (const modifier of ['ctrlKey', 'metaKey']) {
+    document.addEventListener('click', event => event.preventDefault(), { once: true });
+    await act(async () => { nestedChip!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, [modifier]: true })); });
+    expect(container.querySelector('.om-sa-viewer [role="tab"][aria-selected="true"]')).toBe(activeTab);
+    expect(container.querySelector('.om-sa-markdown-doc h3')?.textContent).toBe('Design Guide Heading');
+    expect(fileReads).not.toContain('packages/brand.md');
+  }
   await act(async () => nestedChip!.click());
   await vi.waitFor(async () => {
     await flush();
@@ -1813,7 +1823,7 @@ it('opens clickable Markdown files and web links from Reasoning & Assistant in r
   expect(patchBodies.some(b => Boolean(b.addArtifact))).toBe(false);
 
   // Click web Markdown link directly in Assistant message -> opens in right Viewer
-  const assistantLink = container.querySelector<HTMLAnchorElement>('.om-sa-assistant-content .om-sa-link')!;
+  const assistantLink = container.querySelector<HTMLAnchorElement>('.om-sa-assistant-content a[href="https://example.com/guide"]')!;
   await act(async () => assistantLink.click());
   await flush();
   expect(patchBodies.some(b => b.addArtifact?.kind === 'web' && b.addArtifact?.url === 'https://example.com/guide')).toBe(true);
@@ -3298,6 +3308,44 @@ it('supports unified Phase 2 Game preview console drawer ("Fix with Agent"), ele
   expect(turns[1].attachments?.[0]?.annotation?.mode).toBe('draw');
   expect(turns[1].attachments?.[0]?.annotation?.strokeCount).toBe(1);
   expect(turns[1].attachments?.[0]?.annotation?.strokeBounds).toBeTruthy();
+});
+
+it('opens only explicit media presentations for the selected chat and keeps its live card available after dismissal', async () => {
+  const chatId = 'abcdabcd-aaaa-bbbb-cccc-111111111111';
+  const image = { ...sampleChat.artifacts[1], presentedAt: 4000, assetPresentationAt: 4000 };
+  let current: SuperAgentChat = { ...sampleChat, id: chatId, approvals: [], state: 'running',
+    messages: [sampleChat.messages[0]], artifacts: [], activeArtifactId: undefined };
+  const original = globalThis.fetch;
+  globalThis.fetch = vi.fn(async (input, init) => String(input) === `${SUPER_AGENT_API}/chats/${chatId}`
+    ? Response.json({ conversation: current }) : original(input, init));
+  const props = { active: true, chatId, onChatIdChange: vi.fn(), onOpenDesignProject: vi.fn(), onOpenMotionProject: vi.fn(),
+    onOpenAsset: vi.fn(), onOpenBrandKit: vi.fn(), onOpenAgentSettings: vi.fn(), onOpenMcp: vi.fn() };
+  await act(async () => root.render(<I18nProvider initialLocale="en"><SuperAgentWorkspace {...props} /></I18nProvider>));
+  await flush();
+  const emit = async (snapshot: SuperAgentChat) => {
+    await act(async () => {
+      for (const fn of MockEventSource.instances.at(-1)!.listeners.get('chat') ?? []) fn({ data: JSON.stringify(snapshot) } as MessageEvent);
+    });
+    await flush();
+  };
+  current = { ...current, activeArtifactId: image.id, artifacts: [image] };
+  await emit(current);
+  expect(container.querySelector('.om-sa-viewer')).toBeNull();
+  current = { ...current, messages: [...current.messages, { id: `presentation:${image.id}`, role: 'assistant', text: '', createdAt: 4000, artifactIds: [image.id] }] };
+  await emit({ ...current, id: 'different-chat' });
+  expect(container.querySelector('.om-sa-viewer')).toBeNull();
+  await emit(current);
+  expect(container.querySelector('.om-sa-media-stage img')?.getAttribute('src')).toBe(image.url);
+  await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Close viewer"]')!.click());
+  await emit({ ...current, artifacts: [{ ...image, presentedAt: 4500 }] });
+  expect(container.querySelector('.om-sa-viewer')).toBeNull();
+  await act(async () => container.querySelector<HTMLButtonElement>('.om-sa-presented-assets .om-sa-link')!.click());
+  expect(container.querySelector('.om-sa-media-stage img')?.getAttribute('src')).toBe(image.url);
+  await act(async () => root.render(null));
+  current = { ...current, artifacts: [{ ...image, presentedAt: 5000, assetPresentationAt: 5000 }], updatedAt: 5000 };
+  await act(async () => root.render(<I18nProvider initialLocale="en"><SuperAgentWorkspace {...props} /></I18nProvider>));
+  await flush();
+  expect(container.querySelector('.om-sa-media-stage img')?.getAttribute('src')).toBe(image.url);
 });
 
 it('auto-opens and re-opens the right Artifact Viewer tab whenever a game artifact is presented via presentedAt', async () => {
@@ -8485,9 +8533,9 @@ it('folds intermediate progress notes into WorkLogSection, renders 16:9 game cov
     expect(outerAssistantText).toContain('openmotion-game/SKILL.md');
     expect(outerAssistantText).not.toContain('Application Support');
 
-    const inlinePlayChip = container.querySelector<HTMLButtonElement>('.om-sa-artifact-inline-chip')!;
-    expect(inlinePlayChip).toBeTruthy();
-    await act(async () => inlinePlayChip.click());
+    const playLink = container.querySelector<HTMLAnchorElement>('.om-sa-assistant-content a[href$="/play/index.html"]')!;
+    expect(playLink.className).toBe('om-sa-link');
+    await act(async () => playLink.click());
     expect(onOpenWebUrl).toHaveBeenCalledWith('/motion-api/games/b0789372-b520-472b-acc9-ceca1dabeadf/play/index.html');
     expect(onOpenFilePath).not.toHaveBeenCalled();
 

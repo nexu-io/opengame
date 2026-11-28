@@ -31,6 +31,7 @@ import {
   type ResourceCategoryTab,
 } from './ResourcePickerDialog';
 import { fetchSuperAgentWorkspaceFiles, fetchWorkspaceResources } from './superAgentClient';
+import { isMediaArtifact, mediaArtifactAttachment } from './assetPresentation';
 
 export type MentionMenuCategory =
   | 'all'
@@ -118,17 +119,7 @@ function artifactToMentionItem(artifact: SuperAgentArtifact): SuperAgentResource
       previewUrl: artifact.url,
     };
   }
-  if (artifact.assetId && (artifact.kind === 'asset-image' || artifact.kind === 'asset-video' || artifact.kind === 'asset-audio')) {
-    return {
-      id: artifact.assetId,
-      kind: 'asset',
-      title: artifact.title,
-      subtitle: artifact.subtitle,
-      modality: artifact.kind === 'asset-video' ? 'video' : artifact.kind === 'asset-audio' ? 'audio' : 'image',
-      versionId: artifact.versionId,
-      previewUrl: artifact.url,
-    };
-  }
+  if (isMediaArtifact(artifact.kind)) return mediaArtifactAttachment(artifact);
   if (artifact.kind === 'brand-kit' && artifact.kitId) {
     return {
       id: artifact.kitId,

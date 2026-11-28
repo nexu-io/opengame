@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -8,6 +8,59 @@ import { resolveDesktopChrome } from '../../shared/platform-host.ts';
 import { buildAppIconSvg, packPngFramesAsIco } from '../scripts/build-icons.mjs';
 import { stageDesktopApp } from '../scripts/stage-app.mjs';
 import { DesktopLogger, redactDesktopText } from '../src/logger.ts';
+import { openScopedPreview, trustedPreviewPage } from '../src/local-preview.ts';
+
+test('native previews require a local Studio page and a scoped regular document', async t => {
+  const origin = 'http://127.0.0.1:4173';
+  assert.equal(trustedPreviewPage(`${origin}/agent`, origin), true);
+  for (const url of [`${origin}/motion-api/design/raw/example/`, 'https://example.org/agent', 'file:///tmp/test']) {
+    assert.equal(trustedPreviewPage(url, origin), false);
+  }
+  const data = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'desktop-preview-')));
+  t.after(() => rmSync(data, { recursive: true, force: true }));
+  const id = '11111111-1111-1111-1111-111111111111';
+  const pin = '22222222-2222-2222-2222-222222222222';
+  const work = path.join(data, 'super-agent', 'work', id);
+  const chats = path.join(data, 'super-agent', 'chats');
+  mkdirSync(work, { recursive: true });
+  mkdirSync(chats);
+  writeFileSync(path.join(chats, `${id}.json`), JSON.stringify({ id }));
+  const filename = path.join(work, 'hero.glb');
+  writeFileSync(filename, 'model');
+  const opened = [];
+  const openDocument = async name => { opened.push(name); return ''; };
+  const request = { kind: 'workspace-file', conversationId: id, path: 'hero.glb' };
+  await openScopedPreview(data, request, openDocument);
+  mkdirSync(path.join(work, 'assets'));
+  const knight = path.join(work, 'assets', 'Knight.glb');
+  writeFileSync(knight, 'model');
+  await openScopedPreview(data, { ...request, path: './assets/Knight.glb' }, openDocument);
+  if (process.platform !== 'win32') {
+    const alias = path.join(data, 'parent-alias');
+    symlinkSync(path.dirname(work), alias);
+    writeFileSync(path.join(chats, `${id}.json`), JSON.stringify({ id, workingDir: path.join(alias, id) }));
+    await openScopedPreview(data, { ...request, path: './assets/Knight.glb' }, openDocument);
+    assert.equal(opened.pop(), knight);
+  }
+  const banned = ['../hero.glb', path.join(data, 'hero.glb'), 'run.cmd', 'app.app/hero.glb', 'alias.lnk', 'shortcut.url', 'CON.png'];
+  if (process.platform !== 'win32') {
+    symlinkSync(filename, path.join(work, 'alias.glb'));
+    writeFileSync(path.join(work, 'executable.txt'), '#!/bin/sh');
+    chmodSync(path.join(work, 'executable.txt'), 0o755);
+    banned.push('alias.glb', 'executable.txt');
+  }
+  for (const name of banned) await assert.rejects(openScopedPreview(data, { ...request, path: name }, openDocument));
+  await assert.rejects(openScopedPreview(data, { ...request, rootKey: 'game:other' }, openDocument));
+  const records = path.join(data, 'asset-library', 'records');
+  const versionDir = path.join(data, 'asset-library', 'files', id, pin);
+  mkdirSync(records, { recursive: true });
+  mkdirSync(versionDir, { recursive: true });
+  writeFileSync(path.join(records, `${id}.json`), JSON.stringify({ id, currentVersionId: id, versions: [{ id: pin, filename: 'media.png' }] }));
+  writeFileSync(path.join(versionDir, 'media.png'), 'image');
+  await openScopedPreview(data, { kind: 'library-asset', assetId: id, versionId: pin }, openDocument);
+  await assert.rejects(openScopedPreview(data, { kind: 'library-asset', assetId: id, versionId: id }, openDocument));
+  assert.deepEqual(opened, [filename, knight, path.join(versionDir, 'media.png')]);
+});
 import { buildDesktopMenuTemplate, DOCS_URL, RELEASES_URL, REPORT_ISSUE_URL } from '../src/menu.ts';
 import { augmentDesktopPath, resolveSidecarRuntimeBinary } from '../src/sidecar.ts';
 import {

@@ -94,6 +94,8 @@ import { agentRuntimesFor, isLocalDirectEnabled } from './agent-runtimes.ts';
 import { executeRemoteServiceRun } from './agent-service-adapter.ts';
 import { AssetAgentRpc } from './asset-chat.ts';
 import { AssetLibrary, assetHash, atomicAssetJson } from './asset-library.ts';
+import { resolveAssetPresentation, type AssetPresentationSource } from './asset-presentation.ts';
+import { withProcessLock } from '../shared/process-lock.ts';
 import { readBrandCatalog } from './brand-catalog.ts';
 import { brandKitsFor } from './brand-kits.ts';
 import { resolveLocalAgent } from './local-agents.ts';
@@ -593,6 +595,7 @@ const ALLOWED_ARTIFACT_KINDS = new Set<SuperAgentArtifact['kind']>([
   'asset-image',
   'asset-video',
   'asset-audio',
+  'asset-3d',
   'brand-kit',
   'game-project',
   'workspace-file',
@@ -886,6 +889,7 @@ function buildValidatedArtifact(input: Partial<SuperAgentArtifact>, now = Date.n
     revision: input.revision,
     assetId: input.assetId,
     versionId: input.versionId,
+    ...((input.kind === 'asset-3d' || input.kind === 'workspace-file') && typeof input.animation === 'string' ? { animation: input.animation } : {}),
     kitId: input.kitId,
     jobId: input.jobId,
     url: validatedUrl,
@@ -953,7 +957,8 @@ const presentArtifactTool: AgentDynamicToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
-      kind: { enum: ['design-project', 'motion-project', 'motion-export', 'asset', 'asset-image', 'asset-video', 'asset-audio', 'brand-kit', 'game-project', 'web'] },
+      kind: { enum: ['design-project', 'motion-project', 'motion-export', 'asset', 'asset-image', 'asset-video', 'asset-audio', 'asset-3d', 'brand-kit', 'game-project', 'web'] },
+      animation: { type: 'string', minLength: 1, maxLength: 512 },
       title: { type: 'string', maxLength: 160 },
       projectId: { type: 'string', maxLength: 120 },
       assetId: { type: 'string', maxLength: 120 },
@@ -1048,6 +1053,27 @@ function isRunnableGameFilePath(filePath: string): boolean {
   return true;
 }
 
+function removeChatArtifacts(chat: SuperAgentChat, ids: Set<string>) {
+  chat.artifacts = chat.artifacts.filter(item => !ids.has(item.id));
+  chat.messages = chat.messages.filter(message =>
+    !message.id.startsWith('presentation:') || !ids.has(message.id.slice('presentation:'.length)),
+  );
+  for (const message of chat.messages) {
+    if (message.artifactIds) message.artifactIds = message.artifactIds.filter(id => !ids.has(id));
+  }
+  if (chat.activeArtifactId && ids.has(chat.activeArtifactId)) chat.activeArtifactId = chat.artifacts.at(-1)?.id;
+}
+
+function trimChatArtifacts(chat: SuperAgentChat, storedId?: string) {
+  const excess = chat.artifacts.length - 40;
+  if (excess <= 0) return;
+  const oldest = chat.artifacts
+    .filter(item => item.id !== storedId && item.id !== chat.activeArtifactId)
+    .sort((a, b) => Math.max(a.presentedAt ?? 0, a.updatedAt) - Math.max(b.presentedAt ?? 0, b.updatedAt))
+    .slice(0, excess);
+  removeChatArtifacts(chat, new Set(oldest.map(item => item.id)));
+}
+
 function upsertChatArtifact(
   chat: SuperAgentChat,
   artifact: SuperAgentArtifact,
@@ -1072,14 +1098,12 @@ function upsertChatArtifact(
     stored = artifact;
     chat.artifacts.push(stored);
   }
-  if (chat.artifacts.length > 40) {
-    chat.artifacts.splice(0, chat.artifacts.length - 40);
-  }
   const artIntent = artifactToSuperAgentIntent(stored);
   if (artIntent && !(stored.kind === 'web' && chat.intent === 'coding')) {
     chat.intent = artIntent;
   }
   if (activate) chat.activeArtifactId = stored.id;
+  trimChatArtifacts(chat, stored.id);
   return stored;
 }
 
@@ -1493,6 +1517,29 @@ export class SuperAgentConversations {
     }
   }
 
+  async presentAsset(conversationId: string, input: AssetPresentationSource, title?: string) {
+    const file = await this.file(conversationId);
+    return withProcessLock(`${file}.presentation.lock`, async () => {
+      const snapshot = await this.readChat(conversationId, false);
+      const draft = await resolveAssetPresentation(this.store, snapshot, input);
+      const { id } = draft;
+      const live = this.active.get(conversationId);
+      const chat = live?.chat ?? snapshot;
+      const existing = chat.artifacts.find(item => item.id === id);
+      const presentedAt = Math.max(Date.now(), (existing?.presentedAt ?? 0) + 1);
+      const artifact = upsertChatArtifact(chat, {
+        ...draft, title: title || draft.title, createdAt: presentedAt, updatedAt: presentedAt, presentedAt, assetPresentationAt: presentedAt,
+      });
+      const messageId = `presentation:${id}`;
+      if (!chat.messages.some(message => message.id === messageId)) {
+        chat.messages.push({ id: messageId, role: 'assistant', text: '', status: 'completed', createdAt: presentedAt, artifactIds: [id] });
+      }
+      if (live) (live.presentedArtifactIds ??= new Set()).add(id);
+      await this.persistChatState(chat, live);
+      return { presented: true, conversationId, artifact };
+    });
+  }
+
   async update(
     id: string,
     patch: {
@@ -1531,10 +1578,7 @@ export class SuperAgentConversations {
       if (artIntent) chat.intent = artIntent;
     }
     if (patch.removeArtifactId) {
-      chat.artifacts = chat.artifacts.filter(item => item.id !== patch.removeArtifactId);
-      if (chat.activeArtifactId === patch.removeArtifactId) {
-        chat.activeArtifactId = chat.artifacts.at(-1)?.id;
-      }
+      removeChatArtifacts(chat, new Set([patch.removeArtifactId]));
     }
     if (patch.activeArtifactId !== undefined) {
       chat.activeArtifactId = patch.activeArtifactId === null
@@ -1543,6 +1587,7 @@ export class SuperAgentConversations {
           ? patch.activeArtifactId
           : chat.activeArtifactId;
     }
+    trimChatArtifacts(chat);
     chat.updatedAt = Date.now();
     this.syncProjectDir(chat);
     if (live) {
@@ -1878,6 +1923,7 @@ export class SuperAgentConversations {
 
   private enqueuePersistWrite(active: ActiveSuperAgentChat): Promise<unknown> {
     if (active.deleted) return active.writes;
+    trimChatArtifacts(active.chat);
     const snapshot = structuredClone(active.chat);
     const next = active.writes
       .catch(() => {})
@@ -1930,7 +1976,9 @@ export class SuperAgentConversations {
       active.chat.messages.push({ ...msg, text: msg.text.slice(0, 100_000) });
     }
     if (active.chat.messages.length > 600) {
-      active.chat.messages.splice(0, active.chat.messages.length - 600);
+      const excess = active.chat.messages.length - 600;
+      const retained = active.chat.messages.slice(0, excess).filter(message => message.id.startsWith('presentation:'));
+      active.chat.messages.splice(0, excess, ...retained);
     }
     void this.persist(active, immediate);
   }
@@ -2211,6 +2259,7 @@ export class SuperAgentConversations {
   }
 
   private async persistChatState(chat: SuperAgentChat, live?: ActiveSuperAgentChat): Promise<SuperAgentChat> {
+    trimChatArtifacts(chat);
     if (live) {
       await this.persist(live, true);
       return structuredClone(live.chat);
@@ -4210,6 +4259,12 @@ export class SuperAgentConversations {
 
     if (toolName === presentArtifactTool.name) {
       validateInput(presentArtifactTool.inputSchema, rawArgs);
+      if (String(rawArgs.kind).startsWith('asset')) {
+        if (rawArgs.url !== undefined) throw new Error('Present a library asset by assetId and versionId');
+        const assetId = String(rawArgs.assetId || '');
+        const versionId = typeof rawArgs.versionId === 'string' ? rawArgs.versionId : (await new AssetLibrary(this.store).get(assetId)).currentVersionId;
+        return this.presentAsset(active.chat.id, { assetId, versionId, animation: rawArgs.animation as string | undefined }, rawArgs.title as string | undefined);
+      }
       if (String(rawArgs.kind) === 'web' && typeof rawArgs.url === 'string' && isProviderSettingsWebArtifactUrl(rawArgs.url, runtime.origin)) {
         return {
           presented: false,
@@ -4233,6 +4288,12 @@ export class SuperAgentConversations {
     const phase1Def = exposedPhase1Tools.find(tool => tool.name === normalizedTool);
     if (!phase1Def) throw new Error(`Unknown tool: ${toolName}`);
     const args = { ...rawArgs };
+    if (normalizedTool === 'openmotion_asset_manage' && args.action === 'present_asset') {
+      if (args.conversationId !== undefined && args.conversationId !== active.chat.id) throw new Error('Presentation must target the current conversation');
+      args.conversationId = active.chat.id;
+      validateInput(phase1Def.inputSchema, args);
+      return this.presentAsset(active.chat.id, args as unknown as AssetPresentationSource);
+    }
     if (normalizedTool === 'openmotion_design_comments' && active.attachedDesignComments.length) {
       const { action, projectId, commentId } = normalizeToolInput(phase1Def.inputSchema, args);
       if ((action === 'update' || action === 'delete')
@@ -4357,29 +4418,6 @@ export class SuperAgentConversations {
         projectId: job.projectId,
         downloadUrl: `/api/exports/${encodeURIComponent(job.id)}/file`,
         mimeType: 'video/mp4',
-        createdAt: now,
-        updatedAt: now,
-      };
-    }
-
-    if (kind === 'asset' || kind === 'asset-image' || kind === 'asset-video' || kind === 'asset-audio') {
-      const assetId = String(args.assetId || '');
-      const asset = await new AssetLibrary(this.store).get(assetId);
-      const versionId = typeof args.versionId === 'string' && args.versionId ? args.versionId : asset.currentVersionId;
-      const version = assetVersion(asset, versionId);
-      if (!version) throw new Error('Asset version not found');
-      const artifactKind = asset.modality === 'video' ? 'asset-video' : asset.modality === 'audio' ? 'asset-audio' : 'asset-image';
-      const url = assetMediaUrl(asset.id, version.id);
-      return {
-        id: `asset:${asset.id}:${version.id}`,
-        kind: artifactKind,
-        title: customTitle || asset.name,
-        subtitle: version.model || asset.modality,
-        assetId: asset.id,
-        versionId: version.id,
-        url,
-        downloadUrl: `${url}?download=1`,
-        mimeType: version.mimeType,
         createdAt: now,
         updatedAt: now,
       };
@@ -4514,7 +4552,7 @@ export class SuperAgentConversations {
     const now = Date.now();
     const name = toolName.replace(/^mcp_+openmotion_+/, '');
 
-    if (name === 'openmotion_present_artifact' && value.artifact?.id) {
+    if ((name === 'openmotion_present_artifact' || (name === 'openmotion_asset_manage' && args.action === 'present_asset')) && value.artifact?.id) {
       return value.artifact as SuperAgentArtifact;
     }
 
@@ -4708,13 +4746,14 @@ export class SuperAgentConversations {
         let primary: SuperAgentArtifact | undefined;
         for (const [idx, ref] of (value.job.libraryAssets as { assetId?: string; versionId?: string }[]).slice(0, 8).entries()) {
           if (!ref?.assetId || !ref?.versionId) continue;
-          const asset = await library.get(ref.assetId).catch(() => null);
+          const asset = await library.get(ref.assetId).catch((): null => null);
           if (!asset) continue;
           const version = assetVersion(asset, ref.versionId);
+          if (!version) continue;
           const url = assetMediaUrl(asset.id, ref.versionId);
           const draft: SuperAgentArtifact = {
             id: `asset:${asset.id}:${ref.versionId}`,
-            kind: asset.modality === 'video' ? 'asset-video' : asset.modality === 'audio' ? 'asset-audio' : 'asset-image',
+            kind: `asset-${asset.modality}`,
             title: asset.name,
             subtitle: version?.model || asset.modality,
             assetId: asset.id,

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, stat, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { designHttp, designProjectsFor } from '../design-projects.ts';
 import { GameProjects, gameHttp, gameProjectsFor } from '../game-projects.ts';
@@ -2820,6 +2820,55 @@ test('HTTP /motion-api/super-agent uploads, workspace files, file-content, and s
   assert.equal(noRootTraversalRes.status, 400);
 }));
 
+test('workspace previews stream large models and resolve companions within the selected root', () => fixture(async store => {
+  const req = transport(store);
+  const root = path.join(store.directory, 'asset-preview');
+  await mkdir(path.join(root, 'model'), { recursive: true });
+  const query = (file: string, raw = false) => '/motion-api/super-agent/file-content?' + new URLSearchParams({
+    workingDir: root, rootKey: `custom:${root}`, path: file, ...(raw ? { raw: '1' } : {}),
+  });
+  const bytes = Buffer.alloc(16 * 1024 * 1024, 0x2a);
+  await writeFile(path.join(root, 'model/scene.glb'), bytes);
+  const meta = await (await req(query('model/scene.glb'))).json();
+  assert.equal(meta.sizeBytes, bytes.length);
+  assert.equal(meta.binary, true);
+  assert.equal(meta.content, undefined);
+  const full = await req(meta.previewUrl);
+  assert.equal(full.headers.get('content-type'), 'model/gltf-binary');
+  assert.deepEqual(Buffer.from(await full.arrayBuffer()), bytes);
+  const suffix = await req(meta.previewUrl, { headers: { Range: 'bytes=-4' } });
+  assert.equal(suffix.status, 206);
+  assert.equal(suffix.headers.get('content-range'), `bytes ${bytes.length - 4}-${bytes.length - 1}/${bytes.length}`);
+  assert.deepEqual(Buffer.from(await suffix.arrayBuffer()), bytes.subarray(-4));
+  const invalid = await req(meta.previewUrl, { headers: { Range: `bytes=${bytes.length}-` } });
+  assert.equal(invalid.status, 416);
+  assert.equal(invalid.headers.get('content-range'), `bytes */${bytes.length}`);
+
+  for (const [name, mime] of Object.entries({
+    'scene.gltf': 'model/gltf+json', 'buffer.bin': 'application/octet-stream', 'texture.png': 'image/png',
+    'scene.obj': 'model/obj', 'material.mtl': 'model/mtl', 'scene.fbx': 'application/octet-stream',
+    'mesh.stl': 'model/stl', 'mesh.ply': 'application/octet-stream', 'rig.bvh': 'text/plain',
+    'atlas.json': 'application/json', 'sound.wav': 'audio/wav', 'sound.mp3': 'audio/mpeg',
+    'sound.ogg': 'audio/ogg', 'clip.mp4': 'video/mp4', 'clip.webm': 'video/webm',
+  })) {
+    const companionPath = `model/${name}`;
+    await writeFile(path.join(root, companionPath), name);
+    const companion = new URL(meta.previewUrl, 'http://localhost');
+    companion.searchParams.set('path', companionPath);
+    const response = await req(companion.pathname + companion.search);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), mime);
+    assert.equal(await response.text(), name);
+  }
+  const outside = path.join(store.directory, 'outside');
+  await mkdir(outside);
+  await writeFile(path.join(outside, 'private.bin'), 'private');
+  await symlink(outside, path.join(root, 'model', 'external'), 'junction');
+  assert.equal((await req(query('model/external/private.bin', true))).status, 400);
+  assert.equal((await req(query('../outside/private.bin', true))).status, 400);
+  assert.equal((await req(query('model/scene.glb', true) + '&chatId=missing')).status, 404);
+}));
+
 test('Referenced chats (<openmotion-referenced-conversations>), uploaded textExcerpt, and inline segments persistence', () => fixture(async store => {
   let capturedPrompt = '';
   const service = new SuperAgentConversations(store, {
@@ -2911,6 +2960,41 @@ test('Referenced chats (<openmotion-referenced-conversations>), uploaded textExc
   });
   assert.equal(updatedQ.queuedMessages?.[0]?.segments?.length, 2);
 
+  await service.close();
+}));
+
+test('asset presentations keep the most recent 40 artifacts and clean evicted message references', () => fixture(async store => {
+  const service = new SuperAgentConversations(store);
+  const chat = await service.create({ workingDir: store.directory });
+  const ids: string[] = [];
+  for (let i = 0; i < 40; i++) {
+    const filename = `image-${i}.png`;
+    await writeFile(path.join(store.directory, filename), 'preview');
+    ids.push((await service.presentAsset(chat.id, { path: filename })).artifact.id);
+  }
+  await service.presentAsset(chat.id, { path: 'image-0.png' });
+  const before = await service.get(chat.id);
+  before.messages.push({ id: 'ordinary', role: 'assistant', text: 'See these images', createdAt: Date.now(), artifactIds: [ids[1], ids[0]] });
+  const file = await service.file(chat.id);
+  await writeFile(file, JSON.stringify(before));
+  await writeFile(path.join(store.directory, 'next.png'), 'preview');
+  const { artifact } = await service.presentAsset(chat.id, { path: 'next.png' });
+  const after = await service.get(chat.id);
+  const retained = [ids[0], ...ids.slice(2), artifact.id];
+  assert.deepEqual(after.artifacts.map(item => item.id), retained);
+  assert.equal(after.activeArtifactId, artifact.id);
+  assert.deepEqual(after.messages.filter(message => message.id.startsWith('presentation:')).map(message => message.artifactIds), retained.map(id => [id]));
+  assert.deepEqual(after.messages.find(message => message.id === 'ordinary')?.artifactIds, [ids[0]]);
+
+  for (const id of ['legacy-a', 'legacy-b', 'legacy-c']) {
+    after.artifacts.push({ ...artifact, id, updatedAt: 1, presentedAt: 1 });
+    after.messages.push({ id: `presentation:${id}`, role: 'assistant', text: '', createdAt: 1, artifactIds: [id] });
+  }
+  await writeFile(file, JSON.stringify(after));
+  await service.update(chat.id, { pinned: true });
+  const repaired = await service.get(chat.id);
+  assert.deepEqual(repaired.artifacts.map(item => item.id), retained);
+  assert.deepEqual(repaired.messages.filter(message => message.id.startsWith('presentation:')).map(message => message.id), retained.map(id => `presentation:${id}`));
   await service.close();
 }));
 

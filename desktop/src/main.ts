@@ -11,6 +11,7 @@ import {
   type DesktopMenuAction,
 } from '../../shared/platform-host.ts';
 import { createDesktopDiagnosticZip, DesktopLogger } from './logger.ts';
+import { openScopedPreview, trustedPreviewPage } from './local-preview.ts';
 import { buildDesktopMenuTemplate } from './menu.ts';
 import {
   buildMainWindowOptions,
@@ -584,6 +585,16 @@ function registerIpc(): void {
   ipcMain.handle('openmotion:export-logs', () => exportLogsWithDialog());
   ipcMain.handle('openmotion:open-logs-folder', () => openLogsFolder());
   ipcMain.handle('openmotion:open-external', (_event, url: string) => openExternalSafe(url));
+  ipcMain.handle('openmotion:open-local-preview-file', async (event, file) => {
+    const frame = event.senderFrame;
+    const trusted = () => Boolean(mainWindow?.isFocused() && event.sender === mainWindow.webContents && frame
+      && frame === event.sender.mainFrame && trustedPreviewPage(frame.url, sidecar.appUrl));
+    if (!trusted()) throw new Error('A Studio window is required');
+    await openScopedPreview(dataDir, file, filename => {
+      if (!trusted()) throw new Error('The Studio window changed');
+      return shell.openPath(filename);
+    });
+  });
   ipcMain.handle('openmotion:splash-retry', () => {
     void startBackendAndOpenWindow();
   });

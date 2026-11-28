@@ -727,6 +727,37 @@ describe('ExecutionTimeline creator-first progressive disclosure', () => {
     expect(container.querySelector('.om-sa-work-summary-meta')).toBeNull();
   });
 
+  it('renders each explicitly presented asset as one keyboard-focusable text link for its exact clip', async () => {
+    const assets: SuperAgentChat['artifacts'] = [
+      { id: 'library-run', kind: 'asset-3d', assetId: 'knight', versionId: 'v2', title: 'Knight.glb', animation: 'Running_A', createdAt: 2, updatedAt: 2 },
+      { id: 'workspace-attack', kind: 'workspace-file', filePath: 'assets/Knight.glb', title: 'Attack preview', animation: 'attack', createdAt: 3, updatedAt: 3 },
+      { id: 'image', kind: 'asset-image', title: 'Shield.png', createdAt: 4, updatedAt: 4 },
+    ];
+    const chat: SuperAgentChat = {
+      id: 'knight-previews', title: 'Knight', engine: 'codex', permissionMode: 'auto', state: 'idle',
+      createdAt: 1, updatedAt: 4, approvals: [], artifacts: assets,
+      messages: assets.map(asset => ({ id: `presentation:${asset.id}`, role: 'assistant', text: '', createdAt: asset.createdAt, artifactIds: [asset.id] })),
+    };
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const open = vi.fn();
+    await act(async () => root!.render(<I18nProvider initialLocale="en"><ExecutionTimeline chat={chat} busy={false} sending={false}
+      engineLabel="Codex" activeViewerArtifactId="library-run" onOpenArtifactId={open} onPreviewAttachment={vi.fn()} onCopyText={vi.fn()} onApprove={vi.fn()} />
+    </I18nProvider>));
+    const links = [...container.querySelectorAll<HTMLButtonElement>('.om-sa-presented-assets .om-sa-link')];
+    expect(links.map(link => link.textContent)).toEqual(['Knight.glb · Running_A', 'Knight.glb · attack', 'Shield.png']);
+    expect(links.map(link => link.getAttribute('aria-current'))).toEqual(['true', null, null]);
+    expect(links[1].getAttribute('aria-label')).toBe('Open in Viewer: Knight.glb · attack');
+    expect(container.querySelector('.om-sa-deliverables-group, .om-sa-deliverable-card')).toBeNull();
+    for (const link of links) {
+      link.focus();
+      expect(document.activeElement).toBe(link);
+      link.click();
+    }
+    expect(open.mock.calls).toEqual(assets.map(asset => [asset.id]));
+  });
+
   it('promotes the primary game deliverable as a Hero card above supporting media assets and demotes changed files on creative turns', async () => {
     const now = Date.now();
     const chat: SuperAgentChat = {

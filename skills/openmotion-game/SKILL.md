@@ -1,9 +1,19 @@
 ---
 name: openmotion-game
-description: Build, remix, validate and locally publish playable single-player browser games through the OpenMotion game tools, including a consistent art direction and real generated image, music and voice assets when media models are available.
+description: Preview existing game models, animation clips, sprite atlases, maps and sounds in Studio chat. Build, remix, validate and locally publish playable single-player browser games through the OpenMotion game tools, including a consistent art direction and real generated image, music and voice assets when media models are available.
 ---
 
 # OpenMotion Game Studio
+
+## Preview existing assets in chat
+
+When the user asks to inspect existing files, finish with the preview. Game creation, media generation and edits belong to separate requests.
+
+- **Discuss or compare files.** Link each existing file naturally in the answer, using its path relative to the conversation workspace. For example, if the files exist, write `Follow the [coastal path](./maps/coast.tmj) and listen for the [beacon bell](./sound/beacon-chime.wav).` The reader chooses which preview to open. For a sprite atlas or Tiled map, link the manifest and keep its companion images and tilesets at the referenced paths.
+- **Open a specific asset now.** Use `openmotion_asset_manage` with `action: "present_asset"` and the target Studio `conversationId`. Supply either a workspace-relative `path` or the library's exact `assetId` and `versionId`. If an external caller lacks the conversation ID, ask for the target Studio conversation URL. The call leaves a link the user can reopen.
+- **Show an animation.** For a named clip embedded in a GLB, pass its exact name as `animation`. If the tool reports an unknown name, use the returned available names to resolve the request. Open a standalone BVH by its own path to show the skeleton; applying that motion to a character requires a separate retargeting step.
+
+## Build or remix a game
 
 Turn a brief into a verified local single-player browser game. Resume an explicitly supplied game id, or call `openmotion_game_create` (**pass `style: "3d"` on any 3D brief** so vendored Three.js and `vendor/HumanoidRigController.js` are scaffolded) and read `openmotion_game_get` before editing. Use Remix on a read-only template to create an owned draft. If the user asks for multiplayer, explain that authoring is single-player and ask before adapting (existing multiplayer games remain playable/inspectable). Starter drafts (`plan.md`/`verification.md`) are inputs to revise, never evidence.
 

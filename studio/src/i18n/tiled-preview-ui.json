@@ -1,0 +1,42 @@
+{
+  "zh-CN": {
+    "Export a finite orthogonal map with JSON tile arrays and static PNG tilesets.": "请导出有限大小的正交地图，使用 JSON 图块数组和静态 PNG 图块集。",
+    "Check the workspace file or its relative path: {path}": "请检查工作区文件或其相对路径：{path}"
+  },
+  "ja": {
+    "Export a finite orthogonal map with JSON tile arrays and static PNG tilesets.": "有限サイズの直交マップを、JSON タイル配列と静的な PNG タイルセットでエクスポートしてください。",
+    "Check the workspace file or its relative path: {path}": "ワークスペースのファイルと相対パスを確認してください：{path}"
+  },
+  "ko": {
+    "Export a finite orthogonal map with JSON tile arrays and static PNG tilesets.": "JSON 타일 배열과 정적 PNG 타일셋을 사용하는 유한 크기의 직교 맵을 내보내세요.",
+    "Check the workspace file or its relative path: {path}": "작업 공간 파일 또는 상대 경로를 확인하세요: {path}"
+  },
+  "de": {
+    "Export a finite orthogonal map with JSON tile arrays and static PNG tilesets.": "Exportiere eine orthogonale Karte mit fester Größe, JSON-Kacheldaten und statischen PNG-Kachelsätzen.",
+    "Check the workspace file or its relative path: {path}": "Prüfe die Datei im Arbeitsbereich und ihren relativen Pfad: {path}"
+  },
+  "fr": {
+    "Export a finite orthogonal map with JSON tile arrays and static PNG tilesets.": "Exportez une carte orthogonale de taille finie avec des tableaux de tuiles JSON et des jeux de tuiles PNG statiques.",
+    "Check the workspace file or its relative path: {path}": "Vérifiez le fichier dans l’espace de travail et son chemin relatif : {path}"
+  },
+  "ru": {
+    "Export a finite orthogonal map with JSON tile arrays and static PNG tilesets.": "Экспортируйте ортогональную карту фиксированного размера с массивами тайлов JSON и статическими наборами тайлов PNG.",
+    "Check the workspace file or its relative path: {path}": "Проверьте файл в рабочей области и его относительный путь: {path}"
+  },
+  "es": {
+    "Export a finite orthogonal map with JSON tile arrays and static PNG tilesets.": "Exporta un mapa ortogonal de tamaño finito con matrices de teselas JSON y conjuntos de teselas PNG estáticos.",
+    "Check the workspace file or its relative path: {path}": "Comprueba el archivo del espacio de trabajo y su ruta relativa: {path}"
+  },
+  "pt-BR": {
+    "Export a finite orthogonal map with JSON tile arrays and static PNG tilesets.": "Exporte um mapa ortogonal de tamanho finito com matrizes de blocos JSON e conjuntos de blocos PNG estáticos.",
+    "Check the workspace file or its relative path: {path}": "Verifique o arquivo na área de trabalho e seu caminho relativo: {path}"
+  },
+  "it": {
+    "Export a finite orthogonal map with JSON tile arrays and static PNG tilesets.": "Esporta una mappa ortogonale di dimensioni finite con array di tessere JSON e set di tessere PNG statici.",
+    "Check the workspace file or its relative path: {path}": "Controlla il file nell’area di lavoro e il suo percorso relativo: {path}"
+  },
+  "tr": {
+    "Export a finite orthogonal map with JSON tile arrays and static PNG tilesets.": "JSON döşeme dizileri ve statik PNG döşeme kümeleri kullanan, sonlu boyutta bir dik açılı haritayı dışa aktarın.",
+    "Check the workspace file or its relative path: {path}": "Çalışma alanındaki dosyayı ve göreli yolunu kontrol edin: {path}"
+  }
+}

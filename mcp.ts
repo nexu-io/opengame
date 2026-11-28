@@ -325,6 +325,7 @@ async function invokeRpc(message: any, store: WorkspaceStore, registry: ReturnTy
         if (!responseOk) throw Object.assign(new Error(value.error || 'Tool failed'), {
           code: value.code, details: value.runtime, invalid_field: value.invalid_field, validation_rule: value.validation_rule,
           ...(value.settingsHandoff ? { settingsHandoff: value.settingsHandoff } : {}),
+          ...(Array.isArray(value.availableAnimations) ? { availableAnimations: value.availableAnimations } : {}),
           ...(value.applied === false ? { applied: false } : {}),
         });
         if (finalVideo && (!value.inlineWork?.playable || value.inlineWork.state !== 'completed' || !normalized?._meta?.inlineVideo?.video))
@@ -367,9 +368,11 @@ async function invokeRpc(message: any, store: WorkspaceStore, registry: ReturnTy
       const { invalid_field, validation_rule } = toolFailureFields(error);
       const runtimeFailure = ['MCP_RUNTIME_RELOAD_REQUIRED', 'EDITOR_RUNTIME_INCOMPATIBLE', 'NATIVE_RUNTIME_NOT_READY'].includes(code);
       const settingsHandoff = (error as { settingsHandoff?: unknown })?.settingsHandoff;
+      const availableAnimations = (error as { availableAnimations?: string[] })?.availableAnimations;
       return result({ isError: true, content: [{ type: 'text', text: errorMessage }], structuredContent: {
         ...(settingsHandoff ? { settingsHandoff } : {}),
         error: { code, message: errorMessage,
+          ...(availableAnimations ? { availableAnimations } : {}),
           ...(invalid_field ? { invalid_field, validation_rule } : {}),
           ...(settingsHandoff ? { settingsHandoff } : {}),
           ...(runtimeFailure && (error as any).details ? { details: (error as any).details } : {}),

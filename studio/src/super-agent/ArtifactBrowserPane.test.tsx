@@ -14,6 +14,10 @@ vi.mock('../components/WebPublishPopover', () => ({
   WebPublishPopover: () => null,
 }));
 
+vi.mock('../motion/ModelAssetPreview', () => ({
+  ModelAssetPreview: ({ src, animation }: { src: string; animation?: string }) => <div data-model-source={src} data-animation={animation} />,
+}));
+
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const EXTERNAL_TENNIS: SuperAgentArtifact = {
@@ -109,6 +113,45 @@ async function renderViewer(artifacts: SuperAgentArtifact[], initialTabId = arti
     await Promise.resolve();
   });
 }
+
+it('reads workspace model bytes from the authorized preview URL and changes the clip on the same stage', async () => {
+  const previewUrl = '/motion-api/super-agent/file-content?rootKey=game&path=assets%2Fhero.glb&raw=1';
+  const model: SuperAgentArtifact = {
+    id: 'first', kind: 'workspace-file', title: 'Hero idle', filePath: 'assets/hero.glb', rootKey: 'game',
+    url: 'https://example.org/ignored.glb', animation: 'Idle', createdAt: 1, updatedAt: 1,
+  };
+  vi.mocked(fetch).mockImplementation(async input => String(input).includes('/file-content?')
+    ? Response.json({ path: 'assets/hero.glb', binary: true, sizeBytes: 100, mimeType: 'model/gltf-binary', previewUrl })
+    : Response.json({ games: [] }));
+  await renderViewer([model, { ...model, id: 'second', title: 'Hero run', animation: 'Run' }]);
+  const stage = container.querySelector('[data-model-source]');
+  expect(stage?.getAttribute('data-model-source')).toBe(previewUrl);
+  expect(stage?.getAttribute('data-animation')).toBe('Idle');
+  const runTab = [...container.querySelectorAll<HTMLButtonElement>('.om-sa-viewer-tab button')].find(button => button.textContent?.includes('Hero run'))!;
+  await act(async () => runTab.click());
+  expect(container.querySelector('[data-model-source]')).toBe(stage);
+  expect(stage?.getAttribute('data-animation')).toBe('Run');
+});
+
+it.each(['atlas', 'tilemap', null])('uses the workspace metadata kind %s for a truncated JSON excerpt', async previewKind => {
+  const path = 'assets/level.json';
+  const previewUrl = `/motion-api/super-agent/file-content?rootKey=game&path=${path}&raw=1`;
+  const artifact: SuperAgentArtifact = { id: 'json', kind: 'workspace-file', title: path, filePath: path, rootKey: 'game', createdAt: 1, updatedAt: 1 };
+  // For a rejected document, the excerpt alone looks like a complete map.
+  const content = (previewKind ? '' : '{"type":"map","layers":[],"tilesets":[]}').padEnd(256 * 1024);
+  vi.stubGlobal('IntersectionObserver', undefined);
+  try {
+    vi.mocked(fetch).mockImplementation(async input => {
+      if (String(input) === previewUrl) return new Response('{}');
+      return Response.json({ path, binary: false, sizeBytes: content.length + 100, mimeType: 'application/json', previewUrl, previewKind, content });
+    });
+    await renderViewer([artifact]);
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url) === previewUrl)).toBe(Boolean(previewKind));
+    expect(Boolean(container.querySelector('.om-game-asset-preview'))).toBe(Boolean(previewKind));
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 
 it('waits for the isolated trial origin before navigating the game iframe', async () => {
   let resolvePreview: (response: Response) => void = () => {};

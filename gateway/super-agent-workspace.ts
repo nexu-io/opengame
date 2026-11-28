@@ -1,9 +1,11 @@
 /** Per-task project directory resolution and turn-level filesystem checkpoint diffing for Super Agent. */
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstat, readdir, readFile, realpath, stat } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { lstat, open, readdir, readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { detectGameAssetPreview, MAX_PREVIEW_JSON_BYTES } from '../shared/game-asset-preview.ts';
 import {
   buildUnifiedDiffPreview,
   isBinaryFilePath,
@@ -739,6 +741,27 @@ const MIME_BY_EXT: Record<string, string> = {
   '.webp': 'image/webp',
   '.gif': 'image/gif',
   '.avif': 'image/avif',
+  '.bmp': 'image/bmp',
+  '.ico': 'image/x-icon',
+  '.ktx2': 'image/ktx2',
+  '.glb': 'model/gltf-binary',
+  '.gltf': 'model/gltf+json',
+  '.bin': 'application/octet-stream',
+  '.obj': 'model/obj',
+  '.mtl': 'model/mtl',
+  '.fbx': 'application/octet-stream',
+  '.stl': 'model/stl',
+  '.ply': 'application/octet-stream',
+  '.bvh': 'text/plain',
+  '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg',
+  '.ogg': 'audio/ogg',
+  '.m4a': 'audio/mp4',
+  '.flac': 'audio/flac',
+  '.aac': 'audio/aac',
+  '.mp4': 'video/mp4',
+  '.mov': 'video/quicktime',
+  '.webm': 'video/webm',
   '.pdf': 'application/pdf',
   '.yaml': 'text/yaml',
   '.yml': 'text/yaml',
@@ -927,60 +950,62 @@ export async function listTaskWorkspaceEntries(
   return candidates.slice(0, limit).map(c => c.item);
 }
 
-async function readResolvedWorkspaceFile(
+async function openResolvedWorkspaceFile(
   rootKey: string,
   relPath: string,
+  rootReal: string,
   targetReal: string,
-): Promise<{
-  rootKey: string;
-  path: string;
-  binary: boolean;
-  sizeBytes: number;
-  mimeType: string;
-  content?: string;
-  rawBuffer?: Buffer;
-}> {
-  const st = await lstat(targetReal).catch(() => null);
-  if (!st || !st.isFile()) {
+) {
+  const expected = await lstat(targetReal, { bigint: true }).catch(() => null);
+  if (!expected?.isFile()) {
     throw new Error('FILE_NOT_FOUND');
   }
-
-  const mimeType = inferAttachmentMimeType(relPath);
-  const maxRawBytes = 15 * 1024 * 1024;
-  if (st.size > maxRawBytes) {
-    return {
-      rootKey,
-      path: relPath,
-      binary: true,
-      sizeBytes: st.size,
-      mimeType,
-    };
+  const handle = await open(targetReal, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const opened = await handle.stat({ bigint: true });
+    if (!opened.isFile() || expected.dev !== opened.dev || expected.ino !== opened.ino ||
+        !isWithinRootLexical(rootReal, await realpath(targetReal))) {
+      throw new Error('INVALID_FILE_PATH');
+    }
+    return { rootKey, path: relPath, sizeBytes: Number(opened.size), mimeType: inferAttachmentMimeType(relPath), handle };
+  } catch (error) {
+    await handle.close();
+    throw error;
   }
+}
 
-  const buf = await readFile(targetReal);
-  const sample = buf.subarray(0, 4096);
-  const binary = isBinaryFilePath(relPath) || sample.includes(0);
-  if (binary) {
-    return {
-      rootKey,
-      path: relPath,
-      binary: true,
-      sizeBytes: st.size,
-      mimeType,
-      rawBuffer: buf,
-    };
+export async function workspaceFileMetadata(file: Awaited<ReturnType<typeof openResolvedWorkspaceFile>>) {
+  let previewKind = detectGameAssetPreview(file.path);
+  if (isBinaryFilePath(file.path)) return { binary: true, previewKind };
+  const inspectJson = !previewKind && /\.json$/i.test(file.path) && file.sizeBytes <= MAX_PREVIEW_JSON_BYTES;
+  // One extra byte detects a file that grew after it was opened.
+  const buf = Buffer.alloc(inspectJson ? file.sizeBytes + 1 : Math.min(MAX_TEXT_READ_BYTES, file.sizeBytes));
+  let bytesRead = 0;
+  while (bytesRead < buf.length) {
+    const read = await file.handle.read(buf, bytesRead, buf.length - bytesRead, bytesRead);
+    if (!read.bytesRead) break;
+    bytesRead += read.bytesRead;
   }
+  if (buf.subarray(0, Math.min(bytesRead, 4096)).includes(0)) {
+    return { binary: true, previewKind };
+  }
+  const content = buf.toString('utf8', 0, Math.min(bytesRead, MAX_TEXT_READ_BYTES));
+  if (inspectJson && bytesRead === file.sizeBytes) {
+    previewKind = detectGameAssetPreview(file.path, bytesRead <= MAX_TEXT_READ_BYTES ? content : buf.toString('utf8', 0, bytesRead));
+  }
+  return { binary: false, content, previewKind };
+}
 
-  const text = buf.subarray(0, MAX_TEXT_READ_BYTES).toString('utf8');
-  return {
-    rootKey,
-    path: relPath,
-    binary: false,
-    sizeBytes: st.size,
-    mimeType,
-    content: text,
-    rawBuffer: buf,
-  };
+/** Single inclusive range for playback and seeking. */
+export function workspaceFileRange(header: string, size: number) {
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(header.trim());
+  if (!match || (!match[1] && !match[2]) || !size) return null;
+  const first = Number(match[1]);
+  const last = Number(match[2]);
+  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last)) return null;
+  const start = match[1] ? first : Math.max(0, size - last);
+  const end = match[1] && match[2] ? Math.min(last, size - 1) : size - 1;
+  return start <= end ? { start, end } : null;
 }
 
 function isWithinRootLexical(rootDir: string, candidateAbs: string): boolean {
@@ -988,19 +1013,11 @@ function isWithinRootLexical(rootDir: string, candidateAbs: string): boolean {
   return Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
-export async function readTaskWorkspaceFile(
+export async function openTaskWorkspaceFile(
   roots: TaskProjectRoot[],
   rootKey: string,
   rawRelPath: string,
-): Promise<{
-  rootKey: string;
-  path: string;
-  binary: boolean;
-  sizeBytes: number;
-  mimeType: string;
-  content?: string;
-  rawBuffer?: Buffer;
-}> {
+) {
   const trimmedRaw = typeof rawRelPath === 'string' ? rawRelPath.trim() : '';
   if (!trimmedRaw || trimmedRaw.includes('\0')) {
     throw new Error('INVALID_FILE_PATH');
@@ -1011,7 +1028,7 @@ export async function readTaskWorkspaceFile(
     if (!relPath || relPath.split('/').some(seg => seg === '..')) {
       throw new Error('INVALID_FILE_PATH');
     }
-    const root = roots.find(item => item.key === explicitRootKey) ?? (roots.length === 1 ? roots[0] : undefined);
+    const root = roots.find(item => item.key === explicitRootKey);
     if (!root) {
       throw new Error('FILE_ROOT_NOT_FOUND');
     }
@@ -1027,7 +1044,7 @@ export async function readTaskWorkspaceFile(
     if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
       throw new Error('INVALID_FILE_PATH');
     }
-    return readResolvedWorkspaceFile(root.key, relPath, targetReal);
+    return openResolvedWorkspaceFile(root.key, relPath, rootReal, targetReal);
   }
 
   if (roots.length === 0) {
@@ -1048,7 +1065,7 @@ export async function readTaskWorkspaceFile(
       if (!rootReal) continue;
       const relative = path.relative(rootReal, targetReal);
       if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) continue;
-      return readResolvedWorkspaceFile(root.key, normalizeRelPath(relative), targetReal);
+      return openResolvedWorkspaceFile(root.key, normalizeRelPath(relative), rootReal, targetReal);
     }
     throw new Error('INVALID_FILE_PATH');
   }
@@ -1067,7 +1084,7 @@ export async function readTaskWorkspaceFile(
     if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) continue;
     const st = await lstat(targetReal).catch(() => null);
     if (st?.isFile()) {
-      return readResolvedWorkspaceFile(root.key, relPath, targetReal);
+      return openResolvedWorkspaceFile(root.key, relPath, rootReal, targetReal);
     }
   }
   throw new Error('FILE_NOT_FOUND');

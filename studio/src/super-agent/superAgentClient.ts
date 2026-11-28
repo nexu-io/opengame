@@ -1,4 +1,5 @@
 import type { BrowserScreenshotResult } from '../../../shared/browser';
+import type { PreviewKind } from '../../../shared/game-asset-preview';
 import { assetMediaUrl, assetVersion } from '../../../shared/asset-library';
 import type { Modality } from '../../../shared/gateway';
 import {
@@ -487,6 +488,7 @@ export async function readSuperAgentFileContent(params: {
 }): Promise<{
   path: string;
   content?: string;
+  previewKind?: PreviewKind | null;
   binary: boolean;
   sizeBytes: number;
   mimeType: string;

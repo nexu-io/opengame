@@ -1601,6 +1601,10 @@ export async function assetManage(
   if (args.action === 'brand_kit') {
     return brandKitOperation(brandKitsFor((store.workspaceStore ?? store).directory), args.brandKit, origin ?? '');
   }
+  if (args.action === 'present_asset') {
+    const { superAgentConversations } = await import('./super-agent.ts');
+    return superAgentConversations(store).presentAsset(args.conversationId, args);
+  }
   if (['list', 'get', 'read', 'import', 'update', 'import_to_project'].includes(args.action)) {
     return assetOperation(store, args, importProject, tracking);
   }

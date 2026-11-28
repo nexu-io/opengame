@@ -32,10 +32,12 @@ import type { AccountHandoffResume } from './useAccountHandoff';
 import { openBalanceGate } from '../motion/monetization/monetizationGateBus';
 import { reportEntitlementGateClick, reportEntitlementGateView } from '../motion/pageTracking';
 import { ArtifactDeliverableCard, SupportingAssetRow } from './ArtifactDeliverableCard';
+import { presentedAssetIds } from './assetPresentation';
 import { FilesChangedCard, UnifiedDiffView } from './ChangedFilesTree';
 import { InlineMentionChip } from './MentionNode';
 import { ResourceThumbImage, resourceIcon, resourceImagePreviewUrl, resourceKey } from './ResourcePickerDialog';
 import { SimpleMarkdown } from './SimpleMarkdown';
+import { PreviewLink, PreviewLinkContext } from './PreviewLink';
 
 type TurnGroup = {
   id: string;
@@ -199,7 +201,7 @@ function groupMessagesIntoTurns(chat: SuperAgentChat): TurnGroup[] {
   return rawTurns.map((group, idx) => {
     const isCurrentRunningTurn = chatIsRunning && idx === rawTurns.length - 1;
     const workItems = group.rest.filter(isWorkItem);
-    const allAssistant = group.rest.filter(m => m.role === 'assistant');
+    const allAssistant = group.rest.filter(m => m.role === 'assistant' && (m.text.trim() || !m.artifactIds?.length));
 
     let lastWorkIdx = -1;
     for (let i = group.rest.length - 1; i >= 0; i -= 1) {
@@ -215,7 +217,7 @@ function groupMessagesIntoTurns(chat: SuperAgentChat): TurnGroup[] {
       assistantItems = allAssistant;
       foldedAssistantIds = new Set();
     } else {
-      const trailingAssistant = group.rest.slice(lastWorkIdx + 1).filter(m => m.role === 'assistant');
+      const trailingAssistant = group.rest.slice(lastWorkIdx + 1).filter(m => m.role === 'assistant' && (m.text.trim() || !m.artifactIds?.length));
       if (trailingAssistant.length > 0) {
         assistantItems = trailingAssistant;
         const trailingIds = new Set(trailingAssistant.map(m => m.id));
@@ -2089,6 +2091,7 @@ export function ExecutionTimeline({
     }
   };
   const turns = useMemo(() => groupMessagesIntoTurns(chat), [chat]);
+  const explicitIds = useMemo(() => presentedAssetIds(chat), [chat]);
   const lastTurn = turns[turns.length - 1];
   const showInterruptedCard = !busy && !sending && !chat.error && (
     chat.state === 'cancelled'
@@ -2104,6 +2107,7 @@ export function ExecutionTimeline({
   ].filter(Boolean).join(' · ');
 
   return (
+    <PreviewLinkContext.Provider value={{ chatId: chat.id, workingDir: chat.workingDir, onNotify }}>
     <div className="om-sa-message-list">
       {turns.map((turn, idx) => {
         const isLastTurn = idx === turns.length - 1;
@@ -2192,9 +2196,10 @@ export function ExecutionTimeline({
             />
 
             {(() => {
-              const deliverableArtifacts = !isActiveTurn
-                ? turn.artifacts.filter(artifact => artifact.kind !== 'workspace-file')
-                : [];
+              const presentations = turn.artifacts.filter(artifact => explicitIds.has(artifact.id));
+              const deliverableArtifacts = isActiveTurn ? [] : turn.artifacts.filter(artifact =>
+                artifact.kind !== 'workspace-file' && !explicitIds.has(artifact.id),
+              );
               const isConsumerCreativeTurn = Boolean(chat.intent && chat.intent !== 'coding');
               const primaryKinds = new Set<SuperAgentArtifact['kind']>([
                 'game-project',
@@ -2294,8 +2299,8 @@ export function ExecutionTimeline({
               return (
                 <>
                   {turn.assistantItems.map(msg => {
-                    const cleanedContent = deliverableArtifacts.length > 0
-                      ? normalizeInternalJargon(stripRedundantDeliverableInlineLinks(msg.text, deliverableArtifacts), t)
+                    const cleanedContent = deliverableArtifacts.length || presentations.length
+                      ? normalizeInternalJargon(stripRedundantDeliverableInlineLinks(msg.text, [...deliverableArtifacts, ...presentations]), t)
                       : normalizeInternalJargon(msg.text, t);
                     return (
                       <article key={msg.id} className="om-sa-message" data-role="assistant">
@@ -2325,6 +2330,26 @@ export function ExecutionTimeline({
                           onOpenSettings={onOpenActionCardSettings}
                         />
                       ))}
+                    </div>
+                  )}
+
+                  {presentations.length > 0 && (
+                    <div className="om-sa-presented-assets">
+                      {presentations.map(artifact => {
+                        const name = artifact.filePath?.split(/[\\/]/).pop() || artifact.title;
+                        const label = [name, artifact.animation].filter(Boolean).join(' · ');
+                        return (
+                          <PreviewLink
+                            key={artifact.id}
+                            artifact={artifact}
+                            label={`${t('Open in Viewer')}: ${label}`}
+                            current={activeViewerArtifactId === artifact.id}
+                            onOpen={() => onOpenArtifactId(artifact.id)}
+                          >
+                            {label}
+                          </PreviewLink>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -2572,6 +2597,7 @@ export function ExecutionTimeline({
         />
       ))}
     </div>
+    </PreviewLinkContext.Provider>
   );
 }
 

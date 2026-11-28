@@ -1,6 +1,10 @@
 import { Button } from 'open-design-ui/button';
 import { IconButton } from 'open-design-ui/icon-button';
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { ModelAssetPreview } from '../motion/ModelAssetPreview';
+import { GameAssetPreview } from '../motion/gameAssetPreview';
+import { detectGameAssetPreview } from '../../../shared/game-asset-preview';
+import { isMediaArtifact } from './assetPresentation';
 import { brandCatalogFile, type BrandCatalogEntry } from '../../../shared/brand-catalog';
 import { rankSearchResults } from '../../../shared/fuzzy-search';
 import type { BrandKit } from '../../../shared/brand-kit';
@@ -18,6 +22,7 @@ import {
 } from '../../../shared/design-project';
 import {
   NEW_VIEWER_TAB_ID,
+  SUPER_AGENT_API,
   artifactCanonicalAddress,
   formatAttachmentBytes,
   isPlayableAdArtifact,
@@ -78,6 +83,7 @@ import {
   type MotionProjectArtifactHandle,
 } from './MotionProjectArtifactView';
 import { SimpleMarkdown } from './SimpleMarkdown';
+import { PreviewLinkContext } from './PreviewLink';
 
 type WebDevicePresetId = 'responsive' | 'desktop' | 'tablet' | 'mobile';
 
@@ -112,6 +118,8 @@ function artifactTabIcon(kind: SuperAgentArtifactKind, filePath?: string, mimeTy
       return 'clapperboard-line';
     case 'asset-image':
       return 'image-line';
+    case 'asset-3d':
+      return 'stack-line';
     case 'asset-video':
       return 'film-line';
     case 'asset-audio':
@@ -160,9 +168,7 @@ function artifactAddressDisplay(artifact: SuperAgentArtifact): string {
     artifact.kind === 'design-project'
     || artifact.kind === 'motion-project'
     || artifact.kind === 'motion-export'
-    || artifact.kind === 'asset-image'
-    || artifact.kind === 'asset-video'
-    || artifact.kind === 'asset-audio'
+    || isMediaArtifact(artifact.kind)
     || artifact.kind === 'brand-kit'
   ) {
     return artifact.title;
@@ -1581,17 +1587,10 @@ function WorkspaceFileArtifactView({
   reloadKey: number;
   onNotify?: (message: string, tone?: 'info' | 'error') => void;
   onOpenWebUrl?: (url: string) => void;
-  onOpenFilePath?: (filePath: string, label?: string) => void;
+  onOpenFilePath?: (filePath: string, label?: string, rootKey?: string) => void;
 }) {
   const { t } = useI18n();
-  const [data, setData] = useState<{
-    path: string;
-    content?: string;
-    binary: boolean;
-    sizeBytes: number;
-    mimeType: string;
-    previewUrl?: string;
-  } | null>(null);
+  const [data, setData] = useState<Awaited<ReturnType<typeof readSuperAgentFileContent>> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -1644,7 +1643,19 @@ function WorkspaceFileArtifactView({
   const isMarkdown = /\.(?:md|markdown|mdx)$/i.test(data?.path || relPath) || data?.mimeType === 'text/markdown';
   const lineCount = useMemo(() => (data?.content ? data.content.split('\n').length : 0), [data?.content]);
   const sizeLabel = formatAttachmentBytes(data?.sizeBytes ?? artifact.sizeBytes);
-  const downloadHref = artifact.downloadUrl || data?.previewUrl || artifact.url;
+  const previewKind = data && (data.previewKind === undefined ? detectGameAssetPreview(data.path, data.content) : data.previewKind);
+  const previewUrl = data?.previewUrl && (data.previewUrl.startsWith(`${SUPER_AGENT_API}/file-content?`) || data.previewUrl.startsWith(`${SUPER_AGENT_API}/uploads/`))
+    ? data.previewUrl : undefined;
+  const documentRootKey = previewUrl?.startsWith(`${SUPER_AGENT_API}/file-content?`)
+    ? new URL(previewUrl, location.origin).searchParams.get('rootKey') ?? artifact.rootKey : undefined;
+  const resolveFileUrl = useCallback((path: string) => {
+    if (!previewUrl || !previewUrl.startsWith(`${SUPER_AGENT_API}/file-content?`)) return null;
+    if (!path || /[:?#%\\\x00-\x1f]/.test(path) || path.split('/').some(part => !part || part === '..' || part === '.')) return null;
+    const params = new URLSearchParams(previewUrl.slice(previewUrl.indexOf('?') + 1));
+    params.set('path', path);
+    return `${SUPER_AGENT_API}/file-content?${params}`;
+  }, [previewUrl]);
+  const downloadHref = previewKind ? previewUrl : artifact.downloadUrl || previewUrl || artifact.url;
 
   const handleCopyText = async (value: string, markCopied = false) => {
     try {
@@ -1756,18 +1767,30 @@ function WorkspaceFileArtifactView({
               </Button>
             </div>
           </div>
-        ) : data?.mimeType?.startsWith('image/') && data.mimeType !== 'image/svg+xml' && (data.previewUrl || artifact.url) ? (
-          <div className="om-sa-workspace-file-image">
-            <img src={data.previewUrl || artifact.url} alt={artifact.title} />
+        ) : previewKind === 'glb' && previewUrl ? (
+          <ModelAssetPreview src={previewUrl} title={artifact.title} animation={artifact.animation} />
+        ) : (previewKind === 'audio' || previewKind === 'video') && previewUrl ? (
+          <div className="om-sa-media-stage motion-asset-stage" data-kind={previewKind}><ManagedMediaElement kind={previewKind} src={previewUrl} /></div>
+        ) : previewKind && data && previewUrl ? (
+          <GameAssetPreview path={data.path} url={previewUrl} previewKind={previewKind} title={artifact.title} resolveFileUrl={resolveFileUrl} />
+        ) : data?.mimeType?.startsWith('image/') && data.mimeType !== 'image/svg+xml' && previewUrl ? (
+          <div className="om-sa-workspace-file-image motion-asset-stage">
+            <img src={previewUrl} alt={artifact.title} />
           </div>
         ) : isMarkdown && !data?.binary && data?.content !== undefined && mdViewMode === 'preview' ? (
           <div className="om-sa-markdown-doc">
+            <PreviewLinkContext.Provider value={{ chatId, workingDir, rootKey: documentRootKey,
+              resolvePath: path => resolveRelativeDocPath(data.path, path), onNotify }}>
             <SimpleMarkdown
               content={data.content}
               onCopyCode={textToCopy => void handleCopyText(textToCopy)}
               onOpenWebUrl={onOpenWebUrl}
-              onOpenFilePath={onOpenFilePath ? (target, label) => onOpenFilePath(resolveRelativeDocPath(data?.path || relPath, target), label) : undefined}
+              onOpenFilePath={onOpenFilePath ? (target, label) => {
+                const path = resolveRelativeDocPath(data.path, target);
+                onOpenFilePath(path, label, /^(?:\/|[a-z]:[\\/])/i.test(path) ? undefined : documentRootKey);
+              } : undefined}
             />
+            </PreviewLinkContext.Provider>
           </div>
         ) : !data?.binary && data?.content !== undefined ? (
           <div className="om-sa-code-panel">
@@ -1904,7 +1927,7 @@ export function ArtifactBrowserPane({
   onCloseTab: (tabId: string) => void;
   onNewTab: () => void;
   onOpenWebUrl: (url: string) => void;
-  onOpenFilePath?: (filePath: string, label?: string) => void;
+  onOpenFilePath?: (filePath: string, label?: string, rootKey?: string) => void;
   onOpenArtifact: (artifactId: string) => void;
   onOpenResource: (item: SuperAgentResourceAttachment) => void;
   onToggleExpand: () => void;
@@ -2381,7 +2404,7 @@ export function ArtifactBrowserPane({
   const matchesArtifactTab = (item: SuperAgentArtifact) => {
     if (newTabFilter === 'web-apps' && item.kind !== 'design-project' && item.kind !== 'game-project') return false;
     if (newTabFilter === 'motion' && item.kind !== 'motion-project' && item.kind !== 'motion-export') return false;
-    if (newTabFilter === 'media' && !['asset-image', 'asset-video', 'asset-audio'].includes(item.kind)) return false;
+    if (newTabFilter === 'media' && !isMediaArtifact(item.kind)) return false;
     if (newTabFilter === 'brand-kit' && item.kind !== 'brand-kit') return false;
     if (newTabFilter === 'browser' && item.kind !== 'web') return false;
     return true;
@@ -2450,7 +2473,7 @@ export function ArtifactBrowserPane({
     : undefined;
 
   const downloadHref = activeArtifact?.downloadUrl
-    ?? (activeArtifact && ['asset-image', 'asset-video', 'asset-audio'].includes(activeArtifact.kind) && activeArtifact.url
+    ?? (activeArtifact && isMediaArtifact(activeArtifact.kind) && activeArtifact.url
       ? `${activeArtifact.url}?download=1`
       : undefined);
 
@@ -2461,7 +2484,7 @@ export function ArtifactBrowserPane({
           <div ref={tabStripRef} className="om-sa-viewer-tabs" role="tablist" aria-label={t('Viewer tabs')}>
             {openTabs.map(tab => {
               const isActive = !showNewTab && activeArtifact?.id === tab.id;
-              const tabTitle = tab.kind === 'web' ? (webTabTitles[tab.id] || tab.title) : tab.title;
+              const tabTitle = tab.kind === 'web' ? (webTabTitles[tab.id] || tab.title) : [tab.title, tab.animation].filter(Boolean).join(' · ');
               return (
                 <div key={tab.id} className="om-sa-viewer-tab" data-active={isActive || undefined}>
                   <Button
@@ -3181,7 +3204,7 @@ export function ArtifactBrowserPane({
                     )}
 
                     {/* Games: templates use the toolbar Remix button; the user's own games need no Attach entry. */}
-                    {['design-project', 'motion-project', 'asset-image', 'asset-video', 'asset-audio', 'brand-kit'].includes(activeArtifact.kind) && (
+                    {(isMediaArtifact(activeArtifact.kind) || ['design-project', 'motion-project', 'brand-kit'].includes(activeArtifact.kind)) && (
                       <Button
                         variant="plain"
                         type="button"
@@ -3284,7 +3307,7 @@ export function ArtifactBrowserPane({
                       </Button>
                     )}
 
-                    {['asset-image', 'asset-video', 'asset-audio'].includes(activeArtifact.kind) && activeArtifact.assetId && (
+                    {isMediaArtifact(activeArtifact.kind) && activeArtifact.assetId && (
                       <Button
                         variant="plain"
                         type="button"
@@ -3624,6 +3647,8 @@ export function ArtifactBrowserPane({
           <div className="om-sa-media-stage" data-kind="video">
             <ManagedMediaElement kind="video" src={activeArtifact.downloadUrl} />
           </div>
+        ) : activeArtifact.kind === 'asset-3d' && activeArtifact.url ? (
+          <ModelAssetPreview src={activeArtifact.url} title={activeArtifact.title} animation={activeArtifact.animation} active={active} />
         ) : activeArtifact.kind === 'asset-image' && activeArtifact.url ? (
           <ImageArtifactView url={activeArtifact.url} title={activeArtifact.title} />
         ) : activeArtifact.kind === 'asset-video' && activeArtifact.url ? (
