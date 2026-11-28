@@ -658,6 +658,22 @@ test('resolveAcpModelAndEffort flattens grouped ACP configOptions and maps effor
     resolveAcpModelAndEffort('gemini-4-neon-xhigh', undefined, groupedConfig),
     { configModelValue: 'gemini-4-neon', directModelId: 'gemini-4-neon-xhigh', effortValue: 'xhigh' },
   );
+
+  // Encoded handles (DeepSeek Harness) are discovered by readable name and must resolve back to the raw value.
+  const encodedConfig = [
+    {
+      id: 'model', name: 'Model', category: 'model', type: 'select',
+      options: [{ group: 'deepseek-official', name: 'DeepSeek', options: [{ value: '["deepseek-official","deepseek-v4-flash"]', name: 'deepseek-v4-flash' }] }],
+    },
+    {
+      id: 'reasoning_effort', name: 'Reasoning effort', category: 'thought_level', type: 'select',
+      options: [{ value: 'off' }, { value: 'low' }, { value: 'high' }, { value: 'max' }],
+    },
+  ];
+  assert.deepEqual(
+    resolveAcpModelAndEffort('deepseek-v4-flash', 'high', encodedConfig),
+    { configModelValue: '["deepseek-official","deepseek-v4-flash"]', directModelId: 'deepseek-v4-flash', effortValue: 'high' },
+  );
 });
 
 test('SuperAgentConversations forwards model and reasoning to Claude, Codex turn/start, and ACP re-resolved configOptions', () => fixture(async store => {

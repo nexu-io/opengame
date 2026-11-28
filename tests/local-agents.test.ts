@@ -204,6 +204,22 @@ test('extractAcpModels prefers configOptions, derives per-model reasoning and di
     undefined,
   );
   assert.deepEqual(vibe, [{ id: 'devstral-2', label: 'Devstral 2', source: 'cli', reasoning: ['off', 'high'] }]);
+
+  // DeepSeek Harness shape: encoded multi-part handle `["provider","model"]` keyed by its readable name.
+  const dsh = extractAcpModels(
+    [
+      {
+        id: 'model', name: 'Model', category: 'model', type: 'select', currentValue: '["deepseek-official","deepseek-v4-flash"]',
+        options: [{ group: 'deepseek-official', name: 'DeepSeek', options: [{ value: '["deepseek-official","deepseek-v4-flash"]', name: 'deepseek-v4-flash' }] }],
+      },
+      {
+        id: 'reasoning_effort', name: 'Reasoning effort', category: 'thought_level', type: 'select', currentValue: 'high',
+        options: [{ value: 'off' }, { value: 'low' }, { value: 'high' }, { value: 'max' }],
+      },
+    ],
+    undefined,
+  );
+  assert.deepEqual(dsh, [{ id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', source: 'cli', reasoning: ['off', 'low', 'high', 'max'] }]);
 });
 
 test('Agent defaults persist outside the checkout and selected model reaches the scoped terminal command', async t => {

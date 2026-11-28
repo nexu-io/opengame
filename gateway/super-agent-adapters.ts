@@ -296,9 +296,10 @@ export function resolveAcpModelAndEffort(
   const effortChoices: string[] = flattenAcpSelectOptions(thoughtOpt?.options)
     .map((o: any) => String(o?.value ?? o?.id ?? ''))
     .filter(Boolean);
-  const modelChoices: string[] = flattenAcpSelectOptions(modelOpt?.options)
-    .map((o: any) => String(o?.value ?? o?.id ?? ''))
-    .filter(Boolean);
+  const modelEntries = flattenAcpSelectOptions(modelOpt?.options)
+    .map((o: any) => ({ value: String(o?.value ?? o?.id ?? ''), name: String(o?.name ?? o?.label ?? '') }))
+    .filter((entry: { value: string }) => Boolean(entry.value));
+  const modelChoices: string[] = modelEntries.map(entry => entry.value);
 
   let effortValue = requestedReasoning && requestedReasoning !== 'default'
     ? matchEffortChoice(requestedReasoning, effortChoices)
@@ -311,6 +312,11 @@ export function resolveAcpModelAndEffort(
     if (modelChoices.includes(requestedModel)) {
       configModelValue = requestedModel;
     } else {
+      // Discovery keys encoded handles (JSON strings) by their readable name; send the agent's raw value back.
+      const byName = modelEntries.find(entry => entry.name === requestedModel.trim());
+      if (byName) configModelValue = byName.value;
+    }
+    if (!configModelValue) {
       const suffixMatch = requestedModel.match(/^(.+)-(low|medium|high|xhigh|extra|max|minimal|off|none)$/i);
       if (suffixMatch) {
         const [, base, effort] = suffixMatch;
