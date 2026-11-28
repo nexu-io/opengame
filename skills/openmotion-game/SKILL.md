@@ -1,9 +1,19 @@
 ---
 name: openmotion-game
-description: Build, remix, validate and locally publish playable single-player browser games through the OpenMotion game tools, including a consistent art direction and real generated image, music and voice assets when media models are available.
+description: Preview existing game models, animation clips, sprite atlases, maps and sounds in Studio chat. Build, remix, validate and locally publish playable single-player browser games through the OpenMotion game tools, including a consistent art direction and real generated image, music and voice assets when media models are available.
 ---
 
 # OpenMotion Game Studio
+
+## Preview existing assets in chat
+
+When the user asks to inspect existing files, finish with the preview. Game creation, media generation and edits belong to separate requests.
+
+- **Discuss or compare files.** Link each existing file naturally in the answer, using its path relative to the conversation workspace. For example, if the files exist, write `Follow the [coastal path](./maps/coast.tmj) and listen for the [beacon bell](./sound/beacon-chime.wav).` The reader chooses which preview to open. For a sprite atlas or Tiled map, link the manifest and keep its companion images and tilesets at the referenced paths.
+- **Open a specific asset now.** Use `openmotion_asset_manage` with `action: "present_asset"` and the target Studio `conversationId`. Supply either a workspace-relative `path` or the library's exact `assetId` and `versionId`. If an external caller lacks the conversation ID, ask for the target Studio conversation URL. The call leaves a link the user can reopen.
+- **Show an animation.** For a named clip embedded in a GLB, pass its exact name as `animation`. If the tool reports an unknown name, use the returned available names to resolve the request. Open a standalone BVH by its own path to show the skeleton; applying that motion to a character requires a separate retargeting step.
+
+## Build or remix a game
 
 Turn a brief into a verified local single-player browser game. Resume an explicitly supplied game id, or call `openmotion_game_create` (**pass `style: "3d"` on any 3D brief** so vendored Three.js and `vendor/HumanoidRigController.js` are scaffolded) and read `openmotion_game_get` before editing. Use Remix on a read-only template to create an owned draft. If the user asks for multiplayer, explain that authoring is single-player and ask before adapting (existing multiplayer games remain playable/inspectable). Starter drafts (`plan.md`/`verification.md`) are inputs to revise, never evidence.
 
@@ -18,8 +28,6 @@ When working on an owned copy of a complete, playable built-in template (`remixO
 - **Reply voice (both paths)**: open your final reply in the user's language as the builder who just finished the game (e.g. `"《<title>》已为你制作完成……"` / `"I've built <title> for you — ..."`), summarize gameplay highlights and controls, and invite next edits. Never mention copying a template, returning existing source files, internal skills/tools, or skipping checks, and never fabricate checks you did not run.
 
 ## 1. Route First — Read Only What Applies
-
-For a file reference in chat, write a short Markdown link to its workspace path. When the player asks you to show a model, clip, sprite atlas, map or sound immediately, call `openmotion_asset_manage` with `action: "present_asset"`, the intended Studio `conversationId`, and either the workspace-relative `path` or pinned `assetId` and `versionId`. To show a specific embedded GLB clip, send its exact name as `animation`. The conversation retains a link to reopen it. Apply a chosen asset to the game only when the user asks to use it.
 
 Ask **at most two short questions** only when missing: local-market publication consent and (when paid multimodal assets are planned) one batched spend confirmation. Load **only matching references** via MCP resources (`openmotion://workflow/game/<section>`, never stale local plugin caches) — read each needed section completely without slicing off later sections:
 

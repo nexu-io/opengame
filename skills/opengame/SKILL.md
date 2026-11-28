@@ -1,6 +1,6 @@
 ---
 name: opengame
-description: Build, remix, validate, playtest, and publish playable 2D, 3D, and 9:16 browser games with OpenGame. Set up the local OpenGame Studio and stdio MCP connection when missing, then continue through the matching game workflow. Use for OpenGame installation, first use, and game creation; an already-selected specialist continues directly. Repository development does not trigger game production.
+description: Build, remix, validate, playtest, and publish playable 2D, 3D, and 9:16 browser games with OpenGame. Preview existing game assets in Studio conversations, including models, animations, sprite atlases, maps and sounds. Set up the local OpenGame Studio and stdio MCP connection when missing. Repository development does not trigger game production.
 ---
 
 # OpenGame
@@ -25,6 +25,7 @@ Read the selected installed Skill, or its full MCP resource through `resources/r
 
 | User intent | Skill | MCP resource |
 | --- | --- | --- |
+| Show an existing game asset or link several files for the user to inspect in a Studio conversation | openmotion-game | `openmotion://workflow/game/start` |
 | Build, remix, re-style, validate, simulate, playtest, capture cover, export a playable ad or WeChat Mini Game, or publish a playable browser game | openmotion-game | `openmotion://workflow/game/start` |
 | Generate standalone game art, textures, sprites, 3D assets, BGM, SFX, or voice via configured BYOK providers or an OpenDesign account | openmotion-media | `openmotion://workflow/media/start` |
 
