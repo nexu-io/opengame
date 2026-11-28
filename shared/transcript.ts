@@ -130,7 +130,7 @@ export function parseTranscriptSubtitles(text: string): TranscriptSegment[] {
   const references: Record<string, string> = { amp: '&', lt: '<', gt: '>' };
   const cueTag = /<\/?(?:c|i|b|u|ruby|rt|v|lang)(?:[.\s][^<>]*)?>|<(?:\d{2,}:)?\d{2}:\d{2}\.\d{3}>/g;
   const cueText = /^\uFEFF?WEBVTT/.test(text) ? (value: string) => value.replace(cueTag, '').replace(/&(amp|lt|gt);/g, (_, name: string) => references[name]) : (value: string) => value;
-  const rows = text.replace(/^\uFEFF/, '').replace(/\r/g, '').split(/\n\s*\n/).flatMap(block => {
+  const rows = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').split(/\n\s*\n/).flatMap(block => {
     const match = block.match(/(?:^|\n)((?:\d{2,}:)?\d{2}:\d{2}[,.]\d{3})\s+-->\s+((?:\d{2,}:)?\d{2}:\d{2}[,.]\d{3})[^\n]*\n([\s\S]+)/);
     if (!match && block.includes('-->')) throw new Error('Invalid subtitle cue');
     if (!match) return [];
