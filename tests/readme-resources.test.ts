@@ -17,6 +17,7 @@ test('each OpenGame README language links its guide and bundled game captures', 
     ['README.md', 'English'],
     ['README.zh-CN.md', '简体中文'],
     ['README.ja.md', '日本語'],
+    ['README.tr.md', 'Türkçe'],
   ];
   const docsPages = [
     ['README.md', 'English'],
