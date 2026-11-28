@@ -275,7 +275,7 @@ jobs:
           node --test \
             tests/onboarding-selection.test.ts tests/mcp-template-recommendations.test.ts tests/template-cards-ui.test.ts \
             tests/install.test.ts tests/native-runtime.test.ts tests/source-install.test.ts tests/source-update.test.ts \
-            tests/bootstrap.test.ts tests/inline-onboarding.test.ts tests/inline-storyboard.test.ts \
+            tests/bootstrap.test.ts tests/inline-onboarding.test.ts tests/inline-storyboard.test.ts tests/game-lfs-cache-integrity.test.ts \
             tests/onboarding-workspace.test.ts tests/source-marketplace.test.ts \
             tests/byok.test.ts tests/transcription.test.ts tests/transcription-transport.test.ts tests/generation-options.test.ts tests/asset-library.test.ts \
             tests/gateway.test.ts tests/capability-center.test.ts tests/mcp-onboarding.test.ts tests/media-use.test.ts tests/product-identity.test.ts \

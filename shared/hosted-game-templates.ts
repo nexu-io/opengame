@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { access, copyFile, link, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { access, copyFile, link, lstat, mkdir, mkdtemp, open, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { lfsPointer } from './repository-template-catalog.ts';
@@ -137,9 +138,27 @@ async function resolveLfsBatchUrl(root: string, runGit: GitRunner): Promise<stri
   }
 }
 
-async function isCachedLfsObject(file: string, expectedBytes: number): Promise<boolean> {
-  const info = await lstat(file).catch(error => { if (error.code !== 'ENOENT') throw error; return undefined; });
-  return Boolean(info?.isFile() && info.size === expectedBytes);
+async function isCachedLfsObject(file: string, expectedBytes: number, expectedHash: string): Promise<boolean> {
+  // Keep the no-symlink/non-file check on platforms where O_NOFOLLOW is absent.
+  const before = await lstat(file).catch(error => { if (error.code !== 'ENOENT') throw error; return undefined; });
+  if (!before?.isFile() || before.size !== expectedBytes) return false;
+  const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(error => {
+    if (!['ENOENT', 'ELOOP'].includes(error.code)) throw error;
+    return undefined;
+  });
+  if (!handle) return false;
+  try {
+    const info = await handle.stat();
+    if (!info.isFile() || info.size !== expectedBytes) return false;
+    const hash = createHash('sha256');
+    let size = 0;
+    for await (const chunk of handle.createReadStream({ autoClose: false })) {
+      size += chunk.length;
+      if (size > expectedBytes) return false;
+      hash.update(chunk);
+    }
+    return size === expectedBytes && hash.digest('hex') === expectedHash;
+  } finally { await handle.close(); }
 }
 
 async function linkOrCopy(source: string, destination: string) {
@@ -197,7 +216,7 @@ async function fetchMissingLfsObjects(
   }
   const missing: { oid: string; size: number }[] = [];
   for (const [oid, size] of unique) {
-    if (!await isCachedLfsObject(path.join(objectsDir, oid), size)) missing.push({ oid, size });
+    if (!await isCachedLfsObject(path.join(objectsDir, oid), size, oid)) missing.push({ oid, size });
   }
   if (!missing.length) return;
 
@@ -240,14 +259,14 @@ async function fetchMissingLfsObjects(
       if (index >= downloads.length) return;
       const item = downloads[index];
       const target = path.join(objectsDir, item.oid);
-      if (await isCachedLfsObject(target, item.size)) continue;
+      if (await isCachedLfsObject(target, item.size, item.oid)) continue;
       const bytes = await downloadLfsObject(item, item.href, item.header, allowLoopbackHttp, fetcher);
       const temp = path.join(objectsDir, `.tmp-${item.oid}-${process.pid}-${randomBytes(4).toString('hex')}`);
       await writeFile(temp, bytes, { flag: 'wx' });
       try {
         await rename(temp, target);
       } catch (error) {
-        if (!['EEXIST', 'EPERM', 'ENOTEMPTY'].includes((error as NodeJS.ErrnoException).code ?? '') || !await isCachedLfsObject(target, item.size)) {
+        if (!['EEXIST', 'EPERM', 'ENOTEMPTY'].includes((error as NodeJS.ErrnoException).code ?? '') || !await isCachedLfsObject(target, item.size, item.oid)) {
           throw error;
         }
       } finally {
