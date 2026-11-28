@@ -138,3 +138,90 @@ test('Batch optimization works identically via HTTP routes and openmotion_assets
       await running.close();
     }
   }));
+
+test('batch request IDs distinguish complete item identities when a tool replays prior requests', () =>
+  fixture(async store => {
+    const service = new ContentBatchService(store.directory);
+    const receipts = new Map<string, { projectId: string }>();
+    const requestIds: string[] = [];
+    const host = {
+      callMcpTool: async (_tool: string, args: Record<string, unknown>) => {
+        const requestId = String(args.requestId);
+        requestIds.push(requestId);
+        const previous = receipts.get(requestId);
+        if (previous) return previous;
+        const result = { projectId: String(args.title) };
+        receipts.set(requestId, result);
+        return result;
+      },
+      runAgentOptimization: async () => ({ chatId: 'unused' }),
+    };
+    try {
+      const { batch } = await service.create({
+        title: 'Distinct product variants',
+        mode: 'mcp-pipeline',
+        concurrency: 1,
+        pipeline: [{
+          id: 'create',
+          tool: 'openmotion_create_project',
+          arguments: { title: '{{item.label}}', requestId: '{{batchRequestId}}' },
+        }],
+        items: [
+          { id: 'product-alpha', label: 'Alpha' },
+          { id: 'product-beta', label: 'Beta' },
+        ],
+        autoStart: true,
+        wait: true,
+      }, host);
+
+      assert.equal(batch.state, 'completed');
+      assert.equal(new Set(requestIds).size, 2);
+      assert.ok(requestIds.every(id => /^[\w-]{1,100}$/.test(id)));
+      assert.deepEqual(batch.items.map(item => item.outputs[0]?.id), ['Alpha', 'Beta']);
+    } finally {
+      await service.close();
+    }
+  }));
+
+test('batch creation rejects item IDs that collide after normalization or default allocation', () =>
+  fixture(async store => {
+    const service = new ContentBatchService(store.directory);
+    const cases = [
+      [{ id: 'same', label: 'A' }, { id: 'same', label: 'B' }],
+      [{ id: ' same ', label: 'A' }, { id: 'same', label: 'B' }],
+      [{ id: 'x'.repeat(80) + 'a', label: 'A' }, { id: 'x'.repeat(80) + 'b', label: 'B' }],
+      [{ id: 'item-2', label: 'A' }, { label: 'B' }],
+    ];
+    try {
+      for (const items of cases) {
+        await assert.rejects(service.create({
+          title: 'Conflicting identities',
+          mode: 'mcp-pipeline',
+          pipeline: [{ id: 'inspect', tool: 'openmotion_get_project', arguments: {} }],
+          items,
+        }), /Duplicate batch item id/);
+      }
+      assert.equal((await service.list()).total, 0);
+    } finally {
+      await service.close();
+    }
+  }));
+
+test('batch creation rejects duplicate pipeline step IDs before storing a job', () =>
+  fixture(async store => {
+    const service = new ContentBatchService(store.directory);
+    try {
+      await assert.rejects(service.create({
+        title: 'Conflicting steps',
+        mode: 'mcp-pipeline',
+        pipeline: [
+          { id: 'create', tool: 'openmotion_create_project', arguments: { title: 'First' } },
+          { id: 'create', tool: 'openmotion_create_project', arguments: { title: 'Second' } },
+        ],
+        items: [{ label: 'Variant' }],
+      }), /Duplicate pipeline step id/);
+      assert.equal((await service.list()).total, 0);
+    } finally {
+      await service.close();
+    }
+  }));

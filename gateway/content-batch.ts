@@ -92,9 +92,7 @@ function summarizeBatch(job: ContentBatchJob): ContentBatchSummary {
 }
 
 function derivedBatchRequestId(batchId: string, itemId: string, stepId: string, attempt: number): string {
-  const raw = `batch-${batchId.slice(0, 8)}-${itemId.slice(0, 8)}-${stepId}-a${attempt}`.replace(/[^A-Za-z0-9_-]/g, '-');
-  if (raw.length <= 100 && REQUEST_ID_RE.test(raw)) return raw;
-  return `bt-${sha256Hex(`${batchId}:${itemId}:${stepId}:${attempt}`).slice(0, 48)}`;
+  return `bt-${sha256Hex(JSON.stringify([batchId, itemId, stepId, attempt])).slice(0, 48)}`;
 }
 
 function extractStepOutputs(tool: string, result: any): BatchItemOutputRef[] {
@@ -273,10 +271,13 @@ export class ContentBatchService {
       if (!pipeline.length || pipeline.length > BATCH_LIMITS.maxSteps) {
         throw new Error(`INVALID_ARGUMENT: mcp-pipeline requires 1..${BATCH_LIMITS.maxSteps} steps`);
       }
+      const stepIds = new Set<string>();
       for (const step of pipeline) {
         if (!step?.id || !step?.tool || typeof step.tool !== 'string' || !step.tool.startsWith('openmotion_')) {
           throw new Error(`INVALID_ARGUMENT: Invalid pipeline step tool "${String(step?.tool)}"`);
         }
+        if (stepIds.has(step.id)) throw new Error(`INVALID_ARGUMENT: Duplicate pipeline step id "${step.id}"`);
+        stepIds.add(step.id);
         if (step.tool === 'openmotion_assets_use' && step.arguments?.action === 'batch') {
           throw new Error('INVALID_ARGUMENT: Recursive batch invocation inside pipeline is forbidden');
         }
@@ -294,11 +295,15 @@ export class ContentBatchService {
       }
 
       const now = Date.now();
+      const itemIds = new Set<string>();
       const items: BatchItemRecord[] = input.items.map((item, idx) => {
         const label = typeof item?.label === 'string' ? item.label.trim().slice(0, BATCH_LIMITS.maxLabelChars) : '';
         if (!label) throw new Error(`INVALID_ARGUMENT: Item ${idx + 1} label is required`);
+        const id = typeof item.id === 'string' && item.id.trim() ? item.id.trim().slice(0, 80) : `item-${idx + 1}`;
+        if (itemIds.has(id)) throw new Error(`INVALID_ARGUMENT: Duplicate batch item id "${id}"`);
+        itemIds.add(id);
         return {
-          id: typeof item.id === 'string' && item.id.trim() ? item.id.trim().slice(0, 80) : `item-${idx + 1}`,
+          id,
           index: idx,
           label,
           ...(item.target ? { target: item.target } : {}),
